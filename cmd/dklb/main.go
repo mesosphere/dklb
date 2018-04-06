@@ -11,8 +11,15 @@ import (
 
 func main() {
 	log := logrus.StandardLogger()
-	log.Println("TODO")
 
+	args := os.Args[1:]
 	app := kingpin.New("dklb", "DC/OS Kubernetes load-balancer manager").Version(version.Version)
-	kingpin.MustParse(app.Parse(os.Args[1:]))
+	if len(args) == 0 {
+		app.Usage(args)
+		os.Exit(2)
+	}
+
+	kingpin.MustParse(app.Parse(args))
+
+	log.Println("TODO")
 }
