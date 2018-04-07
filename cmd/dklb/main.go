@@ -16,25 +16,80 @@
 package main
 
 import (
+	"flag"
 	"os"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"gopkg.in/alecthomas/kingpin.v2"
 
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/mesosphere/dklb/pkg/controller"
+	"github.com/mesosphere/dklb/pkg/translator"
 	"github.com/mesosphere/dklb/pkg/version"
+	"github.com/mesosphere/dklb/pkg/workgroup"
 )
 
-func main() {
-	log := logrus.StandardLogger()
+const (
+	// This controller default IngressClass.
+	defaultIngressClass = "dlkb"
 
-	args := os.Args[1:]
+	// Default period between full Kubernetes API sync.
+	defaultResyncPeriod = 24 * time.Hour
+)
+
+// Do this or logrus will complain
+func init() {
+	flag.Parse()
+}
+
+func main() {
+	// Setup the main logger, to be passed on to the several control-loops.
+	logger := logrus.StandardLogger()
+
+	// Setup flags
 	app := kingpin.New("dklb", "DC/OS Kubernetes load-balancer manager").Version(version.Version)
-	if len(args) == 0 {
-		app.Usage(args)
-		os.Exit(2)
+	ingressClass := app.Flag("ingress-class-name", "The IngressClass name to use").Default(defaultIngressClass).String()
+	kubeconfig := app.Flag("kubeconfig", "Apath to a kubeconfig file").String()
+	resyncPeriod := app.Flag("resync-period", "TODO").Default(defaultResyncPeriod.String()).Duration()
+	kingpin.MustParse(app.Parse(os.Args[1:]))
+
+	// Setup Kubernetes client
+	kubeClient, err := newKubernetesClient(kubeconfig)
+	if err != nil {
+		logger.Fatal("There was an error while setting up the Kubernetes client: ", err)
 	}
 
-	kingpin.MustParse(app.Parse(args))
+	// TODO setup EdgeLB manager
 
-	log.Println("TODO")
+	// t translates between Kubernetes API events to EdgeLB calls.
+	t := translator.NewTranslator(logger, *ingressClass /*TODO EdgeLB manager*/)
+
+	var wg workgroup.Group
+	if controller.NewLoadBalancerController(logger, &wg, t, kubeClient, *resyncPeriod); err != nil {
+		logger.Fatal("There was an error while setting up the controller: ", err)
+	}
+
+	// Run all functions registered in the workgroup until one terminates
+	// TODO make sure it respects signals
+	wg.Run()
+}
+
+func newKubernetesClient(kubeconfig *string) (kubernetes.Interface, error) {
+	if kubeconfig == nil {
+		config, err := rest.InClusterConfig()
+		if err != nil {
+			return nil, err
+		}
+		return kubernetes.NewForConfig(config)
+	}
+
+	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+	return kubernetes.NewForConfig(config)
 }
