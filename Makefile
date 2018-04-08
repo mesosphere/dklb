@@ -14,6 +14,9 @@ build: lint
 clean:
 	@rm -f dklb
 
+dep:
+	@dep ensure -update
+
 lint:
 	@golint ./cmd/... ./pkg/...
 
