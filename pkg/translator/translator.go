@@ -16,10 +16,13 @@
 package translator
 
 import (
+	"strings"
+
 	"github.com/sirupsen/logrus"
 
 	"k8s.io/api/core/v1"
 	"k8s.io/api/extensions/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/mesosphere/dklb/pkg/annotations"
@@ -37,7 +40,11 @@ type Translator struct {
 	// The IngressClass the translator is interested in.
 	ingressClass string
 
+	// Cache for Kubernetes objects.
 	cache translatorCache
+
+	// EdgeLB caches operations
+	BackendCache
 }
 
 // NewTranslator returns a configured Translator.
@@ -58,7 +65,6 @@ func (t *Translator) OnAdd(obj interface{}) {
 		t.addEndpoints(obj)
 	case *v1beta1.Ingress:
 		t.addIngress(obj)
-		//TODO t.VirtualHostCache.Notify()
 	case *v1.Secret:
 		t.addSecret(obj)
 	default:
@@ -69,7 +75,6 @@ func (t *Translator) OnAdd(obj interface{}) {
 // OnUpdate handles updated Kubernetes resources.
 func (t *Translator) OnUpdate(oldObj, newObj interface{}) {
 	t.cache.OnUpdate(oldObj, newObj)
-	// TODO(dfc) need to inspect oldObj and remove unused parts of the config from the cache.
 	switch newObj := newObj.(type) {
 	case *v1.Service:
 		oldObj, ok := oldObj.(*v1.Service)
@@ -92,7 +97,6 @@ func (t *Translator) OnUpdate(oldObj, newObj interface{}) {
 			return
 		}
 		t.updateIngress(oldObj, newObj)
-		//TODO t.VirtualHostCache.Notify()
 	case *v1.Secret:
 		t.addSecret(newObj)
 	default:
@@ -110,7 +114,6 @@ func (t *Translator) OnDelete(obj interface{}) {
 		t.removeEndpoints(obj)
 	case *v1beta1.Ingress:
 		t.removeIngress(obj)
-		//TODO t.VirtualHostCache.Notify()
 	case *v1.Secret:
 		t.removeSecret(obj)
 	case cache.DeletedFinalStateUnknown:
@@ -121,15 +124,15 @@ func (t *Translator) OnDelete(obj interface{}) {
 }
 
 func (t *Translator) addService(svc *v1.Service) {
-	//t.recomputeService(nil, svc)
+	t.recomputeService(nil, svc)
 }
 
 func (t *Translator) updateService(oldsvc, newsvc *v1.Service) {
-	//t.recomputeService(oldsvc, newsvc)
+	t.recomputeService(oldsvc, newsvc)
 }
 
 func (t *Translator) removeService(svc *v1.Service) {
-	//t.recomputeService(svc, nil)
+	t.recomputeService(svc, nil)
 }
 
 func (t *Translator) addEndpoints(e *v1.Endpoints) {
@@ -154,9 +157,7 @@ func (t *Translator) addIngress(i *v1beta1.Ingress) {
 	if ok && class != t.ingressClass {
 		// if there is an ingress class set, but it is not set to configured
 		// or default ingress class, ignore this ingress.
-		// TODO(dfc) we should also skip creating any cluster backends,
-		// but this is hard to do at the moment because cds and rds are
-		// independent.
+		// TODO skip creating any related backends?
 		return
 	}
 
@@ -188,9 +189,7 @@ func (t *Translator) removeIngress(i *v1beta1.Ingress) {
 	if ok && class != t.ingressClass {
 		// if there is an ingress class set, but it is not set to configured
 		// or default ingress class, ignore this ingress.
-		// TODO(dfc) we should also skip creating any cluster backends,
-		// but this is hard to do at the moment because cds and rds are
-		// independent.
+		// TODO skip creating any related backends?
 		return
 	}
 
@@ -319,4 +318,17 @@ func (t *translatorCache) OnDelete(obj interface{}) {
 	default:
 		// ignore
 	}
+}
+
+// servicename returns a fixed name for this service and portname
+func servicename(meta metav1.ObjectMeta, portname string) string {
+	sn := []string{
+		meta.Namespace,
+		meta.Name,
+		"",
+	}[:2]
+	if portname != "" {
+		sn = append(sn, portname)
+	}
+	return strings.Join(sn, "/")
 }

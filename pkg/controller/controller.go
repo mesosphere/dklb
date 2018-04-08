@@ -53,14 +53,14 @@ type LoadBalancerController struct {
 }
 
 // NewLoadBalancerController creates a controller for EdgeLB.
-func NewLoadBalancerController(logger logrus.FieldLogger, wg *workgroup.Group, translator cache.ResourceEventHandler, kubeClient kubernetes.Interface, resyncPeriod time.Duration) (*LoadBalancerController, error) {
+func NewLoadBalancerController(log logrus.FieldLogger, wg *workgroup.Group, translator cache.ResourceEventHandler, kubeClient kubernetes.Interface, resyncPeriod time.Duration) (*LoadBalancerController, error) {
 	broadcaster := record.NewBroadcaster()
-	broadcaster.StartLogging(logger.Printf)
+	broadcaster.StartLogging(log.Printf)
 	broadcaster.StartRecordingToSink(&corev1.EventSinkImpl{
 		Interface: kubeClient.CoreV1().Events(defaultNamespace),
 	})
 	lbc := &LoadBalancerController{
-		FieldLogger:  logger,
+		FieldLogger:  log,
 		wg:           wg,
 		kubeClient:   kubeClient,
 		resyncPeriod: resyncPeriod,
@@ -69,7 +69,7 @@ func NewLoadBalancerController(logger logrus.FieldLogger, wg *workgroup.Group, t
 	}
 
 	// Prepare Kubernetes API events buffer
-	buffer := NewBuffer(wg, translator, logger.WithField("context", "dklb-controller-buffer"), defaultBufferSize)
+	buffer := NewBuffer(wg, translator, log.WithField("context", "dklb-controller-buffer"), defaultBufferSize)
 
 	// Prepare watchers
 	watcherLogger := lbc.WithField("context", "dklb-controller-watch")

@@ -28,6 +28,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/mesosphere/dklb/pkg/controller"
+	"github.com/mesosphere/dklb/pkg/edgelb"
 	"github.com/mesosphere/dklb/pkg/translator"
 	"github.com/mesosphere/dklb/pkg/version"
 	"github.com/mesosphere/dklb/pkg/workgroup"
@@ -47,30 +48,34 @@ func init() {
 }
 
 func main() {
-	// Setup the main logger, to be passed on to the several control-loops.
-	logger := logrus.StandardLogger()
+	// Setup the main log, to be passed on to the several control-loops.
+	log := logrus.StandardLogger()
 
 	// Setup flags
 	app := kingpin.New("dklb", "DC/OS Kubernetes load-balancer manager").Version(version.Version)
-	ingressClass := app.Flag("ingress-class-name", "The IngressClass name to use").Default(defaultIngressClass).String()
-	kubeconfig := app.Flag("kubeconfig", "Apath to a kubeconfig file").String()
-	resyncPeriod := app.Flag("resync-period", "TODO").Default(defaultResyncPeriod.String()).Duration()
+	run := app.Command("run", "run")
+	ingressClass := run.Flag("ingress-class-name", "The IngressClass name to use").Default(defaultIngressClass).String()
+	kubeconfig := run.Flag("kubeconfig", "Apath to a kubeconfig file").String()
+	resyncPeriod := run.Flag("resync-period", "TODO").Default(defaultResyncPeriod.String()).Duration()
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 
 	// Setup Kubernetes client
 	kubeClient, err := newKubernetesClient(kubeconfig)
 	if err != nil {
-		logger.Fatal("There was an error while setting up the Kubernetes client: ", err)
+		log.Fatal("There was an error while setting up the Kubernetes client: ", err)
 	}
 
 	// TODO setup EdgeLB manager
 
 	// t translates between Kubernetes API events to EdgeLB calls.
-	t := translator.NewTranslator(logger, *ingressClass /*TODO EdgeLB manager*/)
+	t := translator.NewTranslator(log, *ingressClass /*TODO EdgeLB manager*/)
 
 	var wg workgroup.Group
-	if controller.NewLoadBalancerController(logger, &wg, t, kubeClient, *resyncPeriod); err != nil {
-		logger.Fatal("There was an error while setting up the controller: ", err)
+
+	edgelb.NewManager(log, &wg, t)
+
+	if controller.NewLoadBalancerController(log, &wg, t, kubeClient, *resyncPeriod); err != nil {
+		log.Fatal("There was an error while setting up the controller: ", err)
 	}
 
 	// Run all functions registered in the workgroup until one terminates
