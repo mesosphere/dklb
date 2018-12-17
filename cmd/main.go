@@ -20,11 +20,14 @@ import (
 
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/controllers"
+	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	"github.com/mesosphere/dklb/pkg/signals"
 	"github.com/mesosphere/dklb/pkg/version"
 )
 
 var (
+	// edgelbOptions is the set of options used to configure the EdgeLB Manager.
+	edgelbOptions manager.EdgeLBManagerOptions
 	// kubeconfig is the path to the kubeconfig file to use when running outside a Kubernetes cluster.
 	kubeconfig string
 	// podNamespace is the name of the namespace in which the current instance of the application is deployed (used to perform leader election).
@@ -36,6 +39,11 @@ var (
 )
 
 func init() {
+	flag.StringVar(&edgelbOptions.BearerToken, "edgelb-bearer-token", "", "the bearer token to use when communicating with the edgelb api server")
+	flag.StringVar(&edgelbOptions.Host, "edgelb-host", constants.DefaultEdgeLBHost, "the host at which the edgelb api server can be reached")
+	flag.BoolVar(&edgelbOptions.InsecureSkipTLSVerify, "edgelb-insecure-skip-tls-verify", false, "whether to skip verification of the tls certificate presented by the edgelb api server")
+	flag.StringVar(&edgelbOptions.Path, "edgelb-path", constants.DefaultEdgeLBPath, "the path at which the edgelb api server can be reached")
+	flag.StringVar(&edgelbOptions.Scheme, "edgelb-scheme", constants.DefaultEdgeLBScheme, "the scheme to use when communicating with the edgelb api server")
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "the path to the kubeconfig file to use when running outside a Kubernetes cluster")
 	flag.StringVar(&podNamespace, "pod-namespace", "", "the name of the namespace in which the current instance of the application is deployed (used to perform leader election)")
 	flag.StringVar(&podName, "pod-name", "", "the identity of the current instance of the application (used to perform leader election)")
@@ -58,6 +66,21 @@ func main() {
 	stopCh := signals.SetupSignalHandler()
 	// Birth cry.
 	log.WithField("version", version.Version).Infof("%s is starting", constants.ComponentName)
+
+	// Create a new instance of the EdgeLB Manager.
+	// TODO (@bcustodio) Figure out the best way to pass it to the controllers.
+	edgelbManager := manager.NewEdgeLBManager(edgelbOptions)
+
+	// Check the version of the EdgeLB API server that is currently installed, and issue a warning in case it could not be detected within a couple seconds.
+	func() {
+		ctx, fn := context.WithTimeout(context.Background(), 2*time.Second)
+		defer fn()
+		if v, err := edgelbManager.GetVersion(ctx); err == nil {
+			log.Infof("detected edgelb version: %s", v)
+		} else {
+			log.Warnf("failed to detect the version of edgelb currently installed: %v", err)
+		}
+	}()
 
 	// Create a Kubernetes configuration object.
 	kubeConfig, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
