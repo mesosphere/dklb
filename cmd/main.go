@@ -4,10 +4,12 @@ import (
 	"context"
 	"flag"
 	"os"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	"k8s.io/api/core/v1"
+	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -17,6 +19,7 @@ import (
 	"k8s.io/client-go/tools/record"
 
 	"github.com/mesosphere/dklb/pkg/constants"
+	"github.com/mesosphere/dklb/pkg/controllers"
 	"github.com/mesosphere/dklb/pkg/signals"
 	"github.com/mesosphere/dklb/pkg/version"
 )
@@ -28,12 +31,15 @@ var (
 	podNamespace string
 	// podName is the identity of the current instance of the application (used to perform leader election).
 	podName string
+	// resyncPeriod is the maximum amount of time that may elapse between two consecutive synchronizations of Ingress/Service resources and the status of EdgeLB pools.
+	resyncPeriod time.Duration
 )
 
 func init() {
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "the path to the kubeconfig file to use when running outside a Kubernetes cluster")
 	flag.StringVar(&podNamespace, "pod-namespace", "", "the name of the namespace in which the current instance of the application is deployed (used to perform leader election)")
 	flag.StringVar(&podName, "pod-name", "", "the identity of the current instance of the application (used to perform leader election)")
+	flag.DurationVar(&resyncPeriod, "resync-period", constants.DefaultResyncPeriod, "the maximum amount of time that may elapse between two consecutive synchronizations of ingress/service resources and the status of EdgeLB pools")
 }
 
 func main() {
@@ -94,7 +100,7 @@ func main() {
 					<-stopCh
 					runCancel()
 				}()
-				run(runCtx)
+				run(runCtx, kubeClient)
 			},
 			OnStoppedLeading: func() {
 				// We've stopped leading, so we should exit immediately.
@@ -117,10 +123,31 @@ func createRecorder(kubeClient kubernetes.Interface, podNamespace string) record
 	return eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: constants.ComponentName})
 }
 
-// TODO (@bcustodio) Implement (start the controllers and wait for them to stop).
-func run(ctx context.Context) {
-	// Wait for the context to be cancelled.
-	<-ctx.Done()
+// run starts the controllers and blocks until they stop.
+func run(ctx context.Context, kubeClient kubernetes.Interface) {
+	// Create a shared informer factory for the base API types.
+	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, resyncPeriod)
+	// Create an instance of the ingress controller that uses an ingress informer for watching Ingress resources.
+	ingressController := controllers.NewIngressController(kubeInformerFactory.Extensions().V1beta1().Ingresses())
+	// Create an instance of the service controller that uses a service informer for watching Service resources.
+	serviceController := controllers.NewServiceController(kubeInformerFactory.Core().V1().Services())
+	// Start the shared informer factory.
+	go kubeInformerFactory.Start(ctx.Done())
+
+	// Start the ingress and service controllers.
+	var wg sync.WaitGroup
+	for _, c := range []controllers.Controller{ingressController, serviceController} {
+		wg.Add(1)
+		go func(c controllers.Controller) {
+			defer wg.Done()
+			if err := c.Run(ctx); err != nil {
+				log.Error(err)
+			}
+		}(c)
+	}
+
+	// Wait for the controllers to stop.
+	wg.Wait()
 	// Confirm successful shutdown.
 	log.WithField("version", version.Version).Infof("%s is shutting down", constants.ComponentName)
 	// There is a goroutine in the background trying to renew the leader election lock.
