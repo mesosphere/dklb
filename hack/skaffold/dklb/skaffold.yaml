@@ -1,0 +1,18 @@
+apiVersion: skaffold/v1beta1
+kind: Config
+build:
+  artifacts:
+    # Use the "mesosphere/dklb" image repository in Docker Hub.
+    - image: mesosphere/dklb
+      docker:
+        # Use a Dockerfile specific for development only.
+        dockerfile: hack/skaffold/dklb/Dockerfile
+  # Use the local Docker daemon to build and push the image.
+  local: {}
+deploy:
+  kubectl:
+    manifests:
+      # Make sure that the required service account, cluster role and cluster role binding are in place.
+      - docs/deployment/00-prereqs.yaml
+      # Deploy a single "dklb" pod to make debugging easier.
+      - hack/skaffold/dklb/pod.yaml

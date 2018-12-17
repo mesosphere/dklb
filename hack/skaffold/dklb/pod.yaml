@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: dklb
+  name: dklb
+  namespace: kube-system
+spec:
+  containers:
+  - name: dklb
+    image: mesosphere/dklb
+    imagePullPolicy: Always
+    args:
+    - /dklb
+    - --pod-namespace
+    - "$(POD_NAMESPACE)"
+    - --pod-name
+    - "$(POD_NAME)"
+    env:
+    - name: POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+    - name: POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+  # WARNING: Requires the "docker-hub" secret to be present in the "kube-system" namespace beforehand.
+  # This secret must contain credentials to access the "mesosphere/dklb" Docker Hub repository.
+  imagePullSecrets:
+    - name: docker-hub
+  serviceAccountName: dklb
