@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -11,10 +10,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	extsv1beta1informers "k8s.io/client-go/informers/extensions/v1beta1"
+	"k8s.io/client-go/kubernetes"
 	extsv1beta1listers "k8s.io/client-go/listers/extensions/v1beta1"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/mesosphere/dklb/pkg/constants"
+	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	"github.com/mesosphere/dklb/pkg/translator"
 	"github.com/mesosphere/dklb/pkg/util/prettyprint"
 )
@@ -30,16 +31,22 @@ const (
 type IngressController struct {
 	// IngressController is based-off of a generic controller.
 	*genericController
+	// kubeClient is a client to the Kubernetes core APIs.
+	kubeClient kubernetes.Interface
 	// ingressLister knows how to list Ingress resources from a shared informer's store.
 	ingressLister extsv1beta1listers.IngressLister
+	// edgelbManager is the instance of the EdgeLB manager to use for materializing EdgeLB pools for Ingress resources.
+	edgelbManager manager.EdgeLBManager
 }
 
 // NewIngressController creates a new instance of the EdgeLB ingress controller.
-func NewIngressController(ingressInformer extsv1beta1informers.IngressInformer) *IngressController {
+func NewIngressController(kubeClient kubernetes.Interface, ingressInformer extsv1beta1informers.IngressInformer, edgelbManager manager.EdgeLBManager) *IngressController {
 	// Create a new instance of the ingress controller with the specified name and threadiness.
 	c := &IngressController{
 		genericController: newGenericController(ingressControllerName, ingressControllerThreadiness),
+		kubeClient:        kubeClient,
 		ingressLister:     ingressInformer.Lister(),
+		edgelbManager:     edgelbManager,
 	}
 	// Make the controller wait for caches to sync.
 	c.hasSyncedFuncs = []cache.InformerSynced{
@@ -94,7 +101,7 @@ func (c *IngressController) processQueueItem(key string) error {
 	}
 
 	// Get the Ingress resource with the specified namespace and name.
-	resource, err := c.ingressLister.Ingresses(namespace).Get(name)
+	ingress, err := c.ingressLister.Ingresses(namespace).Get(name)
 	if err != nil {
 		// The Ingress resource may no longer exist, in which case we must stop processing.
 		// TODO (@bcustodio) This might (or might not) be a good place to perform cleanup of any associated EdgeLB pools.
@@ -106,7 +113,7 @@ func (c *IngressController) processQueueItem(key string) error {
 	}
 
 	// Compute the set of options that will be used to translate the Ingress resource into an EdgeLB pool.
-	options, err := translator.ComputeIngressTranslationOptions(resource)
+	options, err := translator.ComputeIngressTranslationOptions(ingress)
 	if err != nil {
 		// Log an error, but do not re-enqueue as the resource is likely invalid.
 		// TODO (@bcustodio) Understand if this is indeed the case, and whether we should re-enqueue the current key.
@@ -117,8 +124,18 @@ func (c *IngressController) processQueueItem(key string) error {
 	// Output some debugging information about the computed set of options.
 	c.logger.Debugf("options for ingress %q: %s", key, prettyprint.Sprint(options))
 
-	// TODO (@bcustodio) Implement translation.
-	return errors.New("translation not implemented")
+	// Perform translation of the Ingress resource into an EdgeLB pool.
+	if err := translator.NewIngressTranslator(ingress, *options, c.edgelbManager).Translate(); err != nil {
+		c.logger.Errorf("failed to translate ingress %q: %v", key, err)
+		return err
+	}
+
+	// Update the status of the Service resource.
+	if _, err := c.kubeClient.ExtensionsV1beta1().Ingresses(ingress.Namespace).UpdateStatus(ingress); err != nil {
+		c.logger.Errorf("failed to update status for ingress %q: %v", key, err)
+		return err
+	}
+	return nil
 }
 
 // Run starts the controller, blocking until the specified context is canceled.

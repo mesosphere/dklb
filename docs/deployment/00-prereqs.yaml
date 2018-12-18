@@ -46,6 +46,20 @@ rules:
   verbs:
   - list
   - watch
+# Allow for updating the status of Ingress resources.
+- apiGroups:
+  - extensions
+  resources:
+  - ingresses/status
+  verbs:
+  - update
+# Allow for updating the status of Service resources.
+- apiGroups:
+  - ""
+  resources:
+  - services/status
+  verbs:
+  - update
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

@@ -76,7 +76,6 @@ func main() {
 	log.WithField("version", version.Version).Infof("%s is starting", constants.ComponentName)
 
 	// Create a new instance of the EdgeLB Manager.
-	// TODO (@bcustodio) Figure out the best way to pass it to the controllers.
 	edgelbManager := manager.NewEdgeLBManager(edgelbOptions)
 
 	// Check the version of the EdgeLB API server that is currently installed, and issue a warning in case it could not be detected within a couple seconds.
@@ -131,7 +130,7 @@ func main() {
 					<-stopCh
 					runCancel()
 				}()
-				run(runCtx, kubeClient)
+				run(runCtx, kubeClient, edgelbManager)
 			},
 			OnStoppedLeading: func() {
 				// We've stopped leading, so we should exit immediately.
@@ -155,13 +154,13 @@ func createRecorder(kubeClient kubernetes.Interface, podNamespace string) record
 }
 
 // run starts the controllers and blocks until they stop.
-func run(ctx context.Context, kubeClient kubernetes.Interface) {
+func run(ctx context.Context, kubeClient kubernetes.Interface, edgelbManager manager.EdgeLBManager) {
 	// Create a shared informer factory for the base API types.
 	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, resyncPeriod)
 	// Create an instance of the ingress controller that uses an ingress informer for watching Ingress resources.
-	ingressController := controllers.NewIngressController(kubeInformerFactory.Extensions().V1beta1().Ingresses())
+	ingressController := controllers.NewIngressController(kubeClient, kubeInformerFactory.Extensions().V1beta1().Ingresses(), edgelbManager)
 	// Create an instance of the service controller that uses a service informer for watching Service resources.
-	serviceController := controllers.NewServiceController(kubeInformerFactory.Core().V1().Services())
+	serviceController := controllers.NewServiceController(kubeClient, kubeInformerFactory.Core().V1().Services(), edgelbManager)
 	// Start the shared informer factory.
 	go kubeInformerFactory.Start(ctx.Done())
 

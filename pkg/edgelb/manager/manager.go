@@ -12,12 +12,6 @@ import (
 	"github.com/mesosphere/dklb/pkg/errors"
 )
 
-// EdgeLBManager knows how to manage the configuration of EdgeLB pools.
-// TODO (@bcustodio) Figure out a way to test this.
-type EdgeLBManager struct {
-	client *edgelbclient.DcosEdgeLb
-}
-
 // EdgeLBManagerOptions groups options that can be used to configure an instance of the EdgeLB Manager.
 type EdgeLBManagerOptions struct {
 	// BearerToken is the (optional) bearer token to use when performing requests.
@@ -32,8 +26,22 @@ type EdgeLBManagerOptions struct {
 	Scheme string
 }
 
+// EdgeLBManager knows how to manage the configuration of EdgeLB pools.
+type EdgeLBManager interface {
+	// GetPoolByName returns the EdgeLB pool with the specified name.
+	GetPoolByName(context.Context, string) (*edgelbmodels.V2Pool, error)
+	// GetVersion returns the current version of EdgeLB.
+	GetVersion(context.Context) (string, error)
+}
+
+// edgeLBManager is the main implementation of the EdgeLB manager.
+// TODO (@bcustodio) Figure out a way to test this.
+type edgeLBManager struct {
+	client *edgelbclient.DcosEdgeLb
+}
+
 // NewEdgeLBManager creates a new instance of EdgeLBManager configured according to the provided options.
-func NewEdgeLBManager(opts EdgeLBManagerOptions) *EdgeLBManager {
+func NewEdgeLBManager(opts EdgeLBManagerOptions) *edgeLBManager {
 	var (
 		t *httptransport.Runtime
 	)
@@ -56,13 +64,13 @@ func NewEdgeLBManager(opts EdgeLBManagerOptions) *EdgeLBManager {
 		t.DefaultAuthentication = httptransport.BearerToken(opts.BearerToken)
 	}
 
-	return &EdgeLBManager{
+	return &edgeLBManager{
 		client: edgelbclient.New(t, strfmt.Default),
 	}
 }
 
 // GetPoolByName returns the EdgeLB pool with the specified name.
-func (m *EdgeLBManager) GetPoolByName(ctx context.Context, name string) (*edgelbmodels.V2Pool, error) {
+func (m *edgeLBManager) GetPoolByName(ctx context.Context, name string) (*edgelbmodels.V2Pool, error) {
 	p := &edgelboperations.V2GetPoolParams{
 		Context: ctx,
 		Name:    name,
@@ -79,7 +87,7 @@ func (m *EdgeLBManager) GetPoolByName(ctx context.Context, name string) (*edgelb
 }
 
 // GetVersion returns the current version of EdgeLB.
-func (m *EdgeLBManager) GetVersion(ctx context.Context) (string, error) {
+func (m *edgeLBManager) GetVersion(ctx context.Context) (string, error) {
 	r, err := m.client.Operations.Version(edgelboperations.NewVersionParamsWithContext(ctx))
 	if err != nil {
 		return "", errors.Unknown(err)

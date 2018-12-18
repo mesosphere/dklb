@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -11,9 +10,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	corev1informers "k8s.io/client-go/informers/core/v1"
+	"k8s.io/client-go/kubernetes"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	"github.com/mesosphere/dklb/pkg/translator"
 	"github.com/mesosphere/dklb/pkg/util/prettyprint"
 )
@@ -29,16 +30,22 @@ const (
 type ServiceController struct {
 	// ServiceController is based-off of a generic controller.
 	*genericController
+	// kubeClient is a client to the Kubernetes core APIs.
+	kubeClient kubernetes.Interface
 	// serviceLister knows how to list Service resources from a shared informer's store.
 	serviceLister corev1listers.ServiceLister
+	// edgelbManager is the instance of the EdgeLB manager to use for materializing EdgeLB pools for Service resources.
+	edgelbManager manager.EdgeLBManager
 }
 
 // NewServiceController creates a new instance of the EdgeLB service controller.
-func NewServiceController(serviceInformer corev1informers.ServiceInformer) *ServiceController {
+func NewServiceController(kubeClient kubernetes.Interface, serviceInformer corev1informers.ServiceInformer, edgelbManager manager.EdgeLBManager) *ServiceController {
 	// Create a new instance of the service controller with the specified name and threadiness.
 	c := &ServiceController{
 		genericController: newGenericController(serviceControllerName, serviceControllerThreadiness),
+		kubeClient:        kubeClient,
 		serviceLister:     serviceInformer.Lister(),
+		edgelbManager:     edgelbManager,
 	}
 	// Make the controller wait for caches to sync.
 	c.hasSyncedFuncs = []cache.InformerSynced{
@@ -82,7 +89,7 @@ func (c *ServiceController) processQueueItem(key string) error {
 	}
 
 	// Get the Service resource with the specified namespace and name.
-	resource, err := c.serviceLister.Services(namespace).Get(name)
+	service, err := c.serviceLister.Services(namespace).Get(name)
 	if err != nil {
 		// The Service resource may no longer exist, in which case we must stop processing.
 		// TODO (@bcustodio) This might (or might not) be a good place to perform cleanup of any associated EdgeLB pools.
@@ -94,7 +101,7 @@ func (c *ServiceController) processQueueItem(key string) error {
 	}
 
 	// Compute the set of options that will be used to translate the Service resource into an EdgeLB pool.
-	options, err := translator.ComputeServiceTranslationOptions(resource)
+	options, err := translator.ComputeServiceTranslationOptions(service)
 	if err != nil {
 		// Log an error, but do not re-enqueue as the resource is likely invalid.
 		// TODO (@bcustodio) Understand if this is indeed the case, and whether we should re-enqueue the current key.
@@ -105,8 +112,18 @@ func (c *ServiceController) processQueueItem(key string) error {
 	// Output some debugging information about the computed set of options.
 	c.logger.Debugf("options for service %q: %s", key, prettyprint.Sprint(options))
 
-	// TODO (@bcustodio) Implement translation.
-	return errors.New("translation not implemented")
+	// Perform translation of the Service resource into an EdgeLB pool.
+	if err := translator.NewServiceTranslator(service, *options, c.edgelbManager).Translate(); err != nil {
+		c.logger.Errorf("failed to translate service %q: %v", key, err)
+		return err
+	}
+
+	// Update the status of the Service resource.
+	if _, err := c.kubeClient.CoreV1().Services(service.Namespace).UpdateStatus(service); err != nil {
+		c.logger.Errorf("failed to update status for service %q: %v", key, err)
+		return err
+	}
+	return nil
 }
 
 // Run starts the controller, blocking until the specified context is canceled.

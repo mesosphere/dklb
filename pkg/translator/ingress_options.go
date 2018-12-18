@@ -2,10 +2,10 @@ package translator
 
 import (
 	"fmt"
-	"k8s.io/apimachinery/pkg/util/validation"
 	"strconv"
 
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
+	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/mesosphere/dklb/pkg/constants"
 )
