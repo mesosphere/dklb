@@ -47,7 +47,7 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
 					EdgeLBPoolCreationStrategy: translator.DefaultEdgeLBPoolCreationStrategy,
 				},
-				EdgeLBPoolPortMap: map[int]int{
+				EdgeLBPoolPortMap: map[int32]int32{
 					80: 80,
 				},
 			},
@@ -77,7 +77,7 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
 					EdgeLBPoolCreationStrategy: translator.DefaultEdgeLBPoolCreationStrategy,
 				},
-				EdgeLBPoolPortMap: map[int]int{
+				EdgeLBPoolPortMap: map[int32]int32{
 					80:  8080,
 					443: 443,
 				},

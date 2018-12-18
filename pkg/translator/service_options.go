@@ -14,7 +14,7 @@ import (
 type ServiceTranslationOptions struct {
 	BaseTranslationOptions
 	// EdgeLBPoolPortMap is the mapping between ports defined in the Service resource and the frontend bind ports used by the EdgeLB pool.
-	EdgeLBPoolPortMap map[int]int
+	EdgeLBPoolPortMap map[int32]int32
 }
 
 // ComputeServiceTranslationOptions computes the set of options to use for "translating" the specified Service resource into an EdgeLB pool.
@@ -22,7 +22,7 @@ type ServiceTranslationOptions struct {
 func ComputeServiceTranslationOptions(obj *corev1.Service) (*ServiceTranslationOptions, error) {
 	// Create an "ServiceTranslationOptions" struct to hold the computed options.
 	res := &ServiceTranslationOptions{
-		EdgeLBPoolPortMap: make(map[int]int, len(obj.Spec.Ports)),
+		EdgeLBPoolPortMap: make(map[int32]int32, len(obj.Spec.Ports)),
 	}
 	var annotations map[string]string
 
@@ -43,12 +43,10 @@ func ComputeServiceTranslationOptions(obj *corev1.Service) (*ServiceTranslationO
 	// Parse any port mappings that may have been provided.
 	// If no mapping for a port has been specified, the original service port is used.
 	for _, port := range obj.Spec.Ports {
-		// Convert the original service port to an "int" for easier manipulation.
-		port := int(port.Port)
 		// Compute the key of the annotation that must be checked based on the current port.
-		key := fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, port)
+		key := fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, port.Port)
 		if v, exists := obj.Annotations[key]; !exists || v == "" {
-			res.EdgeLBPoolPortMap[port] = port
+			res.EdgeLBPoolPortMap[port.Port] = port.Port
 		} else {
 			r, err := strconv.Atoi(v)
 			if err != nil {
@@ -57,7 +55,7 @@ func ComputeServiceTranslationOptions(obj *corev1.Service) (*ServiceTranslationO
 			if validation.IsValidPortNum(r) != nil {
 				return nil, fmt.Errorf("%d is not a valid port number", r)
 			}
-			res.EdgeLBPoolPortMap[port] = r
+			res.EdgeLBPoolPortMap[port.Port] = int32(r)
 		}
 	}
 

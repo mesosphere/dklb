@@ -14,7 +14,7 @@ import (
 type IngressTranslationOptions struct {
 	BaseTranslationOptions
 	// EdgeLBPoolPortKey is the port to be used as a frontend bind port by the EdgeLB pool.
-	EdgeLBPoolPort int
+	EdgeLBPoolPort int32
 }
 
 // ComputeIngressTranslationOptions computes the set of options to use for "translating" the specified Ingress resource into an EdgeLB pool.
@@ -50,7 +50,7 @@ func ComputeIngressTranslationOptions(obj *extsv1beta1.Ingress) (*IngressTransla
 		if validation.IsValidPortNum(r) != nil {
 			return nil, fmt.Errorf("%d is not a valid port number", r)
 		}
-		res.EdgeLBPoolPort = r
+		res.EdgeLBPoolPort = int32(r)
 	}
 
 	// Return the computed set of options

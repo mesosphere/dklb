@@ -15,4 +15,6 @@ const (
 	DefaultEdgeLBScheme = "http"
 	// DefaultResyncPeriod is the maximum amount of time that may elapse between two consecutive synchronizations of Ingress/Service resources and the status of EdgeLB pools.
 	DefaultResyncPeriod = 1 * time.Minute
+	// KubeNodeTaskPattern is the pattern used to match Mesos tasks that correspond to Kubernetes nodes (either control-plane, private or public).
+	KubeNodeTaskPattern = "^kube-(control-plane|node)-.*$"
 )

@@ -12,10 +12,19 @@ spec:
     imagePullPolicy: Always
     args:
     - /dklb
+    - --debug
     - --pod-namespace
+    # NOTE: Populated from the "downward API".
     - "$(POD_NAMESPACE)"
     - --pod-name
+    # NOTE: Populated from the "downward API".
     - "$(POD_NAME)"
+    - --kubernetes-cluster-framework-name
+    # NOTE: Populated from the "kube-system/dklb" configmap.
+    - "$(KUBERNETES_CLUSTER_FRAMEWORK_NAME)"
+    envFrom:
+    - configMapRef:
+        name: dklb
     env:
     - name: POD_NAMESPACE
       valueFrom:

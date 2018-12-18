@@ -28,6 +28,8 @@ type EdgeLBManagerOptions struct {
 
 // EdgeLBManager knows how to manage the configuration of EdgeLB pools.
 type EdgeLBManager interface {
+	// CreatePool creates the specified EdgeLB pool in the EdgeLB API server.
+	CreatePool(context.Context, *edgelbmodels.V2Pool) (*edgelbmodels.V2Pool, error)
 	// GetPoolByName returns the EdgeLB pool with the specified name.
 	GetPoolByName(context.Context, string) (*edgelbmodels.V2Pool, error)
 	// GetVersion returns the current version of EdgeLB.
@@ -67,6 +69,19 @@ func NewEdgeLBManager(opts EdgeLBManagerOptions) *edgeLBManager {
 	return &edgeLBManager{
 		client: edgelbclient.New(t, strfmt.Default),
 	}
+}
+
+// CreatePool creates the specified EdgeLB pool in the EdgeLB API server.
+func (m *edgeLBManager) CreatePool(ctx context.Context, pool *edgelbmodels.V2Pool) (*edgelbmodels.V2Pool, error) {
+	p := &edgelboperations.V2CreatePoolParams{
+		Context: ctx,
+		Pool:    pool,
+	}
+	r, err := m.client.Operations.V2CreatePool(p)
+	if err == nil {
+		return r.Payload, nil
+	}
+	return nil, errors.Unknown(err)
 }
 
 // GetPoolByName returns the EdgeLB pool with the specified name.
