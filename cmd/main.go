@@ -26,6 +26,8 @@ import (
 )
 
 var (
+	// debug indicates whether to enable debug logging.
+	debug bool
 	// edgelbOptions is the set of options used to configure the EdgeLB Manager.
 	edgelbOptions manager.EdgeLBManagerOptions
 	// kubeconfig is the path to the kubeconfig file to use when running outside a Kubernetes cluster.
@@ -39,6 +41,7 @@ var (
 )
 
 func init() {
+	flag.BoolVar(&debug, "debug", false, "whether to enable debug logging")
 	flag.StringVar(&edgelbOptions.BearerToken, "edgelb-bearer-token", "", "the bearer token to use when communicating with the edgelb api server")
 	flag.StringVar(&edgelbOptions.Host, "edgelb-host", constants.DefaultEdgeLBHost, "the host at which the edgelb api server can be reached")
 	flag.BoolVar(&edgelbOptions.InsecureSkipTLSVerify, "edgelb-insecure-skip-tls-verify", false, "whether to skip verification of the tls certificate presented by the edgelb api server")
@@ -53,6 +56,11 @@ func init() {
 func main() {
 	// Parse the provided command-line flags.
 	flag.Parse()
+
+	// Enable debug logging if requested.
+	if debug {
+		log.SetLevel(log.DebugLevel)
+	}
 
 	// Make sure that all necessary flags have been set.
 	if podNamespace == "" {

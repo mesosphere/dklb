@@ -30,3 +30,7 @@ skaffold:
 		GOOS=linux GOARCH=amd64 $(MAKE) -C $(ROOT_DIR) build; \
 	fi
 	@skaffold $(MODE) -f $(ROOT_DIR)/hack/skaffold/dklb/skaffold.yaml -n kube-system
+
+# test.unit runs the unit test suite.
+test.unit:
+	@go test -v ./...

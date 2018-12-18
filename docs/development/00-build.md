@@ -100,7 +100,7 @@ $ make skaffold MODE=run
 
 To delete any resources that may have been created by `skaffold` (and hence uninstall `dklb`), the following command may be run:
 
-```consle
+```console
 $ make skaffold MODE=delete
 ```
 

@@ -1,0 +1,27 @@
+package translator
+
+import (
+	"k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/mesosphere/dklb/pkg/constants"
+)
+
+const (
+	// DefaultEdgeLBPoolCreationStrategy is the strategy to use for creating an EdgeLB pool when a value is not provided.
+	DefaultEdgeLBPoolCreationStrategy = constants.EdgeLBPoolCreationStrategyIfNotPresesent
+	// DefaultEdgeLBPoolPort is the port to use as the frontend bind port for an EdgeLB pool used to provision an Ingress resource when a value is not provided.
+	// TODO (@bcustodio) Split into HTTP/HTTPS port when TLS support is introduced.
+	DefaultEdgeLBPoolPort = 80
+	// DefaultEdgeLBPoolRole is the role to use for an EdgeLB pool when a value is not provided.
+	// TODO (@bcustodio) Change to "constants.EdgeLBRolePublic" if it is decided that services/ingresses should be exposed publicly by default.
+	DefaultEdgeLBPoolRole = constants.EdgelbRoleInternal
+	// DefaultEdgeLBPoolSize is the size to use for an EdgeLB pool when a value is not provided.
+	DefaultEdgeLBPoolSize = 1
+)
+
+var (
+	// DefaultEdgeLBPoolCpus is the amount of CPU to request for an EdgeLB pool when a value is not provided.
+	DefaultEdgeLBPoolCpus = resource.MustParse("100m")
+	// DefaultEdgeLBPoolCpus is the amount of memory to request for an EdgeLB pool when a value is not provided.
+	DefaultEdgeLBPoolMem = resource.MustParse("128Mi")
+)

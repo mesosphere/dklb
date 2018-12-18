@@ -1,6 +1,7 @@
 module github.com/mesosphere/dklb
 
 require (
+	github.com/davecgh/go-spew v1.1.1
 	github.com/evanphx/json-patch v4.1.0+incompatible // indirect
 	github.com/go-openapi/runtime v0.17.2
 	github.com/go-openapi/strfmt v0.17.2
@@ -21,6 +22,7 @@ require (
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/sirupsen/logrus v1.2.0
 	github.com/spf13/pflag v1.0.3 // indirect
+	github.com/stretchr/testify v1.2.2
 	golang.org/x/oauth2 v0.0.0-20181203162652-d668ce993890 // indirect
 	golang.org/x/sync v0.0.0-20181108010431-42b317875d0f // indirect
 	golang.org/x/time v0.0.0-20181108054448-85acf8d2951c // indirect
