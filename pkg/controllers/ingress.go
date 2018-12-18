@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/runtime"
@@ -17,6 +18,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	"github.com/mesosphere/dklb/pkg/translator"
+	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
 	"github.com/mesosphere/dklb/pkg/util/prettyprint"
 )
 
@@ -112,11 +114,15 @@ func (c *IngressController) processQueueItem(key string) error {
 		return err
 	}
 
+	// Create an event recorder that we can use to report events related with the Ingress resource.
+	er := kubernetesutil.NewEventRecorderForNamespace(c.kubeClient, ingress.Namespace)
+
 	// Compute the set of options that will be used to translate the Ingress resource into an EdgeLB pool.
 	options, err := translator.ComputeIngressTranslationOptions(ingress)
 	if err != nil {
-		// Log an error, but do not re-enqueue as the resource is likely invalid.
+		// Emit an event and log an error, but do not re-enqueue as the resource is likely invalid.
 		// TODO (@bcustodio) Understand if this is indeed the case, and whether we should re-enqueue the current key.
+		er.Eventf(ingress, corev1.EventTypeWarning, constants.ReasonInvalidAnnotations, "the resource's annotations are not valid: %v", err)
 		c.logger.Errorf("failed to compute translation options for ingress %q: %v", key, err)
 		return nil
 	}

@@ -8,20 +8,17 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"k8s.io/api/core/v1"
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
-	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
-	"k8s.io/client-go/tools/record"
 
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/controllers"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	"github.com/mesosphere/dklb/pkg/signals"
+	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
 	"github.com/mesosphere/dklb/pkg/version"
 )
 
@@ -108,7 +105,7 @@ func main() {
 		kubeClient.CoreV1(),
 		resourcelock.ResourceLockConfig{
 			Identity:      podName,
-			EventRecorder: createRecorder(kubeClient, podNamespace),
+			EventRecorder: kubernetesutil.NewEventRecorderForNamespace(kubeClient, podNamespace),
 		},
 	)
 
@@ -142,15 +139,6 @@ func main() {
 			},
 		},
 	})
-
-}
-
-// createRecorder creates a recorder for Kubernetes events.
-func createRecorder(kubeClient kubernetes.Interface, podNamespace string) record.EventRecorder {
-	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartLogging(log.Infof)
-	eventBroadcaster.StartRecordingToSink(&corev1client.EventSinkImpl{Interface: corev1client.New(kubeClient.CoreV1().RESTClient()).Events(podNamespace)})
-	return eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: constants.ComponentName})
 }
 
 // run starts the controllers and blocks until they stop.

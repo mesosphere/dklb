@@ -27,6 +27,8 @@ type BaseTranslationOptions struct {
 	EdgeLBPoolCreationStrategy constants.EdgeLBPoolCreationStrategy
 }
 
+// parseBaseTranslationOptions attempts to compute base, common translation options from the specified set of annotations.
+// In case options cannot be computed or are invalid, the error message MUST be suitable to be used as the message for a Kubernetes event associated with the resource.
 func parseBaseTranslationOptions(annotations map[string]string) (*BaseTranslationOptions, error) {
 	// Create a "BaseTranslationOptions" struct to hold the computed options.
 	res := &BaseTranslationOptions{}
