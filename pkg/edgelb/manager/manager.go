@@ -5,14 +5,17 @@ import (
 
 	httptransport "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
-
-	"github.com/mesosphere/dcos-edge-lb/client"
+	edgelbclient "github.com/mesosphere/dcos-edge-lb/client"
 	edgelboperations "github.com/mesosphere/dcos-edge-lb/client/operations"
+	edgelbmodels "github.com/mesosphere/dcos-edge-lb/models"
+
+	"github.com/mesosphere/dklb/pkg/errors"
 )
 
 // EdgeLBManager knows how to manage the configuration of EdgeLB pools.
+// TODO (@bcustodio) Figure out a way to test this.
 type EdgeLBManager struct {
-	client *client.DcosEdgeLb
+	client *edgelbclient.DcosEdgeLb
 }
 
 // EdgeLBManagerOptions groups options that can be used to configure an instance of the EdgeLB Manager.
@@ -54,7 +57,24 @@ func NewEdgeLBManager(opts EdgeLBManagerOptions) *EdgeLBManager {
 	}
 
 	return &EdgeLBManager{
-		client: client.New(t, strfmt.Default),
+		client: edgelbclient.New(t, strfmt.Default),
+	}
+}
+
+// GetPoolByName returns the EdgeLB pool with the specified name.
+func (m *EdgeLBManager) GetPoolByName(ctx context.Context, name string) (*edgelbmodels.V2Pool, error) {
+	p := &edgelboperations.V2GetPoolParams{
+		Context: ctx,
+		Name:    name,
+	}
+	r, err := m.client.Operations.V2GetPool(p)
+	if err == nil {
+		return r.Payload, nil
+	}
+	if err, ok := err.(*edgelboperations.V2GetPoolDefault); ok && err.Code() == 404 {
+		return nil, errors.NotFound(err)
+	} else {
+		return nil, errors.Unknown(err)
 	}
 }
 
@@ -62,7 +82,7 @@ func NewEdgeLBManager(opts EdgeLBManagerOptions) *EdgeLBManager {
 func (m *EdgeLBManager) GetVersion(ctx context.Context) (string, error) {
 	r, err := m.client.Operations.Version(edgelboperations.NewVersionParamsWithContext(ctx))
 	if err != nil {
-		return "", err
+		return "", errors.Unknown(err)
 	}
 	return r.Payload, nil
 }
