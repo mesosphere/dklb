@@ -41,24 +41,10 @@ func parseBaseTranslationOptions(annotations map[string]string) (*BaseTranslatio
 		res.EdgeLBPoolName = v
 	}
 
-	// Parse the type of load-balancer to provision.
-	if v, exists := annotations[constants.EdgeLBLoadBalancerTypeAnnotationKey]; !exists || v == "" {
+	// Parse the role of the target EdgeLB pool.
+	if v, exists := annotations[constants.EdgeLBPoolRoleAnnotationKey]; !exists || v == "" {
 		res.EdgeLBPoolRole = DefaultEdgeLBPoolRole
 	} else {
-		switch v {
-		case string(constants.EdgeLBLoadBalancerTypeInternal):
-			res.EdgeLBPoolRole = constants.EdgeLBRoleInternal
-		case string(constants.EdgeLBLoadBalancerTypePublic):
-			res.EdgeLBPoolRole = constants.EdgeLBRolePublic
-		default:
-			return nil, fmt.Errorf("failed to parse %q as the type of load-balancer to provision", v)
-		}
-	}
-
-	// Parse the role of the target EdgeLB pool.
-	// If defined, it overrides the type of load-balancer to provision.
-	// TODO (@bcustodio) Double-check whether this is the intended behaviour.
-	if v, exists := annotations[constants.EdgeLBPoolRoleAnnotationKey]; exists && v != "" {
 		res.EdgeLBPoolRole = v
 	}
 

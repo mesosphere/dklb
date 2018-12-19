@@ -45,26 +45,6 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 			},
 			error: nil,
 		},
-		// Test computing options for an Ingress resource requesting a public load-balancer.
-		// Make sure the name of the EdgeLB pool is captured as expected, that the role is adequately set, and that the default values are used everywhere else.
-		{
-			annotations: map[string]string{
-				constants.EdgeLBPoolNameAnnotationKey:         "foo",
-				constants.EdgeLBLoadBalancerTypeAnnotationKey: string(constants.EdgeLBLoadBalancerTypePublic),
-			},
-			options: &translator.IngressTranslationOptions{
-				BaseTranslationOptions: translator.BaseTranslationOptions{
-					EdgeLBPoolName:             "foo",
-					EdgeLBPoolRole:             constants.EdgeLBRolePublic,
-					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
-					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
-					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
-					EdgeLBPoolCreationStrategy: translator.DefaultEdgeLBPoolCreationStrategy,
-				},
-				EdgeLBPoolPort: translator.DefaultEdgeLBPoolPort,
-			},
-			error: nil,
-		},
 		// Test computing options for an Ingress resource defining a custom frontend bind port.
 		// Make sure the name of the EdgeLB pool and the frontend bind port are captured as expected, and that the default values are used everywhere else.
 		{
@@ -100,7 +80,6 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 		{
 			annotations: map[string]string{
 				constants.EdgeLBPoolNameAnnotationKey:             "foo",
-				constants.EdgeLBLoadBalancerTypeAnnotationKey:     string(constants.EdgeLBLoadBalancerTypePublic),
 				constants.EdgeLBPoolRoleAnnotationKey:             "custom_role",
 				constants.EdgeLBPoolCpusAnnotationKey:             "250m",
 				constants.EdgeLBPoolMemAnnotationKey:              "2Gi",

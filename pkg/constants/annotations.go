@@ -12,16 +12,6 @@ const (
 	EdgeLBPoolCreationStragegyOnce = EdgeLBPoolCreationStrategy("Once")
 )
 
-// EdgeLBLoadBalancerType represents the type (internal vs. external) of load balancer to provision.
-type EdgeLBLoadBalancerType string
-
-const (
-	// EdgeLBLoadBalancerTypeInternal denotes that an internal load balancer should be provisioned.
-	EdgeLBLoadBalancerTypeInternal = EdgeLBLoadBalancerType("internal")
-	// EdgeLBLoadBalancerTypePublic denotes that a public load balancer should be provisioned.
-	EdgeLBLoadBalancerTypePublic = EdgeLBLoadBalancerType("public")
-)
-
 const (
 	// annotationKeyPrefix is the prefix used by annotations that belong to the MKE domain.
 	annotationKeyPrefix = "kubernetes.dcos.io/"
@@ -34,9 +24,6 @@ const (
 	// EdgeLBIngressClassAnnotationValue is the value that must be used for the annotation that selects the ingress controller used to satisfy a given Ingress resource.
 	// Only Ingres resources having this as the value of the aforementioned annotation will be provisioned using EdgeLB.
 	EdgeLBIngressClassAnnotationValue = "edgelb"
-
-	// EdgeLBLoadBalancerTypeAnnotationKey is the key of the annotation that defines the type (internal vs. external) of load balancer to provision.
-	EdgeLBLoadBalancerTypeAnnotationKey = annotationKeyPrefix + "load-balancer-type"
 
 	// EdgeLBPoolCreationStrategyAnnotationKey is the key of the annotation that holds the strategy to use for provisioning the target EdgeLB pool.
 	EdgeLBPoolCreationStrategyAnnotationKey = annotationKeyPrefix + "edgelb-pool-creation-strategy"

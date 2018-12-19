@@ -15,8 +15,7 @@ const (
 	// TODO (@bcustodio) Split into HTTP/HTTPS port when TLS support is introduced.
 	DefaultEdgeLBPoolPort = 80
 	// DefaultEdgeLBPoolRole is the role to use for an EdgeLB pool when a value is not provided.
-	// TODO (@bcustodio) Change to "constants.EdgeLBRolePublic" if it is decided that services/ingresses should be exposed publicly by default.
-	DefaultEdgeLBPoolRole = constants.EdgeLBRoleInternal
+	DefaultEdgeLBPoolRole = constants.EdgeLBRolePublic
 	// DefaultEdgeLBPoolSize is the size to use for an EdgeLB pool when a value is not provided.
 	DefaultEdgeLBPoolSize = 1
 )
