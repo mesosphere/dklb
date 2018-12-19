@@ -61,9 +61,12 @@ func main() {
 		log.SetLevel(log.DebugLevel)
 	}
 
-	// Make sure that all necessary flags have been set.
+	// Make sure that all necessary flags have been set and have adequate values.
 	if podNamespace == "" {
 		log.Fatalf("--pod-namespace must be set")
+	}
+	if podNamespace != constants.KubeSystemNamespaceName {
+		log.Fatalf("%s must run on the %q namespace", constants.ComponentName, constants.KubeSystemNamespaceName)
 	}
 	if podName == "" {
 		log.Fatalf("--pod-name must be set")

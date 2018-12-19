@@ -83,21 +83,13 @@ To deploy `dklb` to the MKE cluster targeted by the current kubeconfig context, 
 $ make skaffold
 ```
 
-**NOTE:** This assumes that the name of the Mesos framework corresponding to the target Kubernetes cluster is `kubernetes-cluster`.
-To deploy to a Kubernetes cluster with a different name, the following command **MUST** be run instead:
-
-```
-$ make skaffold KUBERNETES_CLUSTER_FRAMEWORK_NAME="<kubernetes-cluster-framework-name>"
-```
-
 These command will perform the following tasks:
 
-1. Create (or overwrite) a configmap called `dklb` in the `kube-system` namespace containing the value of `KUBERNETES_CLUSTER_FRAMEWORK_NAME`.
 1. Build the `build/dklb` binary.
 1. Build the `mesosphere/dklb` Docker image based on said binary.
 1. Push the `mesosphere/dklb` Docker image to Docker Hub.
 1. Create or update a `dklb` service account, cluster role and cluster role binding.
-1. Deploy `dklb` as a single pod that uses the `dklb` configmap to configure its environment.
+1. Deploy `dklb` as a single pod that uses the `kube-system/mke-cluster-info` configmap to configure its environment.
 1. Stream logs from the `dklb` pod until `Ctrl+C` is hit.
 
 To simply deploy the `dklb` pod without streaming logs, the following command may be run instead:

@@ -24,17 +24,12 @@ mod:
 
 # skaffold deploys dklb to the Kubernetes repository targeted by the current context using skaffold.
 .PHONY: skaffold
-skaffold: KUBERNETES_CLUSTER_FRAMEWORK_NAME ?= kubernetes-cluster
 skaffold: MODE ?= dev
-skaffold: CONFIG_MAP_NAME := dklb
-skaffold: NAMESPACE := kube-system
 skaffold:
-	@kubectl -n $(NAMESPACE) delete configmap $(CONFIG_MAP_NAME) --ignore-not-found > /dev/null 2>&1
 	@if [[ ! "$(MODE)" == "delete" ]]; then \
 		GOOS=linux GOARCH=amd64 $(MAKE) -C $(ROOT_DIR) build; \
-		kubectl -n $(NAMESPACE) create configmap $(CONFIG_MAP_NAME) --from-literal KUBERNETES_CLUSTER_FRAMEWORK_NAME=$(KUBERNETES_CLUSTER_FRAMEWORK_NAME); \
 	fi
-	@skaffold $(MODE) -f $(ROOT_DIR)/hack/skaffold/dklb/skaffold.yaml -n $(NAMESPACE)
+	@skaffold $(MODE) -f $(ROOT_DIR)/hack/skaffold/dklb/skaffold.yaml
 
 # test.unit runs the unit test suite.
 test.unit:
