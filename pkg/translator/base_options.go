@@ -47,9 +47,9 @@ func parseBaseTranslationOptions(annotations map[string]string) (*BaseTranslatio
 	} else {
 		switch v {
 		case string(constants.EdgeLBLoadBalancerTypeInternal):
-			res.EdgeLBPoolRole = constants.EdgelbRoleInternal
+			res.EdgeLBPoolRole = constants.EdgeLBRoleInternal
 		case string(constants.EdgeLBLoadBalancerTypePublic):
-			res.EdgeLBPoolRole = constants.EdgelbRolePublic
+			res.EdgeLBPoolRole = constants.EdgeLBRolePublic
 		default:
 			return nil, fmt.Errorf("failed to parse %q as the type of load-balancer to provision", v)
 		}

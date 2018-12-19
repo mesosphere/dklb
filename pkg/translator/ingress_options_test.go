@@ -55,7 +55,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 			options: &translator.IngressTranslationOptions{
 				BaseTranslationOptions: translator.BaseTranslationOptions{
 					EdgeLBPoolName:             "foo",
-					EdgeLBPoolRole:             constants.EdgelbRolePublic,
+					EdgeLBPoolRole:             constants.EdgeLBRolePublic,
 					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
 					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
 					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,

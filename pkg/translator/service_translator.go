@@ -13,7 +13,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	dklberrors "github.com/mesosphere/dklb/pkg/errors"
-	"github.com/mesosphere/dklb/pkg/util/kubernetes"
+	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
 	"github.com/mesosphere/dklb/pkg/util/prettyprint"
 )
 
@@ -62,19 +62,19 @@ func (st *ServiceTranslator) maybeCreateEdgeLBPool() error {
 	// If the pool creation strategy is "Never", the target pool must be provisioned manually.
 	// Hence, we should just exit.
 	if st.options.EdgeLBPoolCreationStrategy == constants.EdgeLBPoolCreationStrategyNever {
-		return fmt.Errorf("edgelb pool %q targeted by service %q does not exist, but the pool creation strategy is %q", st.options.EdgeLBPoolName, kubernetes.Key(st.service), st.options.EdgeLBPoolCreationStrategy)
+		return fmt.Errorf("edgelb pool %q targeted by service %q does not exist, but the pool creation strategy is %q", st.options.EdgeLBPoolName, kubernetesutil.Key(st.service), st.options.EdgeLBPoolCreationStrategy)
 	}
 
 	// Handle the scenario in which the target EdgeLB pool has once existed (because the service's status contains at least one IP) but has since been deleted.
 	// TODO (@bcustodio) Understand what else could/should be done in this scenario.
 	if st.options.EdgeLBPoolCreationStrategy == constants.EdgeLBPoolCreationStragegyOnce && len(st.service.Status.LoadBalancer.Ingress) > 0 {
-		return fmt.Errorf("edgelb pool %q targeted by service %q has probably been manually deleted, and the pool creation strategy is %q", st.options.EdgeLBPoolName, kubernetes.Key(st.service), st.options.EdgeLBPoolCreationStrategy)
+		return fmt.Errorf("edgelb pool %q targeted by service %q has probably been manually deleted, and the pool creation strategy is %q", st.options.EdgeLBPoolName, kubernetesutil.Key(st.service), st.options.EdgeLBPoolCreationStrategy)
 	}
 
 	// At this point, we know that we must create the target EdgeLB pool based on the specified options.
 	// TODO (@bcustodio) Wait for the pool to be provisioned and check for its IP(s) so that the service's status can be updated.
 	pool := st.createPoolObject()
-	log.Debugf("computed pool object:\n\n%s", prettyprint.Sprint(pool))
+	log.Debugf("computed pool object for service %q:\n%s", kubernetesutil.Key(st.service), prettyprint.Sprint(pool))
 	ctx, fn := context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
 	defer fn()
 	_, err := st.manager.CreatePool(ctx, pool)

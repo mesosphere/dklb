@@ -40,16 +40,16 @@ var (
 
 func init() {
 	flag.BoolVar(&debug, "debug", false, "whether to enable debug logging")
-	flag.StringVar(&edgelbOptions.BearerToken, "edgelb-bearer-token", "", "the bearer token to use when communicating with the edgelb api server")
+	flag.StringVar(&edgelbOptions.BearerToken, "edgelb-bearer-token", "", "the (optional) bearer token to use when communicating with the edgelb api server")
 	flag.StringVar(&edgelbOptions.Host, "edgelb-host", constants.DefaultEdgeLBHost, "the host at which the edgelb api server can be reached")
 	flag.BoolVar(&edgelbOptions.InsecureSkipTLSVerify, "edgelb-insecure-skip-tls-verify", false, "whether to skip verification of the tls certificate presented by the edgelb api server")
 	flag.StringVar(&edgelbOptions.Path, "edgelb-path", constants.DefaultEdgeLBPath, "the path at which the edgelb api server can be reached")
 	flag.StringVar(&edgelbOptions.Scheme, "edgelb-scheme", constants.DefaultEdgeLBScheme, "the scheme to use when communicating with the edgelb api server")
-	flag.StringVar(&kubeconfig, "kubeconfig", "", "the path to the kubeconfig file to use when running outside a Kubernetes cluster")
+	flag.StringVar(&kubeconfig, "kubeconfig", "", "the path to the kubeconfig file to use when running outside a kubernetes cluster")
 	flag.StringVar(&cluster.KubernetesClusterFrameworkName, "kubernetes-cluster-framework-name", "", "the name of the mesos framework that corresponds to the current kubernetes cluster")
 	flag.StringVar(&podNamespace, "pod-namespace", "", "the name of the namespace in which the current instance of the application is deployed (used to perform leader election)")
 	flag.StringVar(&podName, "pod-name", "", "the identity of the current instance of the application (used to perform leader election)")
-	flag.DurationVar(&resyncPeriod, "resync-period", constants.DefaultResyncPeriod, "the maximum amount of time that may elapse between two consecutive synchronizations of ingress/service resources and the status of EdgeLB pools")
+	flag.DurationVar(&resyncPeriod, "resync-period", constants.DefaultResyncPeriod, "the maximum amount of time that may elapse between two consecutive synchronizations of ingress/service resources and the status of edgelb pools")
 }
 
 func main() {
@@ -81,25 +81,23 @@ func main() {
 	edgelbManager := manager.NewEdgeLBManager(edgelbOptions)
 
 	// Check the version of the EdgeLB API server that is currently installed, and issue a warning in case it could not be detected within a couple seconds.
-	func() {
-		ctx, fn := context.WithTimeout(context.Background(), 2*time.Second)
-		defer fn()
-		if v, err := edgelbManager.GetVersion(ctx); err == nil {
-			log.Infof("detected edgelb version: %s", v)
-		} else {
-			log.Warnf("failed to detect the version of edgelb currently installed: %v", err)
-		}
-	}()
+	ctx, fn := context.WithTimeout(context.Background(), 2*time.Second)
+	defer fn()
+	if v, err := edgelbManager.GetVersion(ctx); err == nil {
+		log.Infof("detected edgelb version: %s", v)
+	} else {
+		log.Warnf("failed to detect the version of edgelb currently installed: %v", err)
+	}
 
 	// Create a Kubernetes configuration object.
 	kubeConfig, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
-		log.Fatalf("error building kubeconfig: %v", err)
+		log.Fatalf("failed to build kubeconfig: %v", err)
 	}
 	// Create a client for the core Kubernetes APIs.
 	kubeClient, err := kubernetes.NewForConfig(kubeConfig)
 	if err != nil {
-		log.Fatalf("error building kubernetes clientset: %v", err)
+		log.Fatalf("failed to build kubernetes client: %v", err)
 	}
 
 	// Setup a resource lock so we can perform leader election.

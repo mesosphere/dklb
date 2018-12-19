@@ -16,7 +16,7 @@ const (
 	DefaultEdgeLBPoolPort = 80
 	// DefaultEdgeLBPoolRole is the role to use for an EdgeLB pool when a value is not provided.
 	// TODO (@bcustodio) Change to "constants.EdgeLBRolePublic" if it is decided that services/ingresses should be exposed publicly by default.
-	DefaultEdgeLBPoolRole = constants.EdgelbRoleInternal
+	DefaultEdgeLBPoolRole = constants.EdgeLBRoleInternal
 	// DefaultEdgeLBPoolSize is the size to use for an EdgeLB pool when a value is not provided.
 	DefaultEdgeLBPoolSize = 1
 )

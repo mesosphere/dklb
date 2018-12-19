@@ -14,7 +14,7 @@ import (
 
 // EdgeLBManagerOptions groups options that can be used to configure an instance of the EdgeLB Manager.
 type EdgeLBManagerOptions struct {
-	// BearerToken is the (optional) bearer token to use when performing requests.
+	// BearerToken is the (optional) bearer token to use when communicating with the EdgeLB API server.
 	BearerToken string
 	// Host is the host at which the EdgeLB API server can be reached.
 	Host string
@@ -39,6 +39,7 @@ type EdgeLBManager interface {
 // edgeLBManager is the main implementation of the EdgeLB manager.
 // TODO (@bcustodio) Figure out a way to test this.
 type edgeLBManager struct {
+	// client is a client for the EdgeLB API server.
 	client *edgelbclient.DcosEdgeLb
 }
 
@@ -49,7 +50,7 @@ func NewEdgeLBManager(opts EdgeLBManagerOptions) *edgeLBManager {
 	)
 
 	if !opts.InsecureSkipTLSVerify {
-		// Do not skip TLS verification.
+		// Use the default HTTP client, which does not skip TLS verification.
 		t = httptransport.New(opts.Host, opts.Path, []string{opts.Scheme})
 	} else {
 		// Create an HTTP client that skips TLS verification.
