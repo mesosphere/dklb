@@ -101,6 +101,8 @@ func (c *ServiceController) processQueueItem(key string) error {
 		}
 		return err
 	}
+	// Create a deep copy of the Service resource in order to avoid possibly mutating the cache.
+	service = service.DeepCopy()
 
 	// Create an event recorder that we can use to report events related with the Ingress resource.
 	er := kubernetesutil.NewEventRecorderForNamespace(c.kubeClient, service.Namespace)
