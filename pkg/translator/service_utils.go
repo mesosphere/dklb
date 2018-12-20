@@ -59,11 +59,11 @@ func (sp *serviceOwnedEdgeLBObjectMetadata) IsOwnedBy(service *corev1.Service) b
 func computeServiceOwnedEdgeLBObjectMetadata(name string) (*serviceOwnedEdgeLBObjectMetadata, error) {
 	parts := strings.Split(name, separator)
 	if len(parts) != 4 {
-		return nil, errors.New("invalid backend/frontend Name for service")
+		return nil, errors.New("invalid backend/frontend name for service")
 	}
 	p, err := strconv.Atoi(parts[3])
 	if err != nil {
-		return nil, errors.New("invalid backend/frontend Name for service")
+		return nil, errors.New("invalid backend/frontend name for service")
 	}
 	return &serviceOwnedEdgeLBObjectMetadata{
 		ClusterName: parts[0],
