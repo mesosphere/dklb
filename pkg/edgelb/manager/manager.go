@@ -34,6 +34,8 @@ type EdgeLBManager interface {
 	GetPoolByName(context.Context, string) (*edgelbmodels.V2Pool, error)
 	// GetVersion returns the current version of EdgeLB.
 	GetVersion(context.Context) (string, error)
+	// UpdatePool updates the specified EdgeLB pool in the EdgeLB API server.
+	UpdatePool(context.Context, *edgelbmodels.V2Pool) (*edgelbmodels.V2Pool, error)
 }
 
 // edgeLBManager is the main implementation of the EdgeLB manager.
@@ -109,4 +111,22 @@ func (m *edgeLBManager) GetVersion(ctx context.Context) (string, error) {
 		return "", errors.Unknown(err)
 	}
 	return r.Payload, nil
+}
+
+// UpdatePool updates the specified EdgeLB pool in the EdgeLB API server.
+func (m *edgeLBManager) UpdatePool(ctx context.Context, pool *edgelbmodels.V2Pool) (*edgelbmodels.V2Pool, error) {
+	p := &edgelboperations.V2UpdatePoolParams{
+		Context: ctx,
+		Name:    pool.Name,
+		Pool:    pool,
+	}
+	r, err := m.client.Operations.V2UpdatePool(p)
+	if err == nil {
+		return r.Payload, nil
+	}
+	if err, ok := err.(*edgelboperations.V2UpdatePoolDefault); ok && err.Code() == 404 {
+		return nil, errors.NotFound(err)
+	} else {
+		return nil, errors.Unknown(err)
+	}
 }
