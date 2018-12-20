@@ -104,7 +104,7 @@ func main() {
 	}
 
 	// Setup a resource lock so we can perform leader election.
-	rl, err := resourcelock.New(
+	rl, _ := resourcelock.New(
 		resourcelock.EndpointsResourceLock,
 		podNamespace,
 		constants.ComponentName,

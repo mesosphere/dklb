@@ -3,9 +3,11 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 )
@@ -30,6 +32,36 @@ type genericController struct {
 	syncHandler func(key string) error
 	// threadiness is the number of workers to use for processing items from the work queue.
 	threadiness int
+	// name is the name of the controller.
+	name string
+}
+
+// Run starts the controller, blocking until the specified context is canceled.
+func (c *genericController) Run(ctx context.Context) error {
+	// Handle any possible crashes and shutdown the work queue when we're done.
+	defer runtime.HandleCrash()
+	defer c.workqueue.ShutDown()
+
+	c.logger.Debugf("starting %q", c.name)
+
+	// Wait for the caches to be synced before starting workers.
+	c.logger.Debug("waiting for informer caches to be synced")
+	if ok := cache.WaitForCacheSync(ctx.Done(), c.hasSyncedFuncs...); !ok {
+		return fmt.Errorf("failed to wait for informer caches to be synced")
+	}
+
+	c.logger.Debug("starting workers")
+
+	// Launch "threadiness" workers to process items from the work queue.
+	for i := 0; i < c.threadiness; i++ {
+		go wait.Until(c.runWorker, time.Second, ctx.Done())
+	}
+
+	c.logger.Info("started workers")
+
+	// Block until the context is canceled.
+	<-ctx.Done()
+	return nil
 }
 
 // newGenericController returns a new generic controller.
@@ -39,6 +71,7 @@ func newGenericController(name string, threadiness int) *genericController {
 		logger:      log.WithField("controller", name),
 		workqueue:   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), name),
 		threadiness: threadiness,
+		name:        name,
 	}
 }
 

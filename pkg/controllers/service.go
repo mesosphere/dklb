@@ -1,14 +1,11 @@
 package controllers
 
 import (
-	"context"
 	"fmt"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
 	corev1informers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
 	corev1listers "k8s.io/client-go/listers/core/v1"
@@ -131,33 +128,5 @@ func (c *ServiceController) processQueueItem(key string) error {
 		c.logger.Errorf("failed to update status for service %q: %v", key, err)
 		return err
 	}
-	return nil
-}
-
-// Run starts the controller, blocking until the specified context is canceled.
-func (c *ServiceController) Run(ctx context.Context) error {
-	// Handle any possible crashes and shutdown the work queue when we're done.
-	defer runtime.HandleCrash()
-	defer c.workqueue.ShutDown()
-
-	c.logger.Debugf("starting %q", serviceControllerName)
-
-	// Wait for the caches to be synced before starting workers.
-	c.logger.Debug("waiting for informer caches to be synced")
-	if ok := cache.WaitForCacheSync(ctx.Done(), c.hasSyncedFuncs...); !ok {
-		return fmt.Errorf("failed to wait for informer caches to be synced")
-	}
-
-	c.logger.Debug("starting workers")
-
-	// Launch "threadiness" workers to process items from the work queue.
-	for i := 0; i < c.threadiness; i++ {
-		go wait.Until(c.runWorker, time.Second, ctx.Done())
-	}
-
-	c.logger.Info("started workers")
-
-	// Block until the context is canceled.
-	<-ctx.Done()
 	return nil
 }

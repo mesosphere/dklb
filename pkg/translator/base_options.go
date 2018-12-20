@@ -35,11 +35,11 @@ func parseBaseTranslationOptions(annotations map[string]string) (*BaseTranslatio
 
 	// Parse the name of the target EdgeLB pool.
 	// This annotation is MANDATORY.
-	if v, exists := annotations[constants.EdgeLBPoolNameAnnotationKey]; !exists || v == "" {
+	v, exists := annotations[constants.EdgeLBPoolNameAnnotationKey]
+	if !exists || v == "" {
 		return nil, fmt.Errorf("required annotation %q has not been provided", constants.EdgeLBPoolNameAnnotationKey)
-	} else {
-		res.EdgeLBPoolName = v
 	}
+	res.EdgeLBPoolName = v
 
 	// Parse the role of the target EdgeLB pool.
 	if v, exists := annotations[constants.EdgeLBPoolRoleAnnotationKey]; !exists || v == "" {
@@ -93,8 +93,8 @@ func parseBaseTranslationOptions(annotations map[string]string) (*BaseTranslatio
 			res.EdgeLBPoolCreationStrategy = constants.EdgeLBPoolCreationStrategyIfNotPresesent
 		case string(constants.EdgeLBPoolCreationStrategyNever):
 			res.EdgeLBPoolCreationStrategy = constants.EdgeLBPoolCreationStrategyNever
-		case string(constants.EdgeLBPoolCreationStragegyOnce):
-			res.EdgeLBPoolCreationStrategy = constants.EdgeLBPoolCreationStragegyOnce
+		case string(constants.EdgeLBPoolCreationStrategyOnce):
+			res.EdgeLBPoolCreationStrategy = constants.EdgeLBPoolCreationStrategyOnce
 		default:
 			return nil, fmt.Errorf("failed to parse %q as a pool creation strategy", v)
 		}

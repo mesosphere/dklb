@@ -10,7 +10,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/constants"
 )
 
-// ServiceTranslationOption groups together options used to "translate" a Service resource into an EdgeLB pool.
+// ServiceTranslationOptions groups together options used to "translate" a Service resource into an EdgeLB pool.
 type ServiceTranslationOptions struct {
 	BaseTranslationOptions
 	// EdgeLBPoolPortMap is the mapping between ports defined in the Service resource and the frontend bind ports used by the EdgeLB pool.

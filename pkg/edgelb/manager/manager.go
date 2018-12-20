@@ -46,7 +46,7 @@ type edgeLBManager struct {
 }
 
 // NewEdgeLBManager creates a new instance of EdgeLBManager configured according to the provided options.
-func NewEdgeLBManager(opts EdgeLBManagerOptions) *edgeLBManager {
+func NewEdgeLBManager(opts EdgeLBManagerOptions) EdgeLBManager {
 	var (
 		t *httptransport.Runtime
 	)
@@ -99,9 +99,8 @@ func (m *edgeLBManager) GetPoolByName(ctx context.Context, name string) (*edgelb
 	}
 	if err, ok := err.(*edgelboperations.V2GetPoolDefault); ok && err.Code() == 404 {
 		return nil, errors.NotFound(err)
-	} else {
-		return nil, errors.Unknown(err)
 	}
+	return nil, errors.Unknown(err)
 }
 
 // GetVersion returns the current version of EdgeLB.
@@ -126,7 +125,6 @@ func (m *edgeLBManager) UpdatePool(ctx context.Context, pool *edgelbmodels.V2Poo
 	}
 	if err, ok := err.(*edgelboperations.V2UpdatePoolDefault); ok && err.Code() == 404 {
 		return nil, errors.NotFound(err)
-	} else {
-		return nil, errors.Unknown(err)
 	}
+	return nil, errors.Unknown(err)
 }

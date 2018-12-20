@@ -9,7 +9,7 @@ const (
 	ComponentName = "dklb"
 	// DefaultEdgeLBHost is the default host at which the EdgeLB API server can be reached.
 	DefaultEdgeLBHost = "api.edgelb.marathon.l4lb.thisdcos.directory"
-	// DefaultEdgeLBHost is the default path at which the EdgeLB API server can be reached.
+	// DefaultEdgeLBPath is the default path at which the EdgeLB API server can be reached.
 	DefaultEdgeLBPath = "/"
 	// DefaultEdgeLBScheme is the default scheme to use when communicating with the EdgeLB API server.
 	DefaultEdgeLBScheme = "http"

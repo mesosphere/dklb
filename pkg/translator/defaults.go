@@ -28,7 +28,7 @@ const (
 var (
 	// DefaultEdgeLBPoolCpus is the amount of CPU to request for an EdgeLB pool when a value is not provided.
 	DefaultEdgeLBPoolCpus = resource.MustParse("100m")
-	// DefaultEdgeLBPoolCpus is the amount of memory to request for an EdgeLB pool when a value is not provided.
+	// DefaultEdgeLBPoolMem is the amount of memory to request for an EdgeLB pool when a value is not provided.
 	DefaultEdgeLBPoolMem = resource.MustParse("128Mi")
 )
 

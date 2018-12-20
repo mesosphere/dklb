@@ -84,7 +84,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 				constants.EdgeLBPoolCpusAnnotationKey:             "250m",
 				constants.EdgeLBPoolMemAnnotationKey:              "2Gi",
 				constants.EdgeLBPoolSizeAnnotationKey:             "3",
-				constants.EdgeLBPoolCreationStrategyAnnotationKey: string(constants.EdgeLBPoolCreationStragegyOnce),
+				constants.EdgeLBPoolCreationStrategyAnnotationKey: string(constants.EdgeLBPoolCreationStrategyOnce),
 				constants.EdgeLBPoolPortKey:                       "14708",
 			},
 			options: &translator.IngressTranslationOptions{
@@ -94,7 +94,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 					EdgeLBPoolCpus:             resource.MustParse("250m"),
 					EdgeLBPoolMem:              resource.MustParse("2Gi"),
 					EdgeLBPoolSize:             3,
-					EdgeLBPoolCreationStrategy: constants.EdgeLBPoolCreationStragegyOnce,
+					EdgeLBPoolCreationStrategy: constants.EdgeLBPoolCreationStrategyOnce,
 				},
 				EdgeLBPoolPort: 14708,
 			},

@@ -8,8 +8,8 @@ const (
 	EdgeLBPoolCreationStrategyIfNotPresesent = EdgeLBPoolCreationStrategy("IfNotPresent")
 	// EdgeLBPoolCreationStrategyNever denotes the strategy that never creates an EdgeLB pool, expecting it to have been created out-of-band.
 	EdgeLBPoolCreationStrategyNever = EdgeLBPoolCreationStrategy("Never")
-	// PoolCreationStrategyOnce denotes the strategy that creates an EdgeLB pool only if a pool for a given Ingress/Service resource has never been created.
-	EdgeLBPoolCreationStragegyOnce = EdgeLBPoolCreationStrategy("Once")
+	// EdgeLBPoolCreationStrategyOnce denotes the strategy that creates an EdgeLB pool only if a pool for a given Ingress/Service resource has never been created.
+	EdgeLBPoolCreationStrategyOnce = EdgeLBPoolCreationStrategy("Once")
 )
 
 const (
