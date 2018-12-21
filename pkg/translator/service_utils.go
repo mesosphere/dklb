@@ -6,6 +6,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mesosphere/dklb/pkg/constants"
+	"github.com/mesosphere/dklb/pkg/util/pointers"
+
 	"github.com/mesosphere/dcos-edge-lb/models"
 	corev1 "k8s.io/api/core/v1"
 
@@ -53,6 +56,75 @@ type serviceOwnedEdgeLBObjectMetadata struct {
 // IsOwnedBy indicates whether the current object is owned by the specified Service resource.
 func (sp *serviceOwnedEdgeLBObjectMetadata) IsOwnedBy(service *corev1.Service) bool {
 	return sp.ClusterName == stringsutil.RemoveSlashes(cluster.KubernetesClusterFrameworkName) && sp.Namespace == service.Namespace && sp.Name == service.Name
+}
+
+// computeBackendForServicePort computes the backend that correspond to the specified service port.
+func computeBackendForServicePort(service *corev1.Service, servicePort corev1.ServicePort) *models.V2Backend {
+	// Compute the name to give to the backend.
+	bn := backendNameForServicePort(service, servicePort)
+	return &models.V2Backend{
+		Balance:  constants.EdgeLBBackendBalanceLeastConnections,
+		Name:     bn,
+		Protocol: models.V2ProtocolTCP,
+		Services: []*models.V2Service{
+			{
+				Endpoint: &models.V2Endpoint{
+					Check: &models.V2EndpointCheck{
+						Enabled: pointers.NewBool(true),
+					},
+					Port: servicePort.NodePort,
+					Type: models.V2EndpointTypeCONTAINERIP,
+				},
+				Marathon: &models.V2ServiceMarathon{
+					// We don't want to use any Marathon service as the backend.
+				},
+				Mesos: &models.V2ServiceMesos{
+					FrameworkName:   cluster.KubernetesClusterFrameworkName,
+					TaskNamePattern: constants.KubeNodeTaskPattern,
+				},
+			},
+		},
+		// Explicitly set "RewriteHTTP" in order to make it easier to compare a computed backend with a V2Backend returned by the EdgeLB API server later on.
+		RewriteHTTP: &models.V2RewriteHTTP{
+			Request: &models.V2RewriteHTTPRequest{
+				Forwardfor:                pointers.NewBool(true),
+				RewritePath:               pointers.NewBool(true),
+				SetHostHeader:             pointers.NewBool(true),
+				XForwardedPort:            pointers.NewBool(true),
+				XForwardedProtoHTTPSIfTLS: pointers.NewBool(true),
+			},
+			Response: &models.V2RewriteHTTPResponse{
+				RewriteLocation: pointers.NewBool(true),
+			},
+		},
+	}
+}
+
+// computeFrontendForServicePort computes the frontend that correspond to the specified service port.
+func computeFrontendForServicePort(service *corev1.Service, servicePort corev1.ServicePort, options ServiceTranslationOptions) *models.V2Frontend {
+	var (
+		bindPort     int32
+		frontendName string
+	)
+	// Compute the value to use as the frontend bind port, falling back to the service port in case one isn't provided.
+	portOverride, exists := options.EdgeLBPoolPortMap[servicePort.Port]
+	if !exists {
+		bindPort = servicePort.Port
+	} else {
+		bindPort = portOverride
+	}
+	// Compute the name to give to the frontend.
+	frontendName = frontendNameForServicePort(service, servicePort)
+	// Compute the backend and frontend objects and return them.
+	return &models.V2Frontend{
+		BindAddress: constants.EdgeLBFrontendBindAddress,
+		Name:        frontendName,
+		Protocol:    models.V2ProtocolTCP,
+		BindPort:    &bindPort,
+		LinkBackend: &models.V2FrontendLinkBackend{
+			DefaultBackend: backendNameForServicePort(service, servicePort),
+		},
+	}
 }
 
 // computeServiceOwnedEdgeLBObjectMetadata parses the provided backend/frontend name and returns metadata about the Service resource that owns it.

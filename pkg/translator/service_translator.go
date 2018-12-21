@@ -9,12 +9,10 @@ import (
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/mesosphere/dklb/pkg/cluster"
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	dklberrors "github.com/mesosphere/dklb/pkg/errors"
 	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
-	"github.com/mesosphere/dklb/pkg/util/pointers"
 	"github.com/mesosphere/dklb/pkg/util/prettyprint"
 )
 
@@ -116,11 +114,11 @@ func (st *ServiceTranslator) createEdgeLBPoolObject() *models.V2Pool {
 	// Iterate over port definitions and create the corresponding backend and frontend objects.
 	for _, port := range st.service.Spec.Ports {
 		// Compute the backend and frontend for the current service port.
-		bf := st.computeBackendFrontendForServicePort(port)
+		backend, frontend := computeBackendForServicePort(st.service, port), computeFrontendForServicePort(st.service, port, st.options)
 		// Append the backend to the slice of backends.
-		backends = append(backends, bf.Backend)
+		backends = append(backends, backend)
 		// Append the frontend to the slice of frontends.
-		frontends = append(frontends, bf.Frontend)
+		frontends = append(frontends, frontend)
 	}
 
 	// Create and return the pool object.
@@ -140,62 +138,6 @@ func (st *ServiceTranslator) createEdgeLBPoolObject() *models.V2Pool {
 	return p
 }
 
-// computeBackendFrontendForServicePort computes the backend and frontend that correspond to the specified service port.
-func (st *ServiceTranslator) computeBackendFrontendForServicePort(sp corev1.ServicePort) servicePortBackendFrontend {
-	// Compute the name to give to the backend.
-	bn := backendNameForServicePort(st.service, sp)
-	// Compute the name to give to the frontend.
-	fn := frontendNameForServicePort(st.service, sp)
-	// Compute the backend and frontend objects and return them.
-	return servicePortBackendFrontend{
-		Backend: &models.V2Backend{
-			Balance:  constants.EdgeLBBackendBalanceLeastConnections,
-			Name:     bn,
-			Protocol: models.V2ProtocolTCP,
-			Services: []*models.V2Service{
-				{
-					Endpoint: &models.V2Endpoint{
-						Check: &models.V2EndpointCheck{
-							Enabled: pointers.NewBool(true),
-						},
-						Port: sp.NodePort,
-						Type: models.V2EndpointTypeCONTAINERIP,
-					},
-					Marathon: &models.V2ServiceMarathon{
-						// We don't want to use any Marathon service as the backend.
-					},
-					Mesos: &models.V2ServiceMesos{
-						FrameworkName:   cluster.KubernetesClusterFrameworkName,
-						TaskNamePattern: constants.KubeNodeTaskPattern,
-					},
-				},
-			},
-			// Explicitly set "RewriteHTTP" in order to make it easier to compare a computed backend with a V2Backend returned by the EdgeLB API server later on.
-			RewriteHTTP: &models.V2RewriteHTTP{
-				Request: &models.V2RewriteHTTPRequest{
-					Forwardfor:                pointers.NewBool(true),
-					RewritePath:               pointers.NewBool(true),
-					SetHostHeader:             pointers.NewBool(true),
-					XForwardedPort:            pointers.NewBool(true),
-					XForwardedProtoHTTPSIfTLS: pointers.NewBool(true),
-				},
-				Response: &models.V2RewriteHTTPResponse{
-					RewriteLocation: pointers.NewBool(true),
-				},
-			},
-		},
-		Frontend: &models.V2Frontend{
-			BindAddress: constants.EdgeLBFrontendBindAddress,
-			Name:        fn,
-			Protocol:    models.V2ProtocolTCP,
-			BindPort:    pointers.NewInt32(st.options.EdgeLBPoolPortMap[sp.Port]),
-			LinkBackend: &models.V2FrontendLinkBackend{
-				DefaultBackend: bn,
-			},
-		},
-	}
-}
-
 // maybeUpdateEdgeLBPoolObject updates the specified pool object in order to reflect the status of the current Service resource.
 // It modifies the specified pool in-place and returns a value indicating whether the pool must be updated in the EdgeLB API server.
 // Backends and frontends (the "objects") are added/modified/deleted according to the following rules:
@@ -208,7 +150,10 @@ func (st *ServiceTranslator) maybeUpdateEdgeLBPoolObject(pool *models.V2Pool) (m
 	// These will be compared with the backend and frontend objects reported by the EdgeLB API server (i.e. those in "pool").
 	desiredBackendFrontends := make(map[int32]servicePortBackendFrontend, len(st.service.Spec.Ports))
 	for _, port := range st.service.Spec.Ports {
-		desiredBackendFrontends[port.Port] = st.computeBackendFrontendForServicePort(port)
+		desiredBackendFrontends[port.Port] = servicePortBackendFrontend{
+			Backend:  computeBackendForServicePort(st.service, port),
+			Frontend: computeFrontendForServicePort(st.service, port, st.options),
+		}
 	}
 
 	// visitedBackends holds the set of service ports corresponding to visited (existing) backends.

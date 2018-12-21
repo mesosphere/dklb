@@ -89,8 +89,8 @@ func parseBaseTranslationOptions(annotations map[string]string) (*BaseTranslatio
 		res.EdgeLBPoolCreationStrategy = DefaultEdgeLBPoolCreationStrategy
 	} else {
 		switch v {
-		case string(constants.EdgeLBPoolCreationStrategyIfNotPresesent):
-			res.EdgeLBPoolCreationStrategy = constants.EdgeLBPoolCreationStrategyIfNotPresesent
+		case string(constants.EdgeLBPoolCreationStrategyIfNotPresent):
+			res.EdgeLBPoolCreationStrategy = constants.EdgeLBPoolCreationStrategyIfNotPresent
 		case string(constants.EdgeLBPoolCreationStrategyNever):
 			res.EdgeLBPoolCreationStrategy = constants.EdgeLBPoolCreationStrategyNever
 		case string(constants.EdgeLBPoolCreationStrategyOnce):

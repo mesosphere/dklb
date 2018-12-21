@@ -4,8 +4,8 @@ package constants
 type EdgeLBPoolCreationStrategy string
 
 const (
-	// EdgeLBPoolCreationStrategyIfNotPresesent denotes the strategy that creates an EdgeLB pool whenever a pool with the same name doesn't already exist.
-	EdgeLBPoolCreationStrategyIfNotPresesent = EdgeLBPoolCreationStrategy("IfNotPresent")
+	// EdgeLBPoolCreationStrategyIfNotPresent denotes the strategy that creates an EdgeLB pool whenever a pool with the same name doesn't already exist.
+	EdgeLBPoolCreationStrategyIfNotPresent = EdgeLBPoolCreationStrategy("IfNotPresent")
 	// EdgeLBPoolCreationStrategyNever denotes the strategy that never creates an EdgeLB pool, expecting it to have been created out-of-band.
 	EdgeLBPoolCreationStrategyNever = EdgeLBPoolCreationStrategy("Never")
 	// EdgeLBPoolCreationStrategyOnce denotes the strategy that creates an EdgeLB pool only if a pool for a given Ingress/Service resource has never been created.

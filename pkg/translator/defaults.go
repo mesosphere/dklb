@@ -10,7 +10,7 @@ import (
 
 const (
 	// DefaultEdgeLBPoolCreationStrategy is the strategy to use for creating an EdgeLB pool when a value is not provided.
-	DefaultEdgeLBPoolCreationStrategy = constants.EdgeLBPoolCreationStrategyIfNotPresesent
+	DefaultEdgeLBPoolCreationStrategy = constants.EdgeLBPoolCreationStrategyIfNotPresent
 	// DefaultEdgeLBPoolPort is the port to use as the frontend bind port for an EdgeLB pool used to provision an Ingress resource when a value is not provided.
 	// TODO (@bcustodio) Split into HTTP/HTTPS port when TLS support is introduced.
 	DefaultEdgeLBPoolPort = 80
