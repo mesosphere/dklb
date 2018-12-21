@@ -119,6 +119,7 @@ func (c *ServiceController) processQueueItem(key string) error {
 
 	// Perform translation of the Service resource into an EdgeLB pool.
 	if err := translator.NewServiceTranslator(service, *options, c.edgelbManager).Translate(); err != nil {
+		er.Eventf(service, corev1.EventTypeWarning, constants.ReasonTranslationError, "failed to translate service: %v", err)
 		c.logger.Errorf("failed to translate service %q: %v", key, err)
 		return err
 	}
