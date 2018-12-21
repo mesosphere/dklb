@@ -42,19 +42,30 @@ func ComputeServiceTranslationOptions(obj *corev1.Service) (*ServiceTranslationO
 	res.BaseTranslationOptions = *b
 	// Parse any port mappings that may have been provided.
 	// If no mapping for a port has been specified, the original service port is used.
+	// If a duplicate mapping is detected, an error is returned.
+	// bindPorts is a mapping between frontend bind ports (i.e. values of "kubernetes.dcos.io/edgelb-pool-portmap.X" annotations) and the names of service ports.
+	bindPorts := make(map[int]string, len(obj.Spec.Ports))
 	for _, port := range obj.Spec.Ports {
 		// Compute the key of the annotation that must be checked based on the current port.
 		key := fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, port.Port)
 		if v, exists := obj.Annotations[key]; !exists || v == "" {
 			res.EdgeLBPoolPortMap[port.Port] = port.Port
 		} else {
+			// Parse the annotation's value into an integer
 			r, err := strconv.Atoi(v)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse %q as a frontend bind port: %v", v, err)
 			}
+			// Check whether the resulting integer is a valid port number.
 			if validation.IsValidPortNum(r) != nil {
 				return nil, fmt.Errorf("%d is not a valid port number", r)
 			}
+			// Check whether the port is already being used in the current Service resource.
+			if portName, exists := bindPorts[r]; exists {
+				return nil, fmt.Errorf("port %d is mapped to both %q and %q service ports", r, portName, port.Name)
+			}
+			// Mark the current port as being used, and add it to the set of port mappings.
+			bindPorts[r] = port.Name
 			res.EdgeLBPoolPortMap[port.Port] = int32(r)
 		}
 	}
