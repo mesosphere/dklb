@@ -81,7 +81,10 @@ func main() {
 	log.WithField("version", version.Version).Infof("%s is starting", constants.ComponentName)
 
 	// Create a new instance of the EdgeLB Manager.
-	edgelbManager := manager.NewEdgeLBManager(edgelbOptions)
+	edgelbManager, err := manager.NewEdgeLBManager(edgelbOptions)
+	if err != nil {
+		log.Fatalf("failed to build edgelb manager: %v", err)
+	}
 
 	// Check the version of the EdgeLB API server that is currently installed, and issue a warning in case it could not be detected within a couple seconds.
 	ctx, fn := context.WithTimeout(context.Background(), 2*time.Second)

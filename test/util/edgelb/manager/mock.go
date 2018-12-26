@@ -19,6 +19,18 @@ func (m *MockEdgeLBManager) CreatePool(ctx context.Context, pool *edgelbmodels.V
 	return args.Get(0).(*edgelbmodels.V2Pool), args.Error(1)
 }
 
+// DeletePool deletes the EdgeLB pool with the specified name.
+func (m *MockEdgeLBManager) DeletePool(ctx context.Context, name string) error {
+	args := m.Called(ctx, name)
+	return args.Error(0)
+}
+
+// GetPools returns the list of EdgeLB pools known to the EdgeLB API server.
+func (m *MockEdgeLBManager) GetPools(ctx context.Context) ([]*edgelbmodels.V2Pool, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]*edgelbmodels.V2Pool), args.Error(1)
+}
+
 // GetPoolByName returns the EdgeLB pool with the specified name.
 func (m *MockEdgeLBManager) GetPoolByName(ctx context.Context, name string) (*edgelbmodels.V2Pool, error) {
 	args := m.Called(ctx, name)

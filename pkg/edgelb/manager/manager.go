@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"strings"
 
 	httptransport "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
@@ -30,6 +31,10 @@ type EdgeLBManagerOptions struct {
 type EdgeLBManager interface {
 	// CreatePool creates the specified EdgeLB pool in the EdgeLB API server.
 	CreatePool(context.Context, *edgelbmodels.V2Pool) (*edgelbmodels.V2Pool, error)
+	// DeletePool deletes the EdgeLB pool with the specified name.
+	DeletePool(context.Context, string) error
+	// GetPools returns the list of EdgeLB pools known to the EdgeLB API server.
+	GetPools(ctx context.Context) ([]*edgelbmodels.V2Pool, error)
 	// GetPoolByName returns the EdgeLB pool with the specified name.
 	GetPoolByName(context.Context, string) (*edgelbmodels.V2Pool, error)
 	// GetVersion returns the current version of EdgeLB.
@@ -46,11 +51,20 @@ type edgeLBManager struct {
 }
 
 // NewEdgeLBManager creates a new instance of EdgeLBManager configured according to the provided options.
-func NewEdgeLBManager(opts EdgeLBManagerOptions) EdgeLBManager {
+func NewEdgeLBManager(opts EdgeLBManagerOptions) (EdgeLBManager, error) {
 	var (
 		t *httptransport.Runtime
 	)
 
+	// Trim the "http://" and/or "https://" prefixes from the host if they exist.
+	if strings.HasPrefix(opts.Host, "http://") {
+		opts.Host = strings.TrimPrefix(opts.Host, "http://")
+	}
+	if strings.HasPrefix(opts.Host, "https://") {
+		opts.Host = strings.TrimPrefix(opts.Host, "https://")
+	}
+
+	// Configure the transport.
 	if !opts.InsecureSkipTLSVerify {
 		// Use the default HTTP client, which does not skip TLS verification.
 		t = httptransport.New(opts.Host, opts.Path, []string{opts.Scheme})
@@ -69,9 +83,10 @@ func NewEdgeLBManager(opts EdgeLBManagerOptions) EdgeLBManager {
 		t.DefaultAuthentication = httptransport.BearerToken(opts.BearerToken)
 	}
 
+	// Return a new instance of "edgeLBManager" that uses the specified transport.
 	return &edgeLBManager{
 		client: edgelbclient.New(t, strfmt.Default),
-	}
+	}, nil
 }
 
 // CreatePool creates the specified EdgeLB pool in the EdgeLB API server.
@@ -85,6 +100,34 @@ func (m *edgeLBManager) CreatePool(ctx context.Context, pool *edgelbmodels.V2Poo
 		return r.Payload, nil
 	}
 	return nil, errors.Unknown(err)
+}
+
+// DeletePool deletes the EdgeLB pool with the specified name.
+func (m *edgeLBManager) DeletePool(ctx context.Context, name string) error {
+	p := &edgelboperations.V2DeletePoolParams{
+		Context: ctx,
+		Name:    name,
+	}
+	_, err := m.client.Operations.V2DeletePool(p)
+	if err == nil {
+		return nil
+	}
+	if err, ok := err.(*edgelboperations.V2DeletePoolDefault); ok && err.Code() == 404 {
+		return errors.NotFound(err)
+	}
+	return errors.Unknown(err)
+}
+
+// GetPools returns the list of EdgeLB pools known to the EdgeLB API server.
+func (m *edgeLBManager) GetPools(ctx context.Context) ([]*edgelbmodels.V2Pool, error) {
+	p := &edgelboperations.V2GetPoolsParams{
+		Context: ctx,
+	}
+	r, err := m.client.Operations.V2GetPools(p)
+	if err != nil {
+		return nil, errors.Unknown(err)
+	}
+	return r.Payload, nil
 }
 
 // GetPoolByName returns the EdgeLB pool with the specified name.

@@ -31,6 +31,27 @@ skaffold:
 	fi
 	@skaffold $(MODE) -f $(ROOT_DIR)/hack/skaffold/dklb/skaffold.yaml
 
+# test.e2e runs the end-to-end test suite.
+.PHONY: test.e2e
+test.e2e: DCOS_PUBLIC_AGENT_IP :=
+test.e2e: KUBECONFIG ?= $(HOME)/.kube/config
+test.e2e:
+	@if [[ "$(DCOS_PUBLIC_AGENT_IP)" == "" ]]; then \
+		echo "error: DCOS_PUBLIC_AGENT_IP must be set"; \
+		exit 1; \
+	fi
+	@go test -tags e2e $(ROOT_DIR)/test/e2e \
+		-ginkgo.v \
+		-test.v \
+		-dcos-public-agent-ip $(DCOS_PUBLIC_AGENT_IP) \
+		-edgelb-bearer-token "$$(dcos config show core.dcos_acs_token)" \
+		-edgelb-host "$$(dcos config show core.dcos_url)" \
+		-edgelb-insecure-skip-tls-verify \
+		-edgelb-path "/service/edgelb" \
+		-edgelb-scheme https \
+		-kubeconfig $(KUBECONFIG)
+
 # test.unit runs the unit test suite.
+.PHONY: test.unit
 test.unit:
-	@go test -v ./...
+	@go test -v $(ROOT_DIR)/...

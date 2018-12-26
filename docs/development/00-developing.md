@@ -1,4 +1,4 @@
-# Building `dklb`
+# Developing `dklb`
 
 ## Prerequisites
 
@@ -12,8 +12,12 @@ To build `dklb`, the following software is required:
 To run `dklb`, the following additional software is required:
   
 * [`skaffold`]
-* A [DC/OS] 1.12+ cluster having [EdgeLB] installed.
+* A [DC/OS] cluster having [EdgeLB] installed.
+  * DC/OS must be v1.12.0 or later.
+  * EdgeLB must be [`v1.2.3-22-ga35988a`] or later.
+  * The DC/OS CLI must be configured to access the DC/OS cluster.
 * An [MKE] cluster.
+  * `kubernetes-cluster` must be [`d74b25e`] or later.
   * The current kubeconfig context must be configured to point at this cluster.
   
 A Docker Hub account with read/write access to the [`mesosphere/dklb`] image repository is additionally required.
@@ -104,6 +108,42 @@ To delete any resources that may have been created by `skaffold` (and hence unin
 $ make skaffold MODE=delete
 ```
 
+## Testing `dklb`
+
+### Running the unit test suite
+
+In order to run the unit test suite for `dklb`, the following command may be run:
+
+```console
+$ make test.unit
+```
+
+### Running the end-to-end test suite
+
+As of this writing, `dklb`'s end-to-end test suite has the following additional requirements:
+
+* The target DC/OS cluster must have a _single_ DC/OS agent with the `slave_public` role;
+  * It is assumed that the external IP for said DC/OS agent is `<dcos-public-agent-ip>`.
+* The end-to-end test suite must run from _outside_ the target DC/OS cluster.
+
+To run the end-to-end test suite against the MKE cluster targeted by `$HOME/.kube/config`, the following command may be run:
+
+```console
+$ make test.e2e DCOS_PUBLIC_AGENT_IP="<dcos-public-agent-ip>"
+```
+
+The output of a successful run of the end-to-end test suite will be similar to the following:
+
+```text
+(...)
+Ran 2 of 2 Specs in 199.297 seconds
+SUCCESS! -- 2 Passed | 0 Failed | 0 Pending | 0 Skipped
+--- PASS: TestEndToEnd (199.30s)
+PASS
+ok  	github.com/mesosphere/dklb/test/e2e	199.338s
+```
+
+
 [`git`]: https://git-scm.com/
 [Go]: https://golang.org/
 [Go modules]: https://github.com/golang/go/wiki/Modules
@@ -111,5 +151,7 @@ $ make skaffold MODE=delete
 [`skaffold`]: https://github.com/GoogleContainerTools/skaffold
 [DC/OS]: https://dcos.io/
 [EdgeLB]: https://docs.mesosphere.com/services/edge-lb/
+[`v1.2.3-22-ga35988a`]: https://github.com/mesosphere/dcos-edge-lb/commit/a35988a489ab4d515cd4d023ec0742466a3c272b
 [MKE]: https://mesosphere.com/product/kubernetes-engine/
+[`d74b25e`]: https://github.com/mesosphere/dcos-kubernetes-cluster/commit/d74b25e8d7e4e283ba4a66fc0f027669aa4c9fc2
 [`mesosphere/dklb`]: https://hub.docker.com/r/mesosphere/dklb
