@@ -46,6 +46,10 @@ func ComputeServiceTranslationOptions(obj *corev1.Service) (*ServiceTranslationO
 	// bindPorts is a mapping between frontend bind ports (i.e. values of "kubernetes.dcos.io/edgelb-pool-portmap.X" annotations) and the names of service ports.
 	bindPorts := make(map[int]string, len(obj.Spec.Ports))
 	for _, port := range obj.Spec.Ports {
+		// Fail immediately if the protocol is not TCP (or the empty string, meaning TCP as well).
+		if port.Protocol != "" && port.Protocol != corev1.ProtocolTCP {
+			return nil, fmt.Errorf("protocol %q is not supported", port.Protocol)
+		}
 		// Compute the key of the annotation that must be checked based on the current port.
 		key := fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, port.Port)
 		if v, exists := obj.Annotations[key]; !exists || v == "" {

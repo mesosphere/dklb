@@ -15,19 +15,21 @@ import (
 // TestComputeServiceTranslationOptions tests parsing of annotations defined in a Service resource.
 func TestComputeServiceTranslationOptions(t *testing.T) {
 	tests := []struct {
+		description string
 		annotations map[string]string
 		ports       []corev1.ServicePort
 		options     *translator.ServiceTranslationOptions
 		error       error
 	}{
-		// Test computing options for an Service resource without the required annotations.
+		// Test computing options for a Service resource without the required annotations.
 		// Make sure an error is returned.
 		{
+			description: "service resource without the required annotations",
 			annotations: map[string]string{},
 			options:     nil,
 			error:       fmt.Errorf("required annotation %q has not been provided", constants.EdgeLBPoolNameAnnotationKey),
 		},
-		// Test computing options for an Service resource with just the required annotations.
+		// Test computing options for a Service resource with just the required annotations.
 		// Make sure the name of the EdgeLB pool is captured as expected, and that the default values are used everywhere else.
 		{
 			annotations: map[string]string{
@@ -53,9 +55,10 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 			},
 			error: nil,
 		},
-		// Test computing options for an Service resource with a custom port mapping.
+		// Test computing options for a Service resource with a custom port mapping.
 		// Make sure the name of the EdgeLB pool and the port mapping are captured as expected, and that the default values are used everywhere else.
 		{
+			description: "service resource with a custom port mapping",
 			annotations: map[string]string{
 				constants.EdgeLBPoolNameAnnotationKey:                         "foo",
 				fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, 80): "8080",
@@ -84,10 +87,10 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 			},
 			error: nil,
 		},
-
-		// Test computing options for an Service resource with a custom but invalid port mappings.
+		// Test computing options for a Service resource with a custom but invalid port mappings.
 		// Make sure an error is returned.
 		{
+			description: "service resource with a custom but invalid port mapping",
 			annotations: map[string]string{
 				constants.EdgeLBPoolNameAnnotationKey:                          "foo",
 				fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, 443): "74511",
@@ -103,9 +106,26 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 			options: nil,
 			error:   fmt.Errorf("%d is not a valid port number", 74511),
 		},
+		// Test computing options for a Service resource using an unsupported protocol.
+		// Make sure an error is returned.
+		{
+			description: "service resource using an unsupported protocol",
+			annotations: map[string]string{
+				constants.EdgeLBPoolNameAnnotationKey: "foo",
+			},
+			ports: []corev1.ServicePort{
+				{
+					Port:     80,
+					Protocol: corev1.ProtocolUDP,
+				},
+			},
+			options: nil,
+			error:   fmt.Errorf("protocol %q is not supported", corev1.ProtocolUDP),
+		},
 	}
 	// Run each of the tests defined above.
 	for _, test := range tests {
+		t.Logf("test: %s", test.description)
 		// Create a dummy Service resource containing the annotations for the current test.
 		r := servicetestutil.DummyServiceResource("foo", "bar", servicetestutil.WithAnnotations(test.annotations), servicetestutil.WithPorts(test.ports))
 		// Compute the translation options for the resource.
