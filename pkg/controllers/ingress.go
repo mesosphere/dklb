@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
+	"github.com/mesosphere/dklb/pkg/metrics"
 	"github.com/mesosphere/dklb/pkg/translator"
 	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
 	"github.com/mesosphere/dklb/pkg/util/prettyprint"
@@ -92,6 +94,11 @@ func (c *IngressController) enqueueIfEdgeLBIngress(obj *extsv1beta1.Ingress) {
 
 // processQueueItem attempts to reconcile the state of the Ingress resource pointed at by the specified key.
 func (c *IngressController) processQueueItem(key string) error {
+	// Record the current iteration.
+	startTime := time.Now()
+	metrics.RecordSync(ingressControllerName, key)
+	defer metrics.RecordSyncDuration(ingressControllerName, startTime)
+
 	// Convert the specified key into a distinct namespace and name.
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {

@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
+	"github.com/mesosphere/dklb/pkg/metrics"
 	"github.com/mesosphere/dklb/pkg/translator"
 	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
 	"github.com/mesosphere/dklb/pkg/util/prettyprint"
@@ -80,6 +82,11 @@ func (c *ServiceController) enqueueIfLoadBalancer(service *corev1.Service) {
 
 // processQueueItem attempts to reconcile the state of the Service resource pointed at by the specified key.
 func (c *ServiceController) processQueueItem(key string) error {
+	// Record the current iteration.
+	startTime := time.Now()
+	metrics.RecordSync(serviceControllerName, key)
+	defer metrics.RecordSyncDuration(serviceControllerName, startTime)
+
 	// Convert the specified key into a distinct namespace and name.
 	namespace, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
