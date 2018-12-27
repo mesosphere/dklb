@@ -119,8 +119,7 @@ func (c *IngressController) processQueueItem(key string) error {
 	// Compute the set of options that will be used to translate the Ingress resource into an EdgeLB pool.
 	options, err := translator.ComputeIngressTranslationOptions(ingress)
 	if err != nil {
-		// Emit an event and log an error, but do not re-enqueue as the resource is likely invalid.
-		// TODO (@bcustodio) Understand if this is indeed the case, and whether we should re-enqueue the current key.
+		// Emit an event and log an error, but do not re-enqueue as the resource's spec was found to be invalid.
 		er.Eventf(ingress, corev1.EventTypeWarning, constants.ReasonInvalidAnnotations, "the resource's annotations are not valid: %v", err)
 		c.logger.Errorf("failed to compute translation options for ingress %q: %v", key, err)
 		return nil

@@ -12,7 +12,6 @@ import (
 )
 
 // NewEventRecorderForNamespace returns an event recorder that can be used to emit Kubernetes events for object in the specified namespace.
-// TODO (@bcustodio) Cache event recorders on a per-namespace basis?
 func NewEventRecorderForNamespace(kubeClient kubernetes.Interface, namespace string) record.EventRecorder {
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(log.Debugf)

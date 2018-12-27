@@ -59,7 +59,6 @@ func (st *ServiceTranslator) Translate() error {
 
 // maybeCreateEdgeLBPool makes a decision on whether an EdgeLB pool should be created for the associated Service resource.
 // In case it should, it proceeds to actually creating it.
-// TODO (@bcustodio) Implement.
 func (st *ServiceTranslator) maybeCreateEdgeLBPool() error {
 	// If the pool creation strategy is "Never", the target pool must be provisioned manually.
 	// Hence, we should just exit.
@@ -67,14 +66,14 @@ func (st *ServiceTranslator) maybeCreateEdgeLBPool() error {
 		return fmt.Errorf("edgelb pool %q targeted by service %q does not exist, but the pool creation strategy is %q", st.options.EdgeLBPoolName, kubernetesutil.Key(st.service), st.options.EdgeLBPoolCreationStrategy)
 	}
 
-	// Handle the scenario in which the target EdgeLB pool has once existed (because the service's status contains at least one IP) but has since been deleted.
-	// TODO (@bcustodio) Understand what else could/should be done in this scenario.
-	if st.options.EdgeLBPoolCreationStrategy == constants.EdgeLBPoolCreationStrategyOnce && len(st.service.Status.LoadBalancer.Ingress) > 0 {
+	// If the Service resource's ".status" field contains at least one IP/host, that means a pool has once existed, but has been deleted manually.
+	// Hence, and if the pool creation strategy is "Once", we should also just exit.
+	if len(st.service.Status.LoadBalancer.Ingress) > 0 && st.options.EdgeLBPoolCreationStrategy == constants.EdgeLBPoolCreationStrategyOnce {
 		return fmt.Errorf("edgelb pool %q targeted by service %q has probably been manually deleted, and the pool creation strategy is %q", st.options.EdgeLBPoolName, kubernetesutil.Key(st.service), st.options.EdgeLBPoolCreationStrategy)
 	}
 
 	// At this point, we know that we must create the target EdgeLB pool based on the specified options.
-	// TODO (@bcustodio) Wait for the pool to be provisioned and check for its IP(s) so that the service's status can be updated.
+	// TODO (@bcustodio) Wait for the pool to be provisioned and check for its IP(s) so that the service resource's ".status" field can be updated.
 	pool := st.createEdgeLBPoolObject()
 	log.Debugf("computed edgelb pool object for service %q:\n%s", kubernetesutil.Key(st.service), prettyprint.Sprint(pool))
 	ctx, fn := context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
@@ -187,7 +186,6 @@ func (st *ServiceTranslator) maybeUpdateEdgeLBPoolObject(pool *models.V2Pool) (m
 		visitedBackends[backendMetadata.ServicePort] = true
 		// Check whether the existing (current) and computed (desired) backends differ.
 		// In case differences are detected, we replace the existing backend by the computed one.
-		// TODO (@bcustodio) Investigate if "reflect.DeepEqual" is a good option or if we need to get "smarter" on detecting differences.
 		if !reflect.DeepEqual(backend, desiredBackendFrontends[backendMetadata.ServicePort].Backend) {
 			mustUpdate = true
 			updatedBackends = append(updatedBackends, desiredBackendFrontends[backendMetadata.ServicePort].Backend)
@@ -229,7 +227,6 @@ func (st *ServiceTranslator) maybeUpdateEdgeLBPoolObject(pool *models.V2Pool) (m
 		visitedFrontends[frontendMetadata.ServicePort] = true
 		// Check whether the existing (current) and computed (desired) frontends differ.
 		// In case differences are detected, we replace the existing frontend by the computed one.
-		// TODO (@bcustodio) Investigate if "reflect.DeepEqual" is a good option or if we need to get "smarter" on detecting differences.
 		if !reflect.DeepEqual(frontend, desiredBackendFrontends[frontendMetadata.ServicePort].Frontend) {
 			mustUpdate = true
 			updatedFrontends = append(updatedFrontends, desiredBackendFrontends[frontendMetadata.ServicePort].Frontend)
