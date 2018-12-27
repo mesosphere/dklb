@@ -23,7 +23,7 @@ const (
 	// ingressControllerName is the name of the ingress controller.
 	ingressControllerName = "ingress-controller"
 	// ingressControllerThreadiness is the number of workers the ingress controller will use to process items from its work queue.
-	ingressControllerThreadiness = 2
+	ingressControllerThreadiness = 1
 )
 
 // IngressController is the controller for Ingress resources.

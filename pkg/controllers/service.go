@@ -22,7 +22,7 @@ const (
 	// serviceControllerName is the name of the service controller.
 	serviceControllerName = "service-controller"
 	// serviceControllerThreadiness is the number of workers the service controller will use to process items from its work queue.
-	serviceControllerThreadiness = 2
+	serviceControllerThreadiness = 1
 )
 
 // ServiceController is the controller for Service resources.
