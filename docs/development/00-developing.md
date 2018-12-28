@@ -6,8 +6,9 @@ To build `dklb`, the following software is required:
 
 * [`git`].
 * [`make`].
-* [Go] 1.11+.
+* [Go] 1.11.4+.
   * `dklb` makes use of the [Go modules] experiment present in Go 1.11+ only.
+  * Go 1.11.3 and earlier were found to have issues computing the checksum of certain modules.
   
 To run `dklb`, the following additional software is required:
   
@@ -34,7 +35,14 @@ $ git clone git@github.com:mesosphere/dklb.git /some/path
 
 ## Installing dependencies
 
-To install all the dependencies required to build `dklb`, the following command may be run:
+`dklb` depends on private GitHub repositories (notably `mesosphere/dklb`).
+To allow for `go mod` to access these repositories, the following command must be run:
+
+```
+$ git config --global url."git@github.com:".insteadOf "https://github.com/"
+```
+
+To install all the dependencies required to build `dklb`, the following command must then be run:
 
 ```console
 $ make mod
