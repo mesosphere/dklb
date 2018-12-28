@@ -1,0 +1,73 @@
+# Installing `dklb`
+
+## Prerequisites
+
+To install `dklb`, the following prerequisites must be met:
+
+* A [DC/OS] cluster having [EdgeLB] installed.
+  * DC/OS must be v1.12.0 or later.
+  * EdgeLB must be [`v1.2.3-22-ga35988a`] or later.
+* An [MKE] cluster.
+  * `kubernetes-cluster` must be [`d74b25e`] or later.
+  * The current kubeconfig context must be configured to point at this cluster.
+
+## Installing
+
+To install `dklb`, the following commands may be run from the root of this repository:
+
+```console
+$ kubectl create -f docs/deployment/00-prereqs.yaml
+$ kubectl create -f docs/deployment/10-deployment.yaml
+```
+
+This will create a `dklb` deployment in the `kube-system` namespace having two replicas:
+
+```console
+$ kubectl -n kube-system get pod --selector "app=dklb"
+NAME                    READY   STATUS    RESTARTS   AGE
+dklb-756c6c7d88-cgp69   1/1     Running   0          5m45s
+dklb-756c6c7d88-slddz   1/1     Running   0          5m45s
+```
+
+## Tailing logs
+
+At any given time, only a single replica is actively working in order to satisfy Ingress/Service resources.
+This replica is called the _leader_.
+Inspecting the logs of any of the two pods allows for checking which one is the current leader:
+
+```console
+$ kubectl -n kube-system logs dklb-756c6c7d88-cgp69 | grep leader
+time="2018-12-28T16:55:12Z" level=info msg="current leader: dklb-756c6c7d88-slddz"
+```
+
+This means that the current leader is the `dklb-756c6c7d88-slddz` pod.
+To understand what `dklb` is currently doing, it is necessary to tail the logs of this same pod:
+
+```console
+$ kubectl -n kube-system logs dklb-756c6c7d88-slddz
+time="2018-12-28T16:54:55Z" level=info msg="dklb is starting" version=0ab11a8-dev
+time="2018-12-28T16:54:55Z" level=info msg="detected edgelb version: v1.2.3-22-ga35988a"
+(...)
+time="2018-12-28T16:55:11Z" level=debug msg="starting workers" controller=service-controller
+time="2018-12-28T16:55:11Z" level=info msg="started workers" controller=service-controller
+time="2018-12-28T16:55:11Z" level=debug msg="starting workers" controller=ingress-controller
+time="2018-12-28T16:55:11Z" level=info msg="started workers" controller=ingress-controller
+(...)
+```
+
+## Uninstalling
+
+To uninstall `dklb`, the following commands may be run from the root of this repository:
+
+```console
+$ kubectl delete -f docs/deployment/10-deployment.yaml
+$ kubectl delete -f docs/deployment/00-prereqs.yaml
+```
+
+**NOTE:** Deleting `dklb` **DOES NOT** delete any EdgeLB pools that may have been created.
+
+[DC/OS]: https://dcos.io/
+[EdgeLB]: https://docs.mesosphere.com/services/edge-lb/
+[`v1.2.3-22-ga35988a`]: https://github.com/mesosphere/dcos-edge-lb/commit/a35988a489ab4d515cd4d023ec0742466a3c272b
+[MKE]: https://mesosphere.com/product/kubernetes-engine/
+[`d74b25e`]: https://github.com/mesosphere/dcos-kubernetes-cluster/commit/d74b25e8d7e4e283ba4a66fc0f027669aa4c9fc2

@@ -9,7 +9,7 @@ To build `dklb`, the following software is required:
 * [Go] 1.11.4+.
   * `dklb` makes use of the [Go modules] experiment present in Go 1.11+ only.
   * Go 1.11.3 and earlier were found to have issues computing the checksum of certain modules.
-  
+
 To run `dklb`, the following additional software is required:
   
 * [`skaffold`]
@@ -35,17 +35,12 @@ $ git clone git@github.com:mesosphere/dklb.git /some/path
 
 ## Installing dependencies
 
-`dklb` depends on private GitHub repositories (notably `mesosphere/dklb`).
-To allow for `go mod` to access these repositories, the following command must be run:
+As `dklb` uses Go modules, build and test dependencies will be automatically downloaded whenever necessary.
+However, `dklb` depends on private GitHub repositories such as `mesosphere/dklb`.
+To allow for `go mod` to access these repositories, the following command must be run after cloning the repository:
 
 ```
 $ git config --global url."git@github.com:".insteadOf "https://github.com/"
-```
-
-To install all the dependencies required to build `dklb`, the following command must then be run:
-
-```console
-$ make mod
 ```
 
 ## Building `dklb`
@@ -71,22 +66,11 @@ This can be useful to perform local testing with the generated binary.
 
 [`skaffold`] is used to ease the process of running and testing `dklb` during day-to-day development.
 `skaffold` builds a Docker image containing the `dklb` binary and pushes it to the [`mesosphere/dklb`] image repository.
-This repository is currently private, and accessible only by members of the `kubernetes` team in the Mesosphere organization.
+Write access to this repository is granted only to members of the `kubernetes` team in the Mesosphere organization.
 Hence, in order to push the image, it is necessary to login to Docker Hub with adequate credentials:
 
 ```console
 $ docker login
-```
-
-Additionally, and so that Kubernetes can pull the image built and pushed by `skaffold`, it is necessary to create a Kubernetes secret containing credentials with read access to the Docker Hub repository.
-This secret **MUST** be created in the `kube-system` namespace.
-To create said secret, the following command may be run:
-
-```console
-$ kubectl -n kube-system create secret docker-registry \
-    docker-hub \
-    --docker-username "<username>" \
-    --docker-password "<password>"
 ```
 
 To deploy `dklb` to the MKE cluster targeted by the current kubeconfig context, the following command may then be run:
@@ -144,13 +128,12 @@ The output of a successful run of the end-to-end test suite will be similar to t
 
 ```text
 (...)
-Ran 2 of 2 Specs in 199.297 seconds
-SUCCESS! -- 2 Passed | 0 Failed | 0 Pending | 0 Skipped
---- PASS: TestEndToEnd (199.30s)
+Ran 3 of 3 Specs in 328.864 seconds
+SUCCESS! -- 3 Passed | 0 Failed | 0 Pending | 0 Skipped
+--- PASS: TestEndToEnd (328.86s)
 PASS
-ok  	github.com/mesosphere/dklb/test/e2e	199.338s
+ok  	github.com/mesosphere/dklb/test/e2e	328.910s
 ```
-
 
 [`git`]: https://git-scm.com/
 [Go]: https://golang.org/

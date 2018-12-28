@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: dklb
+  name: dklb
+  namespace: kube-system
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: dklb
+  template:
+    metadata:
+      labels:
+        app: dklb
+    spec:
+      priorityClassName: system-node-critical
+      containers:
+      - name: dklb
+        image: mesosphere/dklb:0ab11a8-dev
+        imagePullPolicy: Always
+        args:
+        - /dklb
+        - --debug
+        - --pod-namespace
+        # NOTE: Populated from the "downward API".
+        - "$(POD_NAMESPACE)"
+        - --pod-name
+        # NOTE: Populated from the "downward API".
+        - "$(POD_NAME)"
+        - --kubernetes-cluster-framework-name
+        # NOTE: Populated from the "kube-system/mke-cluster-info" configmap.
+        - "$(CLUSTER_NAME)"
+        envFrom:
+        - configMapRef:
+            name: mke-cluster-info
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "10m"
+      serviceAccountName: dklb

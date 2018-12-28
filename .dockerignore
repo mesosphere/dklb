@@ -1,0 +1,9 @@
+.dockerignore
+.gitignore
+.go/
+.idea/
+docs/
+Dockerfile
+hack/
+README.md
+test/

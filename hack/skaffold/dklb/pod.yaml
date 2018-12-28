@@ -6,6 +6,7 @@ metadata:
   name: dklb
   namespace: kube-system
 spec:
+  priorityClassName: system-node-critical
   containers:
   - name: dklb
     image: mesosphere/dklb
@@ -34,8 +35,8 @@ spec:
       valueFrom:
         fieldRef:
           fieldPath: metadata.name
-  # WARNING: Requires the "docker-hub" secret to be present in the "kube-system" namespace beforehand.
-  # This secret must contain credentials to access the "mesosphere/dklb" Docker Hub repository.
-  imagePullSecrets:
-    - name: docker-hub
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "10m"
   serviceAccountName: dklb

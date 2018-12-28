@@ -7,20 +7,26 @@ VERSION ?= $(shell git describe --always --dirty=-dev)
 # build builds the dklb binary for the specified architecture (defaults to "amd64") and operating system (defaults to "linux").
 .PHONY: build
 build: GOARCH ?= amd64
+build: GOFLAGS ?= ""
 build: GOOS ?= linux
-build: LDFLAGS ?= -d -s -w
-build: mod
+build: LDFLAGS ?= -s -w
 build:
-	@GOARCH=$(GOARCH) GOOS=$(GOOS) go build \
+	@GOARCH=$(GOARCH) GOFLAGS=$(GOFLAGS) GOOS=$(GOOS) go build \
 		-ldflags="$(LDFLAGS) -X github.com/mesosphere/dklb/pkg/version.Version=$(VERSION)" \
 		-o $(ROOT_DIR)/build/dklb \
 		-v \
-		cmd/main.go
+		$(ROOT_DIR)/cmd/main.go
 
-# mod downloads dependencies to the local cache.
-.PHONY: mod
-mod:
-	@go mod download
+# docker builds a Docker image of dklb suitable for distribution.
+.PHONY: docker
+docker: IMG ?= mesosphere/dklb
+docker: TAG ?= $(VERSION)
+docker:
+# We depend on "github.com/mesosphere/dcos-edge-lb", which can't be pulled from inside "docker build".
+# Hence, we must create a "vendor/" directory containing said modules before running "docker build".
+# The Dockerfile must then invoke "make build GOFLAGS=-mod=vendor", or otherwise the build will fail.
+	@go mod vendor
+	@docker build --build-arg VERSION=$(VERSION) --no-cache --tag "$(IMG):$(TAG)" $(ROOT_DIR)
 
 # skaffold deploys dklb to the Kubernetes repository targeted by the current context using skaffold.
 .PHONY: skaffold
