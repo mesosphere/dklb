@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -133,7 +134,7 @@ func (c *IngressController) processQueueItem(workItem WorkItem) error {
 	}
 
 	// Output some debugging information about the computed set of options.
-	c.logger.Debugf("computed ingress translation options for %q:\n%s", workItem.Key, prettyprint.Sprint(options))
+	prettyprint.Logf(log.Debugf, options, "computed service translation options for %q", workItem.Key)
 
 	// Perform translation of the Ingress resource into an EdgeLB pool.
 	if err := translator.NewIngressTranslator(ingress, *options, c.edgelbManager).Translate(); err != nil {

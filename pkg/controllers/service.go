@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -140,7 +141,7 @@ func (c *ServiceController) processQueueItem(workItem WorkItem) error {
 	}
 
 	// Output some debugging information about the computed set of options.
-	c.logger.Debugf("computed service translation options for %q:\n%s", workItem.Key, prettyprint.Sprint(options))
+	prettyprint.Logf(log.Debugf, options, "computed service translation options for %q", workItem.Key)
 
 	// Perform translation of the Service resource into an EdgeLB pool.
 	if err := translator.NewServiceTranslator(service, *options, c.edgelbManager).Translate(); err != nil {

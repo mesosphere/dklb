@@ -147,21 +147,10 @@ func computeServiceOwnedEdgeLBObjectMetadata(name string) (*serviceOwnedEdgeLBOb
 
 // poolInspectionReport is a utility struct used to convey information about the status of a pool (and the required changes) upon inspection.
 type poolInspectionReport struct {
-	Lines []string
+	lines []string
 }
 
 // Report adds a formatted message to the pool inspection report.
 func (pir *poolInspectionReport) Report(message string, args ...interface{}) {
-	pir.Lines = append(pir.Lines, fmt.Sprintf(message, args...))
-}
-
-// String returns a string representation of the pool inspection report.
-func (pir *poolInspectionReport) String() string {
-	var sb strings.Builder
-	for _, item := range pir.Lines {
-		sb.WriteString("=> ")
-		sb.WriteString(item)
-		sb.WriteRune('\n')
-	}
-	return sb.String()
+	pir.lines = append(pir.lines, fmt.Sprintf(message, args...))
 }
