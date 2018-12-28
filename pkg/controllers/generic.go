@@ -18,6 +18,15 @@ type Controller interface {
 	Run(ctx context.Context) error
 }
 
+// WorkItem represents an item that is placed onto the controller's work queue.
+// It is a pairing between the "namespace/name" key corresponding to a given Kubernetes resource and the resource's tombstone in case the resource has been deleted.
+type WorkItem struct {
+	// Key is the key of the Kubernetes resource being synced.
+	Key string
+	// Tombstone is the tombstone (i.e. last known state) of the Kubernetes resource being synced.
+	Tombstone interface{}
+}
+
 // genericController contains basic functionality shared by all controllers.
 type genericController struct {
 	// logger is the logger that the controller will use.
@@ -28,8 +37,8 @@ type genericController struct {
 	workqueue workqueue.RateLimitingInterface
 	// hasSyncedFuncs are the functions used to determine if caches are synced.
 	hasSyncedFuncs []cache.InformerSynced
-	// syncHandler is a function that takes a key (namespace/name) and processes the corresponding resource.
-	syncHandler func(key string) error
+	// syncHandler is a function that takes a work item and processes it.
+	syncHandler func(wi WorkItem) error
 	// threadiness is the number of workers to use for processing items from the work queue.
 	threadiness int
 	// name is the name of the controller.
@@ -99,26 +108,25 @@ func (c *genericController) processNextWorkItem() bool {
 		defer c.workqueue.Done(obj)
 
 		var (
-			key string
-			ok  bool
+			workItem WorkItem
+			ok       bool
 		)
 
-		// We expect strings to come off the work queue.
-		// These are of the form "namespace/name".
-		// We do this as the delayed nature of the work queue means the items in the informer cache may actually be more up to date that when the item was initially put onto the work queue.
-		if key, ok = obj.(string); !ok {
+		// We expect objects of type "WorkItem" to come off the work queue.
+		// These group together keys of the form "namespace/name" corresponding to Kubernetes resources and their tombstone in case these resources have been deleted.
+		if workItem, ok = obj.(WorkItem); !ok {
 			// As the item in the work queue is actually invalid, we call Forget here else we'd go into a loop of attempting to process a work item that is invalid.
 			c.workqueue.Forget(obj)
 			runtime.HandleError(fmt.Errorf("expected a string to come off of the work queue but got %#v", obj))
 			return nil
 		}
 		// Call syncHandler, passing it the "namespace/name" string that corresponds to the resource to be synced.
-		if err := c.syncHandler(key); err != nil {
-			return fmt.Errorf("error syncing %q: %s", key, err.Error())
+		if err := c.syncHandler(workItem); err != nil {
+			return fmt.Errorf("error syncing %q: %s", workItem.Key, err.Error())
 		}
 		// Finally, and if no error occurs, we forget this item so it does not get queued again until another change happens.
 		c.workqueue.Forget(obj)
-		c.logger.Debugf("successfully synced %q", key)
+		c.logger.Debugf("successfully synced %q", workItem.Key)
 		return nil
 	}(obj)
 
@@ -129,11 +137,27 @@ func (c *genericController) processNextWorkItem() bool {
 	return true
 }
 
-// enqueue takes a Kubernetes resource and converts it into a "namespace/name" string which is then put onto the work queue.
+// enqueue takes a Kubernetes resource, computes its resource key and puts it as a work item onto the work queue.
 func (c *genericController) enqueue(obj interface{}) {
 	if key, err := cache.MetaNamespaceKeyFunc(obj); err != nil {
 		runtime.HandleError(err)
 	} else {
-		c.workqueue.AddRateLimited(key)
+		c.workqueue.AddRateLimited(WorkItem{
+			Key: key,
+		})
+	}
+}
+
+// enqueueTombstone takes the tombstone of a Kubernetes resource that has been deleted, computes its resource key and puts it as a work item onto the work queue.
+// Must only be used to handle cleanup in scenarios where the Kubernetes resource has been deleted.
+// For all other usage scenarios, "enqueue" should be used instead.
+func (c *genericController) enqueueTombstone(obj interface{}) {
+	if key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj); err != nil {
+		runtime.HandleError(err)
+	} else {
+		c.workqueue.AddRateLimited(WorkItem{
+			Key:       key,
+			Tombstone: obj,
+		})
 	}
 }

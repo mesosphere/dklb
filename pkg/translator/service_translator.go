@@ -40,6 +40,12 @@ func NewServiceTranslator(service *corev1.Service, options ServiceTranslationOpt
 
 // Translate performs translation of the associated Service resource into an EdgeLB pool.
 func (st *ServiceTranslator) Translate() error {
+	// Return immediately if pool translation is paused.
+	if st.options.EdgeLBPoolTranslationPaused {
+		st.logger.Warnf("skipping translation of %q as translation is paused for the resource", kubernetesutil.Key(st.service))
+		return nil
+	}
+
 	// Check whether a pool with the requested name already exists in EdgeLB.
 	ctx, fn := context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
 	defer fn()
@@ -49,17 +55,18 @@ func (st *ServiceTranslator) Translate() error {
 			return fmt.Errorf("failed to check for the existence of the %q edgelb pool: %v", st.options.EdgeLBPoolName, err)
 		}
 	}
-	// If the target EdgeLB pool does not exist, we should try to create it (depending on the chosen pool creation strategy).
+	// If the target EdgeLB pool does not exist, we must try to create it,
 	if pool == nil {
-		return st.maybeCreateEdgeLBPool()
+		return st.createEdgeLBPool()
 	}
-	// If the target EdgeLB pool already exists, we should try to update it.
-	return st.maybeUpdateEdgeLBPool(pool)
+	// If the target EdgeLB pool already exists, we must check whether it needs to be updated/deleted.
+	return st.updateOrDeleteEdgeLBPool(pool)
 }
 
-// maybeCreateEdgeLBPool makes a decision on whether an EdgeLB pool should be created for the associated Service resource.
-// In case it should, it proceeds to actually creating it.
-func (st *ServiceTranslator) maybeCreateEdgeLBPool() error {
+// createEdgeLBPool makes a decision on whether an EdgeLB pool should be created for the associated Service resource.
+// This decision is based on the pool creation strategy specified for the Service resource.
+// In case it should be created, it proceeds to actually creating it.
+func (st *ServiceTranslator) createEdgeLBPool() error {
 	// If the pool creation strategy is "Never", the target pool must be provisioned manually.
 	// Hence, we should just exit.
 	if st.options.EdgeLBPoolCreationStrategy == constants.EdgeLBPoolCreationStrategyNever {
@@ -82,26 +89,44 @@ func (st *ServiceTranslator) maybeCreateEdgeLBPool() error {
 	return err
 }
 
-// maybeUpdateEdgeLBPool makes a decision on whether the specified EdgeLB pool should be updated based on the current status of the associated Service resource.
-// In case it should, it proceeds to actually updating it.
-// TODO (@bcustodio) Decide whether we should also update the pool's role and its CPU/memory/size requests.
-func (st *ServiceTranslator) maybeUpdateEdgeLBPool(pool *models.V2Pool) error {
+// updateOrDeleteEdgeLBPool makes a decision on whether the specified EdgeLB pool should be updated/deleted based on the current status of the associated Service resource.
+// In case it should be updated/deleted, it proceeds to actually updating/deleting it.
+// TODO (@bcustodio) Decide whether we should also update the pool's role and its CPU/memory/size requests when updating a pool.
+func (st *ServiceTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool) error {
 	// Check whether the pool object must be updated.
-	mustUpdate, report := st.maybeUpdateEdgeLBPoolObject(pool)
+	wasChanged, report := st.updateEdgeLBPoolObject(pool)
 	// Report the status of the pool.
 	st.logger.Debugf("inspection report for edgelb pool %q:\n%s", pool.Name, report.String())
 
 	// If the pool doesn't need to be updated, we just return.
-	if !mustUpdate {
+	if !wasChanged {
 		st.logger.Debugf("edgelb pool %q is synced", pool.Name)
 		return nil
 	}
 
-	// Otherwise, we update the pool in the EdgeLB API server.
-	st.logger.Debugf("edgelb pool %q must be updated", pool.Name)
-	ctx, fn := context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
+	// At this point we know that the pool must be either updated or deleted.
+	// If the pool is empty (i.e. it has no frontends or backends) we proceed to deleting it.
+	// Otherwise, we proceed to updating it.
+
+	var (
+		err error
+		ctx context.Context
+		fn  func()
+	)
+
+	ctx, fn = context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
 	defer fn()
-	_, err := st.manager.UpdatePool(ctx, pool)
+
+	if len(pool.Haproxy.Frontends) == 0 && len(pool.Haproxy.Backends) == 0 {
+		// The pool is empty, so we delete it.
+		st.logger.Debugf("edgelb pool %q is empty and must be deleted", pool.Name)
+		err = st.manager.DeletePool(ctx, pool.Name)
+	} else {
+		// The pool is not empty, so we update it.
+		st.logger.Debugf("edgelb pool %q must be updated", pool.Name)
+		_, err = st.manager.UpdatePool(ctx, pool)
+	}
+
 	return err
 }
 
@@ -137,21 +162,27 @@ func (st *ServiceTranslator) createEdgeLBPoolObject() *models.V2Pool {
 	return p
 }
 
-// maybeUpdateEdgeLBPoolObject updates the specified pool object in order to reflect the status of the current Service resource.
-// It modifies the specified pool in-place and returns a value indicating whether the pool must be updated in the EdgeLB API server.
+// updateEdgeLBPoolObject updates the specified pool object in order to reflect the status of the current Service resource.
+// It modifies the specified pool in-place and returns a value indicating whether the pool object contains changes.
 // Backends and frontends (the "objects") are added/modified/deleted according to the following rules:
 // * If the object is not owned by the current Service resource, it is left untouched.
+// * If the current Service resource has been marked for deletion or is not of type "LoadBalancer" anymore, it is removed.
 // * If the object is owned by the current Service resource but the corresponding service port has disappeared, it is removed.
 // * If the object is owned by the current Service resource and the corresponding service port still exists, it is checked for correctness and updated if necessary.
 // Furthermore, service ports are iterated over in order to understand which objects must be added to the pool.
-func (st *ServiceTranslator) maybeUpdateEdgeLBPoolObject(pool *models.V2Pool) (mustUpdate bool, report poolInspectionReport) {
-	// Iterate over ports defined on the service and re-compute the corresponding backend and frontend objects.
-	// These will be compared with the backend and frontend objects reported by the EdgeLB API server (i.e. those in "pool").
+func (st *ServiceTranslator) updateEdgeLBPoolObject(pool *models.V2Pool) (wasChanged bool, report poolInspectionReport) {
+	// serviceDeleted holds whether the Service resource has been deleted (or changed to a different type, which must produce a similar effect).
+	serviceDeleted := st.service.DeletionTimestamp != nil || st.service.Spec.Type != corev1.ServiceTypeLoadBalancer
+
+	// If the service has not been deleted, we iterate over ports defined on the service and re-compute the corresponding backend and frontend objects.
+	// These will be later compared with the backend and frontend objects reported by the EdgeLB API server (i.e. those in "pool").
 	desiredBackendFrontends := make(map[int32]servicePortBackendFrontend, len(st.service.Spec.Ports))
-	for _, port := range st.service.Spec.Ports {
-		desiredBackendFrontends[port.Port] = servicePortBackendFrontend{
-			Backend:  computeBackendForServicePort(st.service, port),
-			Frontend: computeFrontendForServicePort(st.service, port, st.options),
+	if !serviceDeleted {
+		for _, port := range st.service.Spec.Ports {
+			desiredBackendFrontends[port.Port] = servicePortBackendFrontend{
+				Backend:  computeBackendForServicePort(st.service, port),
+				Frontend: computeFrontendForServicePort(st.service, port, st.options),
+			}
 		}
 	}
 
@@ -175,9 +206,15 @@ func (st *ServiceTranslator) maybeUpdateEdgeLBPoolObject(pool *models.V2Pool) (m
 			continue
 		}
 		// At this point we know the current backend is owned by the current service.
+		// Check whether the service has been deleted, and skip (i.e. remove) the backend if it has.
+		if serviceDeleted {
+			wasChanged = true
+			report.Report("must delete backend %q as %q was deleted or its type has changed", backend.Name, kubernetesutil.Key(st.service))
+			continue
+		}
 		// Check whether the target service port is still present in the service and skip (i.e. remove) the backend if it doesn't.
 		if _, exists := desiredBackendFrontends[backendMetadata.ServicePort]; !exists {
-			mustUpdate = true
+			wasChanged = true
 			report.Report("must delete backend %q as port %d is missing from %s", backend.Name, backendMetadata.ServicePort, kubernetesutil.Key(st.service))
 			continue
 		}
@@ -187,7 +224,7 @@ func (st *ServiceTranslator) maybeUpdateEdgeLBPoolObject(pool *models.V2Pool) (m
 		// Check whether the existing (current) and computed (desired) backends differ.
 		// In case differences are detected, we replace the existing backend by the computed one.
 		if !reflect.DeepEqual(backend, desiredBackendFrontends[backendMetadata.ServicePort].Backend) {
-			mustUpdate = true
+			wasChanged = true
 			updatedBackends = append(updatedBackends, desiredBackendFrontends[backendMetadata.ServicePort].Backend)
 			report.Report("must modify backend %q", backend.Name)
 		} else {
@@ -216,10 +253,16 @@ func (st *ServiceTranslator) maybeUpdateEdgeLBPoolObject(pool *models.V2Pool) (m
 			continue
 		}
 		// At this point we know the current frontend is owned by the current service.
+		// Check whether the service has been deleted, and skip (i.e. remove) the frontend if it has.
+		if serviceDeleted {
+			wasChanged = true
+			report.Report("must delete frontend %q as %q was deleted or its type has changed", frontend.Name, kubernetesutil.Key(st.service))
+			continue
+		}
 		// Check whether the target service port is still present in the service and skip (i.e. remove) the frontend if it doesn't.
 		if _, exists := desiredBackendFrontends[frontendMetadata.ServicePort]; !exists {
-			mustUpdate = true
-			report.Report("must delete frontend %q as port %d is missing from %s", frontend.Name, frontendMetadata.ServicePort, kubernetesutil.Key(st.service))
+			wasChanged = true
+			report.Report("must delete backend %q as port %d is missing from %s", frontend.Name, frontendMetadata.ServicePort, kubernetesutil.Key(st.service))
 			continue
 		}
 		// At this point we know the service port corresponding to the current frontend still exists.
@@ -228,7 +271,7 @@ func (st *ServiceTranslator) maybeUpdateEdgeLBPoolObject(pool *models.V2Pool) (m
 		// Check whether the existing (current) and computed (desired) frontends differ.
 		// In case differences are detected, we replace the existing frontend by the computed one.
 		if !reflect.DeepEqual(frontend, desiredBackendFrontends[frontendMetadata.ServicePort].Frontend) {
-			mustUpdate = true
+			wasChanged = true
 			updatedFrontends = append(updatedFrontends, desiredBackendFrontends[frontendMetadata.ServicePort].Frontend)
 			report.Report("must modify frontend %q", frontend.Name)
 		} else {
@@ -237,26 +280,33 @@ func (st *ServiceTranslator) maybeUpdateEdgeLBPoolObject(pool *models.V2Pool) (m
 		}
 	}
 
+	// Replace the pool's backends and frontends with the (possibly empty) updated lists.
+	pool.Haproxy.Backends, pool.Haproxy.Frontends = updatedBackends, updatedFrontends
+
+	// If the current Service resource was deleted, there is nothing else to compute.
+	if serviceDeleted {
+		return wasChanged, report
+	}
+
 	// Iterate over all the service ports, in order to understand whether there are new service port definitions.
 	// For every service port, if the corresponding backend or frontend isn't present, add it.
 	for port, dbf := range desiredBackendFrontends {
 		if _, visited := visitedBackends[port]; !visited {
 			// The current service port doesn't have a matching backend.
 			// Hence, we add it to the set of updated backends and mark the pool as requiring an update.
-			mustUpdate = true
-			updatedBackends = append(updatedBackends, dbf.Backend)
+			wasChanged = true
+			pool.Haproxy.Backends = append(pool.Haproxy.Backends, dbf.Backend)
 			report.Report("must create backend %q", dbf.Backend.Name)
 		}
 		if _, visited := visitedFrontends[port]; !visited {
 			// The current service port doesn't have a matching frontend.
 			// Hence, we add it to the set of updated frontends and mark the pool as requiring an update.
-			mustUpdate = true
-			updatedFrontends = append(updatedFrontends, dbf.Frontend)
+			wasChanged = true
+			pool.Haproxy.Frontends = append(pool.Haproxy.Frontends, dbf.Frontend)
 			report.Report("must create frontend %q", dbf.Frontend.Name)
 		}
 	}
 
-	// Replace the pool's backends and frontends, and return a value indicating whether the pool must be updated.
-	pool.Haproxy.Backends, pool.Haproxy.Frontends = updatedBackends, updatedFrontends
-	return mustUpdate, report
+	// Return a value indicating whether the pool was changed, and the pool inspection report.
+	return wasChanged, report
 }

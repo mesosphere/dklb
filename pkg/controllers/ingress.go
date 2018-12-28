@@ -93,16 +93,16 @@ func (c *IngressController) enqueueIfEdgeLBIngress(obj *extsv1beta1.Ingress) {
 }
 
 // processQueueItem attempts to reconcile the state of the Ingress resource pointed at by the specified key.
-func (c *IngressController) processQueueItem(key string) error {
+func (c *IngressController) processQueueItem(workItem WorkItem) error {
 	// Record the current iteration.
 	startTime := time.Now()
-	metrics.RecordSync(ingressControllerName, key)
+	metrics.RecordSync(ingressControllerName, workItem.Key)
 	defer metrics.RecordSyncDuration(ingressControllerName, startTime)
 
 	// Convert the specified key into a distinct namespace and name.
-	namespace, name, err := cache.SplitMetaNamespaceKey(key)
+	namespace, name, err := cache.SplitMetaNamespaceKey(workItem.Key)
 	if err != nil {
-		runtime.HandleError(fmt.Errorf("invalid resource key %q", key))
+		runtime.HandleError(fmt.Errorf("invalid resource key %q", workItem.Key))
 		return nil
 	}
 
@@ -112,7 +112,7 @@ func (c *IngressController) processQueueItem(key string) error {
 		// The Ingress resource may no longer exist, in which case we must stop processing.
 		// TODO (@bcustodio) This might (or might not) be a good place to perform cleanup of any associated EdgeLB pools.
 		if apierrors.IsNotFound(err) {
-			runtime.HandleError(fmt.Errorf("ingress %q in work queue no longer exists", key))
+			runtime.HandleError(fmt.Errorf("ingress %q in work queue no longer exists", workItem.Key))
 			return nil
 		}
 		return err
@@ -128,22 +128,22 @@ func (c *IngressController) processQueueItem(key string) error {
 	if err != nil {
 		// Emit an event and log an error, but do not re-enqueue as the resource's spec was found to be invalid.
 		er.Eventf(ingress, corev1.EventTypeWarning, constants.ReasonInvalidAnnotations, "the resource's annotations are not valid: %v", err)
-		c.logger.Errorf("failed to compute translation options for ingress %q: %v", key, err)
+		c.logger.Errorf("failed to compute translation options for ingress %q: %v", workItem.Key, err)
 		return nil
 	}
 
 	// Output some debugging information about the computed set of options.
-	c.logger.Debugf("computed ingress translation options for %q:\n%s", key, prettyprint.Sprint(options))
+	c.logger.Debugf("computed ingress translation options for %q:\n%s", workItem.Key, prettyprint.Sprint(options))
 
 	// Perform translation of the Ingress resource into an EdgeLB pool.
 	if err := translator.NewIngressTranslator(ingress, *options, c.edgelbManager).Translate(); err != nil {
-		c.logger.Errorf("failed to translate ingress %q: %v", key, err)
+		c.logger.Errorf("failed to translate ingress %q: %v", workItem.Key, err)
 		return err
 	}
 
 	// Update the status of the Service resource.
 	if _, err := c.kubeClient.ExtensionsV1beta1().Ingresses(ingress.Namespace).UpdateStatus(ingress); err != nil {
-		c.logger.Errorf("failed to update status for ingress %q: %v", key, err)
+		c.logger.Errorf("failed to update status for ingress %q: %v", workItem.Key, err)
 		return err
 	}
 	return nil

@@ -25,6 +25,8 @@ type BaseTranslationOptions struct {
 
 	// EdgeLBPoolCreationStrategy is the strategy to use for provisioning an EdgeLB pool for the Ingress/Service resource.
 	EdgeLBPoolCreationStrategy constants.EdgeLBPoolCreationStrategy
+	// EdgeLBPoolTranslationPaused indicates whether translation is currently paused for the Ingress/Service resource.
+	EdgeLBPoolTranslationPaused bool
 }
 
 // parseBaseTranslationOptions attempts to compute base, common translation options from the specified set of annotations.
@@ -98,6 +100,17 @@ func parseBaseTranslationOptions(annotations map[string]string) (*BaseTranslatio
 		default:
 			return nil, fmt.Errorf("failed to parse %q as a pool creation strategy", v)
 		}
+	}
+
+	// Parse whether translation is currently paused.
+	if v, exists := annotations[constants.EdgeLBPoolTranslationPaused]; !exists || v == "" {
+		res.EdgeLBPoolTranslationPaused = false
+	} else {
+		p, err := strconv.ParseBool(v)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse %q as a boolean value: %v", v, err)
+		}
+		res.EdgeLBPoolTranslationPaused = p
 	}
 
 	// Return the computed set of options.

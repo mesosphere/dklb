@@ -2,12 +2,13 @@ package translator
 
 import (
 	"testing"
-
-	"k8s.io/apimachinery/pkg/api/resource"
+	"time"
 
 	"github.com/mesosphere/dcos-edge-lb/models"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/mesosphere/dklb/pkg/util/pointers"
@@ -27,6 +28,22 @@ var (
 				TargetPort: intstr.FromInt(8080),
 			},
 		}
+		service.Spec.Type = v1.ServiceTypeLoadBalancer
+	})
+	// deletedServiceExposingPort80 is a dummy Kubernetes Service resource that exposes port 80 but has been marked for deletion.
+	deletedServiceExposingPort80 = service.DummyServiceResource("foo", "bar", func(service *v1.Service) {
+		deletionTimestamp := metav1.NewTime(time.Now())
+		service.ObjectMeta.DeletionTimestamp = &deletionTimestamp
+		service.Spec.Ports = []v1.ServicePort{
+			{
+				Name:       "http-1",
+				Protocol:   v1.ProtocolTCP,
+				Port:       80,
+				NodePort:   34567,
+				TargetPort: intstr.FromInt(8080),
+			},
+		}
+		service.Spec.Type = v1.ServiceTypeLoadBalancer
 	})
 	// serviceTranslationOptionsForPort80 is a set of translation options that maps a Service's port 80 to EdgeLB frontend bind port 10080.
 	serviceTranslationOptionsForPort80 = ServiceTranslationOptions{
@@ -107,13 +124,13 @@ func TestCreateEdgeLBPoolObject(t *testing.T) {
 	}
 }
 
-// TestMaybeUpdateEdgeLBPoolObject tests the "maybeUpdateEdgeLBPoolObject" function.
-func TestMaybeUpdateEdgeLBPoolObject(t *testing.T) {
+// TestUpdateEdgeLBPoolObject tests the "updateEdgeLBPoolObject" function.
+func TestUpdateEdgeLBPoolObject(t *testing.T) {
 	tests := []struct {
 		service            *v1.Service
 		options            ServiceTranslationOptions
 		pool               *models.V2Pool
-		expectedMustUpdate bool
+		expectedWasChanged bool
 		expectedBackends   []*models.V2Backend
 		expectedFrontends  []*models.V2Frontend
 	}{
@@ -129,13 +146,29 @@ func TestMaybeUpdateEdgeLBPoolObject(t *testing.T) {
 					frontendForServiceExposingPort80,
 				}
 			}),
-			expectedMustUpdate: false,
+			expectedWasChanged: false,
 			expectedBackends: []*models.V2Backend{
 				backendForServiceExposingPort80,
 			},
 			expectedFrontends: []*models.V2Frontend{
 				frontendForServiceExposingPort80,
 			},
+		},
+		{
+			// Test that a pool that was "in sync" with a deleted Service resource is detected as requiring an update.
+			service: deletedServiceExposingPort80,
+			options: serviceTranslationOptionsForPort80,
+			pool: edgelbpooltestutil.DummyEdgeLBPool("baz", func(p *models.V2Pool) {
+				p.Haproxy.Backends = []*models.V2Backend{
+					backendForServiceExposingPort80,
+				}
+				p.Haproxy.Frontends = []*models.V2Frontend{
+					frontendForServiceExposingPort80,
+				}
+			}),
+			expectedWasChanged: true,
+			expectedBackends:   []*models.V2Backend{},
+			expectedFrontends:  []*models.V2Frontend{},
 		},
 		{
 			// Test that a pool for which a backend was manually changed is detected as requiring an update.
@@ -153,7 +186,7 @@ func TestMaybeUpdateEdgeLBPoolObject(t *testing.T) {
 					frontendForServiceExposingPort80,
 				}
 			}),
-			expectedMustUpdate: true,
+			expectedWasChanged: true,
 			expectedBackends: []*models.V2Backend{
 				backendForServiceExposingPort80,
 			},
@@ -177,7 +210,7 @@ func TestMaybeUpdateEdgeLBPoolObject(t *testing.T) {
 					frontend,
 				}
 			}),
-			expectedMustUpdate: true,
+			expectedWasChanged: true,
 			expectedBackends: []*models.V2Backend{
 				backendForServiceExposingPort80,
 			},
@@ -202,7 +235,7 @@ func TestMaybeUpdateEdgeLBPoolObject(t *testing.T) {
 					preExistingFrontend2,
 				}
 			}),
-			expectedMustUpdate: true,
+			expectedWasChanged: true,
 			expectedBackends: []*models.V2Backend{
 				preExistingBackend1,
 				preExistingBackend2,
@@ -246,7 +279,7 @@ func TestMaybeUpdateEdgeLBPoolObject(t *testing.T) {
 					}, ServiceTranslationOptions{}),
 				}
 			}),
-			expectedMustUpdate: true,
+			expectedWasChanged: true,
 			expectedBackends: []*models.V2Backend{
 				preExistingBackend1,
 				preExistingBackend2,
@@ -261,9 +294,9 @@ func TestMaybeUpdateEdgeLBPoolObject(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		mustUpdate, _ := NewServiceTranslator(test.service, test.options, nil).maybeUpdateEdgeLBPoolObject(test.pool)
+		mustUpdate, _ := NewServiceTranslator(test.service, test.options, nil).updateEdgeLBPoolObject(test.pool)
 		// Check that the need for a pool update was adequately detected.
-		assert.Equal(t, test.expectedMustUpdate, mustUpdate)
+		assert.Equal(t, test.expectedWasChanged, mustUpdate)
 		// Check that all expected backends are present.
 		assert.Equal(t, test.expectedBackends, test.pool.Haproxy.Backends)
 		// Check that all expected frontends are present.

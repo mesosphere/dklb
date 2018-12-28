@@ -6,6 +6,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	corev1informers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -56,15 +57,33 @@ func NewServiceController(kubeClient kubernetes.Interface, serviceInformer corev
 	c.syncHandler = c.processQueueItem
 
 	// Setup an event handler to inform us when Service resources change.
+	// A Service resource is enqueued in the following scenarios:
+	// * It was listed ("ADDED") and is of type "LoadBalancer".
+	// * It was updated ("MODIFIED") and either the old or the new types (or both) are of type "LoadBalancer".
+	//   * This allows for handling the cases in which the type of a service changes.
+	// * It was deleted ("DELETED") and was of type "LoadBalancer".
 	serviceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			c.enqueueIfLoadBalancer(obj.(*corev1.Service))
+			svc := obj.(*corev1.Service)
+			if svc.Spec.Type != corev1.ServiceTypeLoadBalancer {
+				return
+			}
+			c.enqueue(svc)
 		},
-		UpdateFunc: func(_, obj interface{}) {
-			c.enqueueIfLoadBalancer(obj.(*corev1.Service))
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			oldSvc := oldObj.(*corev1.Service)
+			newSvc := newObj.(*corev1.Service)
+			if oldSvc.Spec.Type != corev1.ServiceTypeLoadBalancer && newSvc.Spec.Type != corev1.ServiceTypeLoadBalancer {
+				return
+			}
+			c.enqueue(newSvc)
 		},
 		DeleteFunc: func(obj interface{}) {
-			c.enqueueIfLoadBalancer(obj.(*corev1.Service))
+			svc := obj.(*corev1.Service)
+			if svc.Spec.Type != corev1.ServiceTypeLoadBalancer {
+				return
+			}
+			c.enqueueTombstone(svc)
 		},
 	})
 
@@ -72,41 +91,41 @@ func NewServiceController(kubeClient kubernetes.Interface, serviceInformer corev
 	return c
 }
 
-// enqueueIfLoadBalancer checks if the specified Service resource is of type "LoadBalancer", and enqueues it if this condition is verified.
-func (c *ServiceController) enqueueIfLoadBalancer(service *corev1.Service) {
-	if service.Spec.Type != corev1.ServiceTypeLoadBalancer {
-		return
-	}
-	c.enqueue(service)
-}
-
 // processQueueItem attempts to reconcile the state of the Service resource pointed at by the specified key.
-func (c *ServiceController) processQueueItem(key string) error {
+func (c *ServiceController) processQueueItem(workItem WorkItem) error {
 	// Record the current iteration.
 	startTime := time.Now()
-	metrics.RecordSync(serviceControllerName, key)
+	metrics.RecordSync(serviceControllerName, workItem.Key)
 	defer metrics.RecordSyncDuration(serviceControllerName, startTime)
 
 	// Convert the specified key into a distinct namespace and name.
-	namespace, name, err := cache.SplitMetaNamespaceKey(key)
+	namespace, name, err := cache.SplitMetaNamespaceKey(workItem.Key)
 	if err != nil {
-		runtime.HandleError(fmt.Errorf("invalid resource key %q", key))
+		runtime.HandleError(fmt.Errorf("invalid resource key %q", workItem.Key))
 		return nil
 	}
 
 	// Get the Service resource with the specified namespace and name.
 	service, err := c.serviceLister.Services(namespace).Get(name)
-	if err != nil {
-		// The Service resource may no longer exist, in which case we must stop processing.
-		// TODO (@bcustodio) This might (or might not) be a good place to perform cleanup of any associated EdgeLB pools.
-		if apierrors.IsNotFound(err) {
-			runtime.HandleError(fmt.Errorf("service %q in work queue no longer exists", key))
-			return nil
+	if err == nil {
+		// Create a deep copy of the Service resource in order to avoid possibly mutating the cache.
+		service = service.DeepCopy()
+	} else {
+		// Return immediately if the current error's type is something other than "NotFound".
+		if !apierrors.IsNotFound(err) {
+			return err
 		}
-		return err
+		// At this point we know the service resource does not exist anymore.
+		// Hence, we take its tombstone and hand it over to the translator so it can perform cleanup of the associated EdgeLB pool as it sees fit.
+		if workItem.Tombstone == nil {
+			return fmt.Errorf("service %q in work queue no longer exists, and no tombstone was recovered", workItem.Key)
+		}
+		// Create a deep copy of the tombstone in order to avoid mutating the cache.
+		service = workItem.Tombstone.(*corev1.Service).DeepCopy()
+		// Set the current timestamp as the value of ".metadata.deletionTimestamp" so the translator can understand that the resource has been deleted.
+		deletionTimestamp := metav1.NewTime(startTime)
+		service.ObjectMeta.DeletionTimestamp = &deletionTimestamp
 	}
-	// Create a deep copy of the Service resource in order to avoid possibly mutating the cache.
-	service = service.DeepCopy()
 
 	// Create an event recorder that we can use to report events related with the Ingress resource.
 	er := kubernetesutil.NewEventRecorderForNamespace(c.kubeClient, service.Namespace)
@@ -116,24 +135,26 @@ func (c *ServiceController) processQueueItem(key string) error {
 	if err != nil {
 		// Emit an event and log an error, but do not re-enqueue as the resource's spec was found to be invalid.
 		er.Eventf(service, corev1.EventTypeWarning, constants.ReasonInvalidAnnotations, "the resource's annotations are not valid: %v", err)
-		c.logger.Errorf("failed to compute translation options for service %q: %v", key, err)
+		c.logger.Errorf("failed to compute translation options for service %q: %v", workItem.Key, err)
 		return nil
 	}
 
 	// Output some debugging information about the computed set of options.
-	c.logger.Debugf("computed service translation options for %q:\n%s", key, prettyprint.Sprint(options))
+	c.logger.Debugf("computed service translation options for %q:\n%s", workItem.Key, prettyprint.Sprint(options))
 
 	// Perform translation of the Service resource into an EdgeLB pool.
 	if err := translator.NewServiceTranslator(service, *options, c.edgelbManager).Translate(); err != nil {
 		er.Eventf(service, corev1.EventTypeWarning, constants.ReasonTranslationError, "failed to translate service: %v", err)
-		c.logger.Errorf("failed to translate service %q: %v", key, err)
+		c.logger.Errorf("failed to translate service %q: %v", workItem.Key, err)
 		return err
 	}
 
-	// Update the status of the Service resource.
-	if _, err := c.kubeClient.CoreV1().Services(service.Namespace).UpdateStatus(service); err != nil {
-		c.logger.Errorf("failed to update status for service %q: %v", key, err)
-		return err
+	// Update the status of the Service resource if it hasn't been deleted.
+	if service.ObjectMeta.DeletionTimestamp == nil {
+		if _, err := c.kubeClient.CoreV1().Services(service.Namespace).UpdateStatus(service); err != nil {
+			c.logger.Errorf("failed to update status for service %q: %v", workItem.Key, err)
+			return err
+		}
 	}
 	return nil
 }

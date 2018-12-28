@@ -97,9 +97,6 @@ var _ = Describe("Service", func() {
 				})
 				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
 
-				// Delete the pool after the test finishes.
-				defer f.DeleteEdgeLBPool(pool)
-
 				// Make sure the pool is reporting the requested configuration.
 				Expect(pool.Name).To(Equal(redisSvc.Annotations[constants.EdgeLBPoolNameAnnotationKey]))
 				Expect(pool.Role).To(Equal(redisSvc.Annotations[constants.EdgeLBPoolRoleAnnotationKey]))
@@ -186,9 +183,6 @@ var _ = Describe("Service", func() {
 						return err == nil, nil
 					})
 					Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
-
-					// Delete the pool after the test finishes.
-					defer f.DeleteEdgeLBPool(pool)
 
 					// TODO (@bcustodio) Wait for the pool's IP(s) to be reported.
 
@@ -371,9 +365,10 @@ var _ = Describe("Service", func() {
 				})
 				Expect(err).NotTo(HaveOccurred(), "timed out while attempting to ping redis")
 
-				// Set the type of "redisSvc" to "NodePort".
+				// Pause translation of the Service resource.
 				// This will cause the service controller to stop processing this resource, and will prevent the pool from being re-created too soon.
-				redisSvc.Spec.Type = corev1.ServiceTypeNodePort
+				// This is required in order to prevent https://jira.mesosphere.com/browse/DCOS-46508 from happening due to the controller's resync period elapsing in the meantime.
+				redisSvc.Annotations[constants.EdgeLBPoolTranslationPaused] = "1"
 				redisSvc, err = f.KubeClient.CoreV1().Services(redisSvc.Namespace).Update(redisSvc)
 				Expect(err).NotTo(HaveOccurred(), "failed to set the type of %q to %q", kubernetes.Key(redisSvc), corev1.ServiceTypeNodePort)
 
@@ -395,9 +390,9 @@ var _ = Describe("Service", func() {
 				// https://jira.mesosphere.com/browse/DCOS-46508
 				time.Sleep(30 * time.Second)
 
-				// Set the type of "redisSvc" back to "LoadBalancer".
+				// Resume translation of the Service resource.
 				// This will cause the service controller to restart processing this resource, and re-create the pool since we're using the default pool re-creation strategy.
-				redisSvc.Spec.Type = corev1.ServiceTypeLoadBalancer
+				redisSvc.Annotations[constants.EdgeLBPoolTranslationPaused] = "0"
 				redisSvc, err = f.KubeClient.CoreV1().Services(redisSvc.Namespace).Update(redisSvc)
 				Expect(err).NotTo(HaveOccurred(), "failed to set the type of %q to %q", kubernetes.Key(redisSvc), corev1.ServiceTypeNodePort)
 
@@ -415,9 +410,6 @@ var _ = Describe("Service", func() {
 				// Manually delete the two services now in order to prevent the EdgeLB pool from being re-created during namespace deletion.
 				err = f.KubeClient.CoreV1().Services(redisSvc.Namespace).Delete(redisSvc.Name, metav1.NewDeleteOptions(0))
 				Expect(err).NotTo(HaveOccurred(), "failed to delete service %q", kubernetes.Key(redisSvc))
-
-				// Delete the EdgeLB pool.
-				f.DeleteEdgeLBPool(pool)
 			})
 		})
 	})

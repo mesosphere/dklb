@@ -45,4 +45,8 @@ const (
 	// EdgeLBPoolPortMapKeyPrefix is the prefix of the key of the annotation that holds the port to use as a frontend bind port by the target EdgeLB pool.
 	// This annotation is specific to Service resources.
 	EdgeLBPoolPortMapKeyPrefix = annotationKeyPrefix + "edgelb-pool-portmap."
+
+	// EdgeLBPoolTranslationPaused is the key of the annotation that holds whether a given resource is currently paused.
+	// Used mostly to facilitate end-to-end testing.
+	EdgeLBPoolTranslationPaused = annotationKeyPrefix + "edgelb-pool-translation-paused"
 )

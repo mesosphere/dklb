@@ -28,7 +28,9 @@ func TestServiceTranslator_Translate(t *testing.T) {
 	}{
 		// Tests that a pool is created whenever it doesn't exist and the pool creation strategy is set of "IfNotPresent".
 		{
-			service:  servicetestutil.DummyServiceResource("foo", "bar"),
+			service: servicetestutil.DummyServiceResource("foo", "bar", func(service *v1.Service) {
+				service.Spec.Type = v1.ServiceTypeLoadBalancer
+			}),
 			poolName: "foo",
 			mockCustomizer: func(manager *edgelbmanagertestutil.MockEdgeLBManager) {
 				manager.On("GetPoolByName", mock.Anything, "foo").Return(nil, dklberrors.NotFound(errors.New("not found")))
@@ -44,7 +46,9 @@ func TestServiceTranslator_Translate(t *testing.T) {
 		},
 		// Tests that a pool is NOT created whenever it doesn't exist and the pool creation strategy is set to "Never".
 		{
-			service:  servicetestutil.DummyServiceResource("foo", "bar"),
+			service: servicetestutil.DummyServiceResource("foo", "bar", func(service *v1.Service) {
+				service.Spec.Type = v1.ServiceTypeLoadBalancer
+			}),
 			poolName: "foo",
 			mockCustomizer: func(manager *edgelbmanagertestutil.MockEdgeLBManager) {
 				manager.On("GetPoolByName", mock.Anything, "foo").Return(nil, dklberrors.NotFound(errors.New("not found")))
@@ -65,6 +69,7 @@ func TestServiceTranslator_Translate(t *testing.T) {
 						IP: "1.2.3.4",
 					},
 				}
+				service.Spec.Type = v1.ServiceTypeLoadBalancer
 			}),
 			poolName: "foo",
 			mockCustomizer: func(manager *edgelbmanagertestutil.MockEdgeLBManager) {
@@ -90,6 +95,7 @@ func TestServiceTranslator_Translate(t *testing.T) {
 						TargetPort: intstr.FromInt(8000),
 					},
 				}
+				service.Spec.Type = v1.ServiceTypeLoadBalancer
 			}),
 			poolName: "foo",
 			mockCustomizer: func(manager *edgelbmanagertestutil.MockEdgeLBManager) {
