@@ -85,7 +85,7 @@ func TestRetryWithTimeout(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Logf("test: %s", test.description)
+		t.Logf("test case: %s", test.description)
 		// Reset the iteration counter.
 		cur = 0
 		// Take note of the current time.

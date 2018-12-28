@@ -86,6 +86,7 @@ var (
 
 func TestCreateEdgeLBPoolObject(t *testing.T) {
 	tests := []struct {
+		description       string
 		service           *v1.Service
 		options           ServiceTranslationOptions
 		expectedName      string
@@ -97,6 +98,7 @@ func TestCreateEdgeLBPoolObject(t *testing.T) {
 		expectedFrontends []*models.V2Frontend
 	}{
 		{
+			description:  "create an edgelb pool based on valid translattion options",
 			service:      serviceExposingPort80,
 			options:      serviceTranslationOptionsForPort80,
 			expectedName: serviceTranslationOptionsForPort80.EdgeLBPoolName,
@@ -113,6 +115,7 @@ func TestCreateEdgeLBPoolObject(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		t.Logf("test case: %s", test.description)
 		pool := NewServiceTranslator(test.service, test.options, nil).createEdgeLBPoolObject()
 		assert.Equal(t, test.expectedName, pool.Name)
 		assert.Equal(t, test.expectedRole, pool.Role)
@@ -127,6 +130,7 @@ func TestCreateEdgeLBPoolObject(t *testing.T) {
 // TestUpdateEdgeLBPoolObject tests the "updateEdgeLBPoolObject" function.
 func TestUpdateEdgeLBPoolObject(t *testing.T) {
 	tests := []struct {
+		description        string
 		service            *v1.Service
 		options            ServiceTranslationOptions
 		pool               *models.V2Pool
@@ -135,9 +139,10 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 		expectedFrontends  []*models.V2Frontend
 	}{
 		{
-			// Test that a pool that in "in sync" with the service spec is detected as NOT requiring an update.
-			service: serviceExposingPort80,
-			options: serviceTranslationOptionsForPort80,
+			// Test that a pool that is in "in sync" with the Service resource's spec is detected as not requiring an update.
+			description: "pool that is \"in sync\" with the Service resource's spec is detected as not requiring an update",
+			service:     serviceExposingPort80,
+			options:     serviceTranslationOptionsForPort80,
 			pool: edgelbpooltestutil.DummyEdgeLBPool("baz", func(p *models.V2Pool) {
 				p.Haproxy.Backends = []*models.V2Backend{
 					backendForServiceExposingPort80,
@@ -156,8 +161,9 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 		},
 		{
 			// Test that a pool that was "in sync" with a deleted Service resource is detected as requiring an update.
-			service: deletedServiceExposingPort80,
-			options: serviceTranslationOptionsForPort80,
+			description: "pool that was \"in sync\" with a deleted Service resource is detected as requiring an update",
+			service:     deletedServiceExposingPort80,
+			options:     serviceTranslationOptionsForPort80,
 			pool: edgelbpooltestutil.DummyEdgeLBPool("baz", func(p *models.V2Pool) {
 				p.Haproxy.Backends = []*models.V2Backend{
 					backendForServiceExposingPort80,
@@ -172,8 +178,9 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 		},
 		{
 			// Test that a pool for which a backend was manually changed is detected as requiring an update.
-			service: serviceExposingPort80,
-			options: serviceTranslationOptionsForPort80,
+			description: "pool for which a backend was manually changed is detected as requiring an update",
+			service:     serviceExposingPort80,
+			options:     serviceTranslationOptionsForPort80,
 			pool: edgelbpooltestutil.DummyEdgeLBPool("baz", func(p *models.V2Pool) {
 				// Change the target port for the backend.
 				backend := computeBackendForServicePort(serviceExposingPort80, serviceExposingPort80.Spec.Ports[0])
@@ -196,8 +203,9 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 		},
 		{
 			// Test that a pool for which a frontend was manually changed is detected as requiring an update.
-			service: serviceExposingPort80,
-			options: serviceTranslationOptionsForPort80,
+			description: "pool for which a frontend was manually changed is detected as requiring an update",
+			service:     serviceExposingPort80,
+			options:     serviceTranslationOptionsForPort80,
 			pool: edgelbpooltestutil.DummyEdgeLBPool("baz", func(p *models.V2Pool) {
 				p.Haproxy.Backends = []*models.V2Backend{
 					backendForServiceExposingPort80,
@@ -219,9 +227,10 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 			},
 		},
 		{
-			// Test that a pool with existing backends/frontends but no backends/frontends for the current service is detected as requiring an update, and has all expected backends and frontends after being updated in-place.
-			service: serviceExposingPort80,
-			options: serviceTranslationOptionsForPort80,
+			// Test that a pool with existing backends/frontends but no backends/frontends for the current Service resource is detected as requiring an update, and has all expected backends and frontends after being updated in-place.
+			description: "pool with existing backends/frontends but no backends/frontends for the current Service resource is detected as requiring an update",
+			service:     serviceExposingPort80,
+			options:     serviceTranslationOptionsForPort80,
 			pool: edgelbpooltestutil.DummyEdgeLBPool("baz", func(p *models.V2Pool) {
 				p.Haproxy.Backends = []*models.V2Backend{
 					// Will have to exist (and come before "backendForServiceExposingPort80") in the end.
@@ -249,9 +258,10 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 			},
 		},
 		{
-			// Test that a pool with existing backends/frontends is detected as requiring an update after a port is removed from the Service.
-			service: serviceExposingPort80,
-			options: serviceTranslationOptionsForPort80,
+			// Test that a pool with existing backends/frontends is detected as requiring an update after a port is removed from the Service resource.
+			description: "pool with existing backends/frontends is detected as requiring an update after a port is removed from the Service resource",
+			service:     serviceExposingPort80,
+			options:     serviceTranslationOptionsForPort80,
 			pool: edgelbpooltestutil.DummyEdgeLBPool("baz", func(p *models.V2Pool) {
 				p.Haproxy.Backends = []*models.V2Backend{
 					preExistingBackend1,
@@ -294,6 +304,8 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		t.Logf("test case: %s", test.description)
+		// Update the EdgeLB pool object in-place.
 		mustUpdate, _ := NewServiceTranslator(test.service, test.options, nil).updateEdgeLBPoolObject(test.pool)
 		// Check that the need for a pool update was adequately detected.
 		assert.Equal(t, test.expectedWasChanged, mustUpdate)

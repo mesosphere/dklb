@@ -11,27 +11,33 @@ import (
 // TestRemoveSlashes tests the "RemoveSlashes" function.
 func TestRemoveSlashes(t *testing.T) {
 	tests := []struct {
-		i string
-		o string
+		description string
+		input       string
+		output      string
 	}{
 		{
-			i: "",
-			o: "",
+			description: "empty string",
+			input:       "",
+			output:      "",
 		},
 		{
-			i: "foo",
-			o: "foo",
+			description: "string without slashes",
+			input:       "foo",
+			output:      "foo",
 		},
 		{
-			i: "dev/kubernetes01",
-			o: "devkubernetes01",
+			description: "string with a single slash",
+			input:       "dev/kubernetes01",
+			output:      "devkubernetes01",
 		},
 		{
-			i: "dev/kubernetes/k-01",
-			o: "devkubernetesk-01",
+			description: "string with multiple slashes",
+			input:       "dev/kubernetes/k-01",
+			output:      "devkubernetesk-01",
 		},
 	}
 	for _, test := range tests {
-		assert.Equal(t, test.o, strings.RemoveSlashes(test.i))
+		t.Logf("test case: %s", test.description)
+		assert.Equal(t, test.output, strings.RemoveSlashes(test.input))
 	}
 }

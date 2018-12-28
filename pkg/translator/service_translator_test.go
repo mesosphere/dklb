@@ -20,14 +20,16 @@ import (
 
 func TestServiceTranslator_Translate(t *testing.T) {
 	tests := []struct {
+		description    string
 		service        *v1.Service
 		poolName       string
 		mockCustomizer func(manager *edgelbmanagertestutil.MockEdgeLBManager)
 		options        translator.ServiceTranslationOptions
 		expectedError  error
 	}{
-		// Tests that a pool is created whenever it doesn't exist and the pool creation strategy is set of "IfNotPresent".
+		// Tests that a pool is created whenever it doesn't exist and the pool creation strategy is set to "IfNotPresent".
 		{
+			description: "pool is created whenever it doesn't exist and the pool creation strategy is set to \"IfNotPresent\"",
 			service: servicetestutil.DummyServiceResource("foo", "bar", func(service *v1.Service) {
 				service.Spec.Type = v1.ServiceTypeLoadBalancer
 			}),
@@ -44,8 +46,9 @@ func TestServiceTranslator_Translate(t *testing.T) {
 			},
 			expectedError: nil,
 		},
-		// Tests that a pool is NOT created whenever it doesn't exist and the pool creation strategy is set to "Never".
+		// Tests that a pool is not created when it doesn't exist and the pool creation strategy is set to "Never".
 		{
+			description: "pool is not created when it doesn't exist and the pool creation strategy is set to \"Never\"",
 			service: servicetestutil.DummyServiceResource("foo", "bar", func(service *v1.Service) {
 				service.Spec.Type = v1.ServiceTypeLoadBalancer
 			}),
@@ -61,8 +64,9 @@ func TestServiceTranslator_Translate(t *testing.T) {
 			},
 			expectedError: fmt.Errorf("edgelb pool %q targeted by service %q does not exist, but the pool creation strategy is %q", "foo", "foo/bar", constants.EdgeLBPoolCreationStrategyNever),
 		},
-		// Tests that a pool is NOT created whenever it doesn't exist, the target Service resource has a non-empty status field and the pool creation strategy is set of "Once".
+		// Tests that a pool is not created when it doesn't exist, the target Service resource has a non-empty status field and the pool creation strategy is set to "Once".
 		{
+			description: "pool is not created when it doesn't exist, the target Service resource has a non-empty status field and the pool creation strategy is set to \"Once\"",
 			service: servicetestutil.DummyServiceResource("foo", "bar", func(service *v1.Service) {
 				service.Status.LoadBalancer.Ingress = []v1.LoadBalancerIngress{
 					{
@@ -85,6 +89,7 @@ func TestServiceTranslator_Translate(t *testing.T) {
 		},
 		// Tests that a pool is updated whenever it exists but is not in sync with the target Service resource.
 		{
+			description: "pool is updated whenever it exists but is not in sync with the target Service resource",
 			service: servicetestutil.DummyServiceResource("foo", "bar", func(service *v1.Service) {
 				service.Spec.Ports = []v1.ServicePort{
 					{
@@ -114,12 +119,17 @@ func TestServiceTranslator_Translate(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		t.Logf("test case: %s", test.description)
+		// Create and customize a mock EdgeLB manager.
 		m := new(edgelbmanagertestutil.MockEdgeLBManager)
 		test.mockCustomizer(m)
+		// Perform translation of the Service resource.
 		err := translator.NewServiceTranslator(test.service, test.options, m).Translate()
 		if test.expectedError != nil {
+			// Make sure we've got the expected error.
 			assert.Equal(t, test.expectedError, err)
 		} else {
+			// Make sure that we haven't got any errors, and that all expected method calls were performed.
 			assert.NoError(t, err)
 			m.AssertExpectations(t)
 		}

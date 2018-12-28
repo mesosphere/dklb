@@ -13,37 +13,38 @@ import (
 // TestKey tests the "Key" function.
 func TestKey(t *testing.T) {
 	tests := []struct {
-		i interface{}
-		o string
+		description string
+		input       interface{}
+		output      string
 	}{
 		{
-			i: &corev1.Node{
+			description: "non-namespaced resource",
+			input: &corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: "",
 					Name:      "foo",
 				},
 			},
-			o: "foo",
+			output: "foo",
 		},
 		{
-			i: &corev1.Service{
+			description: "namespaced resource",
+			input: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: "foo",
 					Name:      "bar",
 				},
 			},
-			o: "foo/bar",
+			output: "foo/bar",
 		},
 		{
-			i: "foo",
-			o: "(unknown)",
-		},
-		{
-			i: 1,
-			o: "(unknown)",
+			description: "not a resource",
+			input:       "foo",
+			output:      "(unknown)",
 		},
 	}
 	for _, test := range tests {
-		assert.Equal(t, test.o, kubernetes.Key(test.i))
+		t.Logf("test case: %s", test.description)
+		assert.Equal(t, test.output, kubernetes.Key(test.input))
 	}
 }

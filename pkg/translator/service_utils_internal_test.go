@@ -16,12 +16,14 @@ import (
 // TestBackendNameForServicePort tests the "backendNameForServicePort" function.
 func TestBackendNameForServicePort(t *testing.T) {
 	tests := []struct {
+		description string
 		clusterName string
 		service     *v1.Service
 		port        v1.ServicePort
 		backendName string
 	}{
 		{
+			description: "cluster name having slashes",
 			clusterName: "dev/kubernetes01",
 			service:     servicetestutil.DummyServiceResource("foo", "bar"),
 			port: v1.ServicePort{
@@ -30,15 +32,17 @@ func TestBackendNameForServicePort(t *testing.T) {
 			backendName: "devkubernetes01__foo__bar__12345",
 		},
 		{
-			clusterName: "dev/kubernetes01",
+			description: "service name has digits",
+			clusterName: "kubernetes-cluster",
 			service:     servicetestutil.DummyServiceResource("foobar-baz01", "baz02"),
 			port: v1.ServicePort{
 				Port: 80,
 			},
-			backendName: "devkubernetes01__foobar-baz01__baz02__80",
+			backendName: "kubernetes-cluster__foobar-baz01__baz02__80",
 		},
 	}
 	for _, test := range tests {
+		t.Logf("test case: %s", test.description)
 		cluster.KubernetesClusterFrameworkName = test.clusterName
 		assert.Equal(t, test.backendName, backendNameForServicePort(test.service, test.port))
 	}
@@ -47,12 +51,14 @@ func TestBackendNameForServicePort(t *testing.T) {
 // TestFrontendNameForServicePort tests the "frontendNameForServicePort" function.
 func TestFrontendNameForServicePort(t *testing.T) {
 	tests := []struct {
+		description string
 		clusterName string
 		service     *v1.Service
 		port        v1.ServicePort
 		frontend    string
 	}{
 		{
+			description: "cluster name has slashes",
 			clusterName: "dev/kubernetes01",
 			service:     servicetestutil.DummyServiceResource("foo", "bar"),
 			port: v1.ServicePort{
@@ -61,15 +67,17 @@ func TestFrontendNameForServicePort(t *testing.T) {
 			frontend: "devkubernetes01__foo__bar__12345",
 		},
 		{
-			clusterName: "dev/kubernetes01",
+			description: "service name has digits",
+			clusterName: "kubernetes-cluster",
 			service:     servicetestutil.DummyServiceResource("foobar-baz01", "baz02"),
 			port: v1.ServicePort{
 				Port: 80,
 			},
-			frontend: "devkubernetes01__foobar-baz01__baz02__80",
+			frontend: "kubernetes-cluster__foobar-baz01__baz02__80",
 		},
 	}
 	for _, test := range tests {
+		t.Logf("test case: %s", test.description)
 		cluster.KubernetesClusterFrameworkName = test.clusterName
 		assert.Equal(t, test.frontend, frontendNameForServicePort(test.service, test.port))
 	}
@@ -78,12 +86,14 @@ func TestFrontendNameForServicePort(t *testing.T) {
 // TestServiceOwnedEdgeLBObjectMetadata_IsOwnedBy tests the "IsOwnedBy" function.
 func TestServiceOwnedEdgeLBObjectMetadata_IsOwnedBy(t *testing.T) {
 	tests := []struct {
+		description string
 		clusterName string
 		metadata    serviceOwnedEdgeLBObjectMetadata
 		service     *v1.Service
 		result      bool
 	}{
 		{
+			description: "cluster name, and service namespace and name match",
 			clusterName: "dev/kubernetes01",
 			metadata: serviceOwnedEdgeLBObjectMetadata{
 				ClusterName: "devkubernetes01",
@@ -95,6 +105,7 @@ func TestServiceOwnedEdgeLBObjectMetadata_IsOwnedBy(t *testing.T) {
 			result:  true,
 		},
 		{
+			description: "service name mismatch",
 			clusterName: "dev/kubernetes01",
 			metadata: serviceOwnedEdgeLBObjectMetadata{
 				ClusterName: "devkubernetes01",
@@ -106,6 +117,7 @@ func TestServiceOwnedEdgeLBObjectMetadata_IsOwnedBy(t *testing.T) {
 			result:  false,
 		},
 		{
+			description: "service namespace mismatch",
 			clusterName: "dev/kubernetes01",
 			metadata: serviceOwnedEdgeLBObjectMetadata{
 				ClusterName: "devkubernetes01",
@@ -117,6 +129,7 @@ func TestServiceOwnedEdgeLBObjectMetadata_IsOwnedBy(t *testing.T) {
 			result:  false,
 		},
 		{
+			description: "cluster name mismatch",
 			clusterName: "not-the-cluster-name",
 			metadata: serviceOwnedEdgeLBObjectMetadata{
 				ClusterName: "devkubernetes01",
@@ -129,6 +142,7 @@ func TestServiceOwnedEdgeLBObjectMetadata_IsOwnedBy(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		t.Logf("test case: %s", test.description)
 		cluster.KubernetesClusterFrameworkName = test.clusterName
 		assert.Equal(t, test.result, test.metadata.IsOwnedBy(test.service))
 	}
@@ -137,22 +151,26 @@ func TestServiceOwnedEdgeLBObjectMetadata_IsOwnedBy(t *testing.T) {
 // TestComputeServiceOwnedEdgeLBObjectMetadata tests the "computeServiceOwnedEdgeLBObjectMetadata" function.
 func TestComputeServiceOwnedEdgeLBObjectMetadata(t *testing.T) {
 	tests := []struct {
-		name     string
-		metadata *serviceOwnedEdgeLBObjectMetadata
-		err      error
+		description string
+		name        string
+		metadata    *serviceOwnedEdgeLBObjectMetadata
+		err         error
 	}{
 		{
-			name:     "foo__backend",
-			metadata: nil,
-			err:      errors.New("invalid backend/frontend name for service"),
+			description: "name doesn't have all required components",
+			name:        "foo__backend",
+			metadata:    nil,
+			err:         errors.New("invalid backend/frontend name for service"),
 		},
 		{
-			name:     "devkubernetes01__foo__bar__XYZ",
-			metadata: nil,
-			err:      errors.New("invalid backend/frontend name for service"),
+			description: "name has invalid fourth component",
+			name:        "devkubernetes01__foo__bar__XYZ",
+			metadata:    nil,
+			err:         errors.New("invalid backend/frontend name for service"),
 		},
 		{
-			name: "devkubernetes01__foo__bar__80",
+			description: "name is valid",
+			name:        "devkubernetes01__foo__bar__80",
 			metadata: &serviceOwnedEdgeLBObjectMetadata{
 				ClusterName: "devkubernetes01",
 				Namespace:   "foo",
@@ -162,6 +180,7 @@ func TestComputeServiceOwnedEdgeLBObjectMetadata(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
+		t.Logf("test case: %s", test.description)
 		r, err := computeServiceOwnedEdgeLBObjectMetadata(test.name)
 		if err != nil {
 			assert.Equal(t, test.err, err)
