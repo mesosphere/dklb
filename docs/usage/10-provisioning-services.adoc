@@ -1,0 +1,202 @@
+:sectnums:
+:numbered:
+:toc: macro
+:toc-title:
+:toclevels: 3
+:numbered!:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+= Provisioning TCP services with `dklb`
+:icons: font
+
+[discrete]
+== Table of Contents
+toc::[]
+
+== Foreword
+
+`dklb` supports exposing TCP services _only_.
+In particular, exposing UDP or SCTP services is **NOT** supported.
+
+== Instructions
+
+=== Using `dklb` to provision a Kubernetes service
+
+To expose a TCP application running on MKE to both inside and outside the DC/OS cluster, a Kubernetes `Service` resource of type https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer[`LoadBalancer`] **MUST** be created.
+Furthermore, and in order for `dklb` to provision said service using EdgeLB, the service *MUST* be https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/[annotated] with the following annotation:
+
+[source,text]
+----
+kubernetes.dcos.io/edgelb-pool-name: "<edgelb-pool-name>"
+----
+
+This annotation lets `dklb` know about the EdgeLB pool it should use to provision the service (the _target_ EdgeLB pool).
+Depending on whether the _target_ EdgeLB pool exists or not, `dklb` will then create or update it in order to expose the service.
+
+IMPORTANT: One **MUST NOT** remove or change the value of this annotation at any time after the `Service` resource is created.
+
+=== Intra-DC/OS vs external exposure
+
+By default, `dklb` exposes services to _outside_ the DC/OS cluster, by scheduling the target EdgeLB pool onto a https://docs.mesosphere.com/1.12/overview/architecture/node-types/#public-agent-nodes[public DC/OS agent].
+However, and in order to accommodate all possible needs, `dklb` supports explicitly specifying a http://mesos.apache.org/documentation/latest/roles/[_Mesos role_] for the target EdgeLB pool:
+
+[source,text]
+----
+kubernetes.dcos.io/edgelb-pool-role: "<edgelb-pool-role>"
+----
+
+To expose a service to _inside_ DC/OS only, `*` (_wildcard_) should be used as the value of this annotation.
+Providing said value will cause `dklb` to schedule the target EdgeLB pool to any https://docs.mesosphere.com/1.12/overview/architecture/node-types/#private-agent-nodes[private DC/OS agent] having enough resources.
+
+[WARNING]
+====
+Currently, the value of this annotation is observed only when first _creating_ the target EdgeLB pool.
+In other words, updating the value of this annotation will produce no effect on the target EdgeLB pool.
+====
+
+=== Customizing the exposed ports
+
+`dklb` provisions the target EdgeLB pool by looking at the service's ports and creating an EdgeLB https://docs.mesosphere.com/services/edge-lb/1.2/pool-configuration/v2-reference/[backend] and and EdgeLB https://docs.mesosphere.com/services/edge-lb/1.2/pool-configuration/v2-reference/[frontend] per port.
+By default, `dklb` uses the port number that is defined on the `Service` resource as the frontend's bind port.
+In some situations, however, one may wish to use a different port number as the frontend's bind port.footnote:[This may happen, for example, in scenarios where there are "port clashes" between services in the same or different MKE clusters].
+In order to accommodate more advanced use cases, `dklb` supports reading custom _port mappings_ from annotations of the following form:
+
+[source,text]
+----
+kubernetes.dcos.io/edgelb-pool-portmap.<service-port>: "<frontend-bind-port>"
+----
+
+One **MUST** provide at most a single annotation per service port.
+When such an annotation is provided, `dklb` will use `<frontend-bind-port>` instead of `<service-port>` as the actual frontend bind port.
+
+[WARNING]
+====
+Changing the value of this annotation after the `Service` resource is created is supported, but will most likely cause disruption while the target EdgeLB pool is re-deployed.
+One should port mappings ahead whenever possible in order to prevent changes from being required in the first place.
+====
+
+== Example
+
+=== Exposing a Redis instance
+
+This example walks one through exposing a Redis instance to outside the DC/OS cluster.
+To start with, one should start by creating a `redis` pod:
+
+[source,console]
+----
+$ cat <<EOF | kubectl create -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: redis
+  name: redis
+spec:
+  containers:
+  - name: redis
+    image: redis:5.0.3
+    ports:
+    - name: redis
+      containerPort: 6379
+      protocol: TCP
+EOF
+pod/redis created
+----
+[source,console]
+----
+$ kubectl get pod --selector "app=redis"
+NAME    READY   STATUS    RESTARTS   AGE
+redis   1/1     Running   0          100s
+----
+
+Then, one should proceed to creating a `Service` resource of type `LoadBalancer` targeting the specified pod:
+
+[source,console]
+----
+$ cat <<EOF | kubectl create -f -
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    kubernetes.dcos.io/edgelb-pool-name: "dklb-redis"
+    kubernetes.dcos.io/edgelb-pool-portmap.6379: "16379"
+  labels:
+    app: redis
+  name: redis
+spec:
+  type: LoadBalancer
+  selector:
+    app: redis
+  ports:
+  - protocol: TCP
+    port: 6379
+    targetPort: 6379
+EOF
+service/redis created
+----
+[source,console]
+----
+$ kubectl get svc --selector "app=redis"
+NAME    TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)          AGE
+redis   LoadBalancer   10.100.80.96   <pending>     6379:32213/TCP   2m42s
+----
+
+At this point, querying the EdgeLB API should reveal the existence of a pool called `dklb-redis` exposing port `16379`:
+
+[source,console]
+----
+$ dcos edgelb list
+  NAME        APIVERSION  COUNT  ROLE          PORTS
+  dklb-redis  V2          1      slave_public  9090, 16379
+----
+
+This means that `dklb` has successfully _created_ the target EdgeLB pool based on the spec of the `redis` service.
+
+=== Connecting to the Redis instance
+
+As of this writing, `dklb` is still unable to report the IP(s)/name(s) at which the service is exposed.
+Hence, at this point and in order to test connectivity, one must manually check at which (public) DC/OS agent the target EdgeLB pool was scheduled to.
+Assuming this IP is `<public-dcos-agent-ip>`, one can check that the Redis instance is correctly exposed to outside the DC/OS cluster using, for example, `telnet`:
+
+[source,console]
+----
+$ telnet <public-dcos-agent-ip> 16379
+Trying <public-dcos-agent-ip>...
+Connected to <public-dcos-agent-ip>.
+Escape character is '^]'.
+----
+
+WARNING: Depending on one's firewall configuration, it may be necessary to manually allow traffic to port `16379` in order to allow connectivity.
+
+This means that the Redis instance is indeed reachable at `<public-dcos-agent-ip>:16379` (i.e., from _outside_ the DC/OS cluster).
+At this point, one may try running some additional commands in order to verify that everything is working as expected:
+
+[source,console]
+----
+$ telnet <public-dcos-agent-ip> 16379
+(...)
+SET foo bar
++OK
+GET foo
+$3
+bar
+QUIT
++OK
+Connection closed by foreign host.
+----
+
+=== Cleaning up
+
+After one is done testing, one may cleanup the Kubernetes service and the target EdgeLB pool by running the following commands:
+
+[source,console]
+----
+$ kubectl delete svc redis
+$ kubectl delete pod redis
+----
