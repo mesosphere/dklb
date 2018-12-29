@@ -17,8 +17,8 @@ const (
 	DefaultMetricsAddr = "0.0.0.0:10250"
 	// DefaultResyncPeriod is the (default) maximum amount of time that may elapse between two consecutive synchronizations of Ingress/Service resources and the status of EdgeLB pools.
 	DefaultResyncPeriod = 2 * time.Minute
-	// KubeNodeTaskPattern is the pattern used to match Mesos tasks that correspond to Kubernetes nodes (either control-plane, private or public).
-	KubeNodeTaskPattern = "^kube-(control-plane|node)-.*$"
+	// KubeNodeTaskPattern is the pattern used to match Mesos tasks that correspond to Kubernetes nodes (either private or public).
+	KubeNodeTaskPattern = "^kube-node-.*$"
 	// KubeSystemNamespaceName holds the name of the "kube-system" namespace.
 	KubeSystemNamespaceName = "kube-system"
 )
