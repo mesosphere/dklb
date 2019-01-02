@@ -7,5 +7,6 @@ COPY build/dklb /dklb
 ENV CLUSTER_NAME ""
 ENV POD_NAME ""
 ENV POD_NAMESPACE ""
+EXPOSE 10250
 
 CMD ["/dklb", "-h"]

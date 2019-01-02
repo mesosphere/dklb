@@ -23,6 +23,8 @@ spec:
     - --kubernetes-cluster-framework-name
     # NOTE: Populated from the "kube-system/mke-cluster-info" configmap.
     - "$(CLUSTER_NAME)"
+    ports:
+    - containerPort: 10250
     envFrom:
     - configMapRef:
         name: mke-cluster-info

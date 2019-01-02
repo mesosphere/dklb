@@ -1,15 +1,19 @@
 package metrics
 
 import (
-	"sync"
+	"net/http"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/mesosphere/dklb/pkg/constants"
 )
 
 const (
+	// bindAddr is the address (host and port) at which to expose the "/metrics" handler.
+	bindAddr = "0.0.0.0:10250"
 	// controllerNameLabel is the name of the label used to hold the name of a controller.
 	controllerNameLabel = "controller_name"
 	// lastSyncTimestampKey is the name of the metric used to hold the timestamp at which a controller last synced a resource.
@@ -43,18 +47,18 @@ var (
 	}, []string{controllerNameLabel, resourceKeyLabel})
 )
 
-var (
-	// register is used to guarantee that metrics registering happens only once.
-	register sync.Once
-)
-
-// RegisterMetrics initializes the metrics registry by registering metrics.
-func RegisterMetrics() {
-	register.Do(func() {
-		prometheus.MustRegister(lastSyncTimestamp)
-		prometheus.MustRegister(syncDuration)
-		prometheus.MustRegister(totalSyncs)
-	})
+func init() {
+	// Register metrics.
+	prometheus.MustRegister(lastSyncTimestamp)
+	prometheus.MustRegister(syncDuration)
+	prometheus.MustRegister(totalSyncs)
+	// Start the HTTP server that will expose application-level metrics.
+	go func() {
+		http.Handle("/metrics", promhttp.Handler())
+		if err := http.ListenAndServe(bindAddr, nil); err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+	}()
 }
 
 // RecordSyncDuration records the time taken by a single iteration of the specified controller.

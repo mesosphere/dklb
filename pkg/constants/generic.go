@@ -13,8 +13,6 @@ const (
 	DefaultEdgeLBPath = "/"
 	// DefaultEdgeLBScheme is the default scheme to use when communicating with the EdgeLB API server.
 	DefaultEdgeLBScheme = "http"
-	// DefaultMetricsAddr is the default address (host:port) at which to expose application-level metrics in Prometheus format.
-	DefaultMetricsAddr = "0.0.0.0:10250"
 	// DefaultResyncPeriod is the (default) maximum amount of time that may elapse between two consecutive synchronizations of Ingress/Service resources and the status of EdgeLB pools.
 	DefaultResyncPeriod = 2 * time.Minute
 	// KubeNodeTaskPattern is the pattern used to match Mesos tasks that correspond to Kubernetes nodes (either private or public).

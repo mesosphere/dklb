@@ -3,14 +3,10 @@ package main
 import (
 	"context"
 	"flag"
-	"net/http"
 	"os"
 	"sync"
 	"time"
 
-	"github.com/mesosphere/dklb/pkg/metrics"
-
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -22,6 +18,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/controllers"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
+	_ "github.com/mesosphere/dklb/pkg/metrics"
 	"github.com/mesosphere/dklb/pkg/signals"
 	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
 	"github.com/mesosphere/dklb/pkg/version"
@@ -34,8 +31,6 @@ var (
 	edgelbOptions manager.EdgeLBManagerOptions
 	// kubeconfig is the path to the kubeconfig file to use when running outside a Kubernetes cluster.
 	kubeconfig string
-	// metricsAddr is the address (host:port) at which to expose application-level metrics in Prometheus format.
-	metricsAddr string
 	// podNamespace is the name of the namespace in which the current instance of the application is deployed (used to perform leader election).
 	podNamespace string
 	// podName is the identity of the current instance of the application (used to perform leader election).
@@ -53,7 +48,6 @@ func init() {
 	flag.StringVar(&edgelbOptions.Scheme, "edgelb-scheme", constants.DefaultEdgeLBScheme, "the scheme to use when communicating with the edgelb api server")
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "the path to the kubeconfig file to use when running outside a kubernetes cluster")
 	flag.StringVar(&cluster.KubernetesClusterFrameworkName, "kubernetes-cluster-framework-name", "", "the name of the mesos framework that corresponds to the current kubernetes cluster")
-	flag.StringVar(&metricsAddr, "metrics-addr", constants.DefaultMetricsAddr, "the address (host:port) at which to expose application-level metrics in prometheus format.")
 	flag.StringVar(&podNamespace, "pod-namespace", "", "the name of the namespace in which the current instance of the application is deployed (used to perform leader election)")
 	flag.StringVar(&podName, "pod-name", "", "the identity of the current instance of the application (used to perform leader election)")
 	flag.DurationVar(&resyncPeriod, "resync-period", constants.DefaultResyncPeriod, "the maximum amount of time that may elapse between two consecutive synchronizations of ingress/service resources and the status of edgelb pools")
@@ -86,16 +80,6 @@ func main() {
 	stopCh := signals.SetupSignalHandler()
 	// Birth cry.
 	log.WithField("version", version.Version).Infof("%s is starting", constants.ComponentName)
-
-	// Start the HTTP server that will expose application-level metrics.
-	go func() {
-		http.Handle("/metrics", promhttp.Handler())
-		if err := http.ListenAndServe(metricsAddr, nil); err != http.ErrServerClosed {
-			log.Fatal(err)
-		}
-	}()
-	// Initialize the metrics registry.
-	metrics.RegisterMetrics()
 
 	// Create a new instance of the EdgeLB Manager.
 	edgelbManager, err := manager.NewEdgeLBManager(edgelbOptions)
