@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 
+	"github.com/mesosphere/dklb/pkg/cache"
 	"github.com/mesosphere/dklb/pkg/cluster"
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/controllers"
@@ -155,10 +156,12 @@ func main() {
 func run(ctx context.Context, kubeClient kubernetes.Interface, edgelbManager manager.EdgeLBManager) {
 	// Create a shared informer factory for the base API types.
 	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, resyncPeriod)
+	// Create a cache for Kubernetes resources based on the shared informer factory.
+	kubeCache := cache.NewKubernetesResourceCache(kubeInformerFactory)
 	// Create an instance of the ingress controller that uses an ingress informer for watching Ingress resources.
-	ingressController := controllers.NewIngressController(kubeClient, kubeInformerFactory.Extensions().V1beta1().Ingresses(), edgelbManager)
+	ingressController := controllers.NewIngressController(kubeClient, kubeInformerFactory.Extensions().V1beta1().Ingresses(), kubeCache, edgelbManager)
 	// Create an instance of the service controller that uses a service informer for watching Service resources.
-	serviceController := controllers.NewServiceController(kubeClient, kubeInformerFactory.Core().V1().Services(), edgelbManager)
+	serviceController := controllers.NewServiceController(kubeClient, kubeInformerFactory.Core().V1().Services(), kubeCache, edgelbManager)
 	// Start the shared informer factory.
 	go kubeInformerFactory.Start(ctx.Done())
 

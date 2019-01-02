@@ -11,9 +11,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/runtime"
 	extsv1beta1informers "k8s.io/client-go/informers/extensions/v1beta1"
 	"k8s.io/client-go/kubernetes"
-	extsv1beta1listers "k8s.io/client-go/listers/extensions/v1beta1"
 	"k8s.io/client-go/tools/cache"
 
+	dklbcache "github.com/mesosphere/dklb/pkg/cache"
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	"github.com/mesosphere/dklb/pkg/metrics"
@@ -35,24 +35,25 @@ type IngressController struct {
 	*genericController
 	// kubeClient is a client to the Kubernetes core APIs.
 	kubeClient kubernetes.Interface
-	// ingressLister knows how to list Ingress resources from a shared informer's store.
-	ingressLister extsv1beta1listers.IngressLister
+	// dklbCache is the instance of the Kubernetes resource cache to use.
+	kubeCache dklbcache.KubernetesResourceCache
 	// edgelbManager is the instance of the EdgeLB manager to use for materializing EdgeLB pools for Ingress resources.
 	edgelbManager manager.EdgeLBManager
 }
 
 // NewIngressController creates a new instance of the EdgeLB ingress controller.
-func NewIngressController(kubeClient kubernetes.Interface, ingressInformer extsv1beta1informers.IngressInformer, edgelbManager manager.EdgeLBManager) *IngressController {
+func NewIngressController(kubeClient kubernetes.Interface, ingressInformer extsv1beta1informers.IngressInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *IngressController {
 	// Create a new instance of the ingress controller with the specified name and threadiness.
 	c := &IngressController{
 		genericController: newGenericController(ingressControllerName, ingressControllerThreadiness),
 		kubeClient:        kubeClient,
-		ingressLister:     ingressInformer.Lister(),
+		kubeCache:         kubeCache,
 		edgelbManager:     edgelbManager,
 	}
-	// Make the controller wait for caches to sync.
+	// Make the controller wait for the caches to sync.
 	c.hasSyncedFuncs = []cache.InformerSynced{
 		ingressInformer.Informer().HasSynced,
+		kubeCache.HasSynced,
 	}
 	// Make processQueueItem the handler for items popped out of the work queue.
 	c.syncHandler = c.processQueueItem
@@ -108,7 +109,7 @@ func (c *IngressController) processQueueItem(workItem WorkItem) error {
 	}
 
 	// Get the Ingress resource with the specified namespace and name.
-	ingress, err := c.ingressLister.Ingresses(namespace).Get(name)
+	ingress, err := c.kubeCache.GetIngress(namespace, name)
 	if err != nil {
 		// The Ingress resource may no longer exist, in which case we must stop processing.
 		// TODO (@bcustodio) This might (or might not) be a good place to perform cleanup of any associated EdgeLB pools.

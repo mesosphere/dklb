@@ -11,9 +11,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/runtime"
 	corev1informers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
-	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 
+	dklbcache "github.com/mesosphere/dklb/pkg/cache"
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	"github.com/mesosphere/dklb/pkg/metrics"
@@ -35,24 +35,25 @@ type ServiceController struct {
 	*genericController
 	// kubeClient is a client to the Kubernetes core APIs.
 	kubeClient kubernetes.Interface
-	// serviceLister knows how to list Service resources from a shared informer's store.
-	serviceLister corev1listers.ServiceLister
+	// dklbCache is the instance of the Kubernetes resource cache to use.
+	kubeCache dklbcache.KubernetesResourceCache
 	// edgelbManager is the instance of the EdgeLB manager to use for materializing EdgeLB pools for Service resources.
 	edgelbManager manager.EdgeLBManager
 }
 
 // NewServiceController creates a new instance of the EdgeLB service controller.
-func NewServiceController(kubeClient kubernetes.Interface, serviceInformer corev1informers.ServiceInformer, edgelbManager manager.EdgeLBManager) *ServiceController {
+func NewServiceController(kubeClient kubernetes.Interface, serviceInformer corev1informers.ServiceInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *ServiceController {
 	// Create a new instance of the service controller with the specified name and threadiness.
 	c := &ServiceController{
 		genericController: newGenericController(serviceControllerName, serviceControllerThreadiness),
 		kubeClient:        kubeClient,
-		serviceLister:     serviceInformer.Lister(),
+		kubeCache:         kubeCache,
 		edgelbManager:     edgelbManager,
 	}
-	// Make the controller wait for caches to sync.
+	// Make the controller wait for the caches to sync.
 	c.hasSyncedFuncs = []cache.InformerSynced{
 		serviceInformer.Informer().HasSynced,
+		kubeCache.HasSynced,
 	}
 	// Make processQueueItem the handler for items popped out of the work queue.
 	c.syncHandler = c.processQueueItem
@@ -107,7 +108,7 @@ func (c *ServiceController) processQueueItem(workItem WorkItem) error {
 	}
 
 	// Get the Service resource with the specified namespace and name.
-	service, err := c.serviceLister.Services(namespace).Get(name)
+	service, err := c.kubeCache.GetService(namespace, name)
 	if err == nil {
 		// Create a deep copy of the Service resource in order to avoid possibly mutating the cache.
 		service = service.DeepCopy()
