@@ -78,10 +78,10 @@ func parseBaseTranslationOptions(annotations map[string]string) (*BaseTranslatio
 	} else {
 		r, err := strconv.Atoi(v)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse %q as the pool size: %v", v, err)
+			return nil, fmt.Errorf("failed to parse %q as the size to request for the edgelb pool: %v", v, err)
 		}
 		if r <= 0 {
-			return nil, fmt.Errorf("%d is not a valid pool size", r)
+			return nil, fmt.Errorf("%d is not a valid size", r)
 		}
 		res.EdgeLBPoolSize = r
 	}

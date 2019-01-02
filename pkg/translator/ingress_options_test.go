@@ -108,6 +108,28 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 			},
 			error: nil,
 		},
+		// Test computing options for an Ingress resource with a custom but invalid port mapping.
+		// Make sure an error is returned.
+		{
+			description: "compute options for an Ingress resource with a custom but invalid port mapping",
+			annotations: map[string]string{
+				constants.EdgeLBPoolNameAnnotationKey: "foo",
+				constants.EdgeLBPoolPortKey:           "74511",
+			},
+			options: nil,
+			error:   fmt.Errorf("%d is not a valid port number", 74511),
+		},
+		// Test computing options for an Ingress resource having an invalid port mapping.
+		// Make sure an error is returned.
+		{
+			description: "compute options for a Service resource having an invalid port mapping",
+			annotations: map[string]string{
+				constants.EdgeLBPoolNameAnnotationKey: "foo",
+				constants.EdgeLBPoolPortKey:           "foo",
+			},
+			options: nil,
+			error:   fmt.Errorf("failed to parse %q as the frontend bind port to use: %v", "foo", "strconv.Atoi: parsing \"foo\": invalid syntax"),
+		},
 	}
 	// Run each of the tests defined above.
 	for _, test := range tests {

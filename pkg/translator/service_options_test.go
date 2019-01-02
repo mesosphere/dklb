@@ -88,7 +88,7 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 			},
 			error: nil,
 		},
-		// Test computing options for a Service resource with a custom but invalid port mappings.
+		// Test computing options for a Service resource with a custom but invalid port mapping.
 		// Make sure an error is returned.
 		{
 			description: "compute options for a Service resource with a custom but invalid port mapping",
@@ -122,6 +122,112 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 			},
 			options: nil,
 			error:   fmt.Errorf("protocol %q is not supported", corev1.ProtocolUDP),
+		},
+		// Test computing options for a Service resource having duplicate port mappings.
+		// Make sure an error is returned.
+		{
+			description: "compute options for a Service resource having duplicate port mappings",
+			annotations: map[string]string{
+				constants.EdgeLBPoolNameAnnotationKey:                           "foo",
+				fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, 8080): "18080",
+				fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, 8081): "18080",
+			},
+			ports: []corev1.ServicePort{
+				{
+					Name: "http-1",
+					Port: 8080,
+				},
+				{
+					Name: "http-2",
+					Port: 8081,
+				},
+			},
+			options: nil,
+			error:   fmt.Errorf("port %d is mapped to both %q and %q service ports", 18080, "http-1", "http-2"),
+		},
+		// Test computing options for a Service resource having an invalid port mapping.
+		// Make sure an error is returned.
+		{
+			description: "compute options for a Service resource having an invalid port mapping",
+			annotations: map[string]string{
+				constants.EdgeLBPoolNameAnnotationKey:                           "foo",
+				fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, 8080): "18080",
+				fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, 8081): "foo",
+			},
+			ports: []corev1.ServicePort{
+				{
+					Port: 8080,
+				},
+				{
+					Port: 8081,
+				},
+			},
+			options: nil,
+			error:   fmt.Errorf("failed to parse %q as a frontend bind port: %v", "foo", "strconv.Atoi: parsing \"foo\": invalid syntax"),
+		},
+		// Test computing options for a Service resource having an invalid CPU request.
+		// Make sure an error is returned.
+		{
+			description: "compute options for a Service resource having an invalid CPU request",
+			annotations: map[string]string{
+				constants.EdgeLBPoolNameAnnotationKey: "foo",
+				constants.EdgeLBPoolCpusAnnotationKey: "foo",
+			},
+			ports: []corev1.ServicePort{
+				{
+					Port: 80,
+				},
+			},
+			options: nil,
+			error:   fmt.Errorf("failed to parse %q as the amount of cpus to request: %s", "foo", "quantities must match the regular expression '^([+-]?[0-9.]+)([eEinumkKMGTP]*[-+]?[0-9]*)$'"),
+		},
+		// Test computing options for a Service resource having an invalid memory request.
+		// Make sure an error is returned.
+		{
+			description: "compute options for a Service resource having an invalid memory request",
+			annotations: map[string]string{
+				constants.EdgeLBPoolNameAnnotationKey: "foo",
+				constants.EdgeLBPoolMemAnnotationKey:  "foo",
+			},
+			ports: []corev1.ServicePort{
+				{
+					Port: 80,
+				},
+			},
+			options: nil,
+			error:   fmt.Errorf("failed to parse %q as the amount of memory to request: %s", "foo", "quantities must match the regular expression '^([+-]?[0-9.]+)([eEinumkKMGTP]*[-+]?[0-9]*)$'"),
+		},
+		// Test computing options for a Service resource having an invalid (malformed) size request.
+		// Make sure an error is returned.
+		{
+			description: "compute options for a Service resource having an invalid (malformed) size request",
+			annotations: map[string]string{
+				constants.EdgeLBPoolNameAnnotationKey: "foo",
+				constants.EdgeLBPoolSizeAnnotationKey: "foo",
+			},
+			ports: []corev1.ServicePort{
+				{
+					Port: 80,
+				},
+			},
+			options: nil,
+			error:   fmt.Errorf("failed to parse %q as the size to request for the edgelb pool: %s", "foo", "strconv.Atoi: parsing \"foo\": invalid syntax"),
+		},
+		// Test computing options for a Service resource having an invalid (negative) size request.
+		// Make sure an error is returned.
+		{
+			description: "compute options for a Service resource having an invalid (negative) size request",
+			annotations: map[string]string{
+				constants.EdgeLBPoolNameAnnotationKey: "foo",
+				constants.EdgeLBPoolSizeAnnotationKey: "-1",
+			},
+			ports: []corev1.ServicePort{
+				{
+					Port: 80,
+				},
+			},
+			options: nil,
+			error:   fmt.Errorf("%d is not a valid size", -1),
 		},
 	}
 	// Run each of the tests defined above.
