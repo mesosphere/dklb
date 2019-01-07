@@ -22,7 +22,7 @@ const (
 	// serviceFrontendNameFormatString is the format string used to compute the name for a frontend for a given Service resource.
 	serviceFrontendNameFormatString = serviceBackendNameFormatString
 	// separator is the separator used between the different parts that comprise the name of a backend/frontend.
-	separator = "__"
+	separator = ":"
 )
 
 // servicePortBackendFrontend groups together the backend and frontend that correspond to a given service port.
@@ -33,12 +33,12 @@ type servicePortBackendFrontend struct {
 
 // backendNameForServicePort computes the name of the backend used for the specified service port.
 func backendNameForServicePort(service *corev1.Service, port corev1.ServicePort) string {
-	return fmt.Sprintf(serviceBackendNameFormatString, stringsutil.RemoveSlashes(cluster.KubernetesClusterFrameworkName), service.Namespace, service.Name, port.Port)
+	return fmt.Sprintf(serviceBackendNameFormatString, stringsutil.ReplaceSlashes(cluster.KubernetesClusterFrameworkName), service.Namespace, service.Name, port.Port)
 }
 
 // frontendNameForServicePort computes the name of the frontend used for the specified service port.
 func frontendNameForServicePort(service *corev1.Service, port corev1.ServicePort) string {
-	return fmt.Sprintf(serviceFrontendNameFormatString, stringsutil.RemoveSlashes(cluster.KubernetesClusterFrameworkName), service.Namespace, service.Name, port.Port)
+	return fmt.Sprintf(serviceFrontendNameFormatString, stringsutil.ReplaceSlashes(cluster.KubernetesClusterFrameworkName), service.Namespace, service.Name, port.Port)
 }
 
 // serviceOwnedEdgeLBObjectMetadata groups together information about about the Service resource that owns a given EdgeLB backend/frontend.
@@ -55,7 +55,7 @@ type serviceOwnedEdgeLBObjectMetadata struct {
 
 // IsOwnedBy indicates whether the current object is owned by the specified Service resource.
 func (sp *serviceOwnedEdgeLBObjectMetadata) IsOwnedBy(service *corev1.Service) bool {
-	return sp.ClusterName == stringsutil.RemoveSlashes(cluster.KubernetesClusterFrameworkName) && sp.Namespace == service.Namespace && sp.Name == service.Name
+	return sp.ClusterName == cluster.KubernetesClusterFrameworkName && sp.Namespace == service.Namespace && sp.Name == service.Name
 }
 
 // computeBackendForServicePort computes the backend that correspond to the specified service port.
@@ -138,7 +138,7 @@ func computeServiceOwnedEdgeLBObjectMetadata(name string) (*serviceOwnedEdgeLBOb
 		return nil, errors.New("invalid backend/frontend name for service")
 	}
 	return &serviceOwnedEdgeLBObjectMetadata{
-		ClusterName: parts[0],
+		ClusterName: stringsutil.ReplaceDots(parts[0]),
 		Namespace:   parts[1],
 		Name:        parts[2],
 		ServicePort: int32(p),

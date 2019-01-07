@@ -4,8 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/mesosphere/dklb/pkg/util/strings"
-
 	"github.com/stretchr/testify/assert"
 	"k8s.io/api/core/v1"
 
@@ -29,7 +27,7 @@ func TestBackendNameForServicePort(t *testing.T) {
 			port: v1.ServicePort{
 				Port: 12345,
 			},
-			backendName: "devkubernetes01__foo__bar__12345",
+			backendName: "dev.kubernetes01:foo:bar:12345",
 		},
 		{
 			description: "service name has digits",
@@ -38,7 +36,7 @@ func TestBackendNameForServicePort(t *testing.T) {
 			port: v1.ServicePort{
 				Port: 80,
 			},
-			backendName: "kubernetes-cluster__foobar-baz01__baz02__80",
+			backendName: "kubernetes-cluster:foobar-baz01:baz02:80",
 		},
 	}
 	for _, test := range tests {
@@ -64,7 +62,7 @@ func TestFrontendNameForServicePort(t *testing.T) {
 			port: v1.ServicePort{
 				Port: 12345,
 			},
-			frontend: "devkubernetes01__foo__bar__12345",
+			frontend: "dev.kubernetes01:foo:bar:12345",
 		},
 		{
 			description: "service name has digits",
@@ -73,7 +71,7 @@ func TestFrontendNameForServicePort(t *testing.T) {
 			port: v1.ServicePort{
 				Port: 80,
 			},
-			frontend: "kubernetes-cluster__foobar-baz01__baz02__80",
+			frontend: "kubernetes-cluster:foobar-baz01:baz02:80",
 		},
 	}
 	for _, test := range tests {
@@ -96,7 +94,7 @@ func TestServiceOwnedEdgeLBObjectMetadata_IsOwnedBy(t *testing.T) {
 			description: "cluster name, and service namespace and name match",
 			clusterName: "dev/kubernetes01",
 			metadata: serviceOwnedEdgeLBObjectMetadata{
-				ClusterName: "devkubernetes01",
+				ClusterName: "dev/kubernetes01",
 				Namespace:   "foo",
 				Name:        "bar",
 				ServicePort: 12345,
@@ -108,7 +106,7 @@ func TestServiceOwnedEdgeLBObjectMetadata_IsOwnedBy(t *testing.T) {
 			description: "service name mismatch",
 			clusterName: "dev/kubernetes01",
 			metadata: serviceOwnedEdgeLBObjectMetadata{
-				ClusterName: "devkubernetes01",
+				ClusterName: "dev/kubernetes01",
 				Namespace:   "foo",
 				Name:        "bar",
 				ServicePort: 12345,
@@ -120,7 +118,7 @@ func TestServiceOwnedEdgeLBObjectMetadata_IsOwnedBy(t *testing.T) {
 			description: "service namespace mismatch",
 			clusterName: "dev/kubernetes01",
 			metadata: serviceOwnedEdgeLBObjectMetadata{
-				ClusterName: "devkubernetes01",
+				ClusterName: "dev/kubernetes01",
 				Namespace:   "foo",
 				Name:        "bar",
 				ServicePort: 12345,
@@ -132,7 +130,7 @@ func TestServiceOwnedEdgeLBObjectMetadata_IsOwnedBy(t *testing.T) {
 			description: "cluster name mismatch",
 			clusterName: "not-the-cluster-name",
 			metadata: serviceOwnedEdgeLBObjectMetadata{
-				ClusterName: "devkubernetes01",
+				ClusterName: "dev/kubernetes01",
 				Namespace:   "foo",
 				Name:        "bar",
 				ServicePort: 12345,
@@ -158,21 +156,21 @@ func TestComputeServiceOwnedEdgeLBObjectMetadata(t *testing.T) {
 	}{
 		{
 			description: "name doesn't have all required components",
-			name:        "foo__backend",
+			name:        "foo:backend",
 			metadata:    nil,
 			err:         errors.New("invalid backend/frontend name for service"),
 		},
 		{
 			description: "name has invalid fourth component",
-			name:        "devkubernetes01__foo__bar__XYZ",
+			name:        "dev.kubernetes01:foo:bar:XYZ",
 			metadata:    nil,
 			err:         errors.New("invalid backend/frontend name for service"),
 		},
 		{
 			description: "name is valid",
-			name:        "devkubernetes01__foo__bar__80",
+			name:        "dev.kubernetes01:foo:bar:80",
 			metadata: &serviceOwnedEdgeLBObjectMetadata{
-				ClusterName: "devkubernetes01",
+				ClusterName: "dev/kubernetes01",
 				Namespace:   "foo",
 				Name:        "bar",
 				ServicePort: int32(80),
@@ -200,7 +198,7 @@ func TestComputeServiceOwnedEdgeLBObjectMetadataRoundTrip(t *testing.T) {
 		}
 		metadata, err := computeServiceOwnedEdgeLBObjectMetadata(fn(service, port))
 		assert.NoError(t, err)
-		assert.Equal(t, strings.RemoveSlashes(cluster.KubernetesClusterFrameworkName), metadata.ClusterName)
+		assert.Equal(t, cluster.KubernetesClusterFrameworkName, metadata.ClusterName)
 		assert.Equal(t, service.Namespace, metadata.Namespace)
 		assert.Equal(t, service.Name, metadata.Name)
 		assert.Equal(t, port.Port, metadata.ServicePort)
