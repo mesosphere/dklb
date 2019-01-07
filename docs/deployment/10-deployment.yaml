@@ -22,7 +22,6 @@ spec:
         imagePullPolicy: Always
         args:
         - /dklb
-        - --debug
         - --pod-namespace
         # NOTE: Populated from the "downward API".
         - "$(POD_NAMESPACE)"
@@ -32,6 +31,8 @@ spec:
         - --kubernetes-cluster-framework-name
         # NOTE: Populated from the "kube-system/mke-cluster-info" configmap.
         - "$(CLUSTER_NAME)"
+        - --log-level
+        - debug
         ports:
         - containerPort: 10250
         envFrom:

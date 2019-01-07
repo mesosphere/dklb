@@ -26,12 +26,12 @@ import (
 )
 
 var (
-	// debug indicates whether to enable debug logging.
-	debug bool
 	// edgelbOptions is the set of options used to configure the EdgeLB Manager.
 	edgelbOptions manager.EdgeLBManagerOptions
 	// kubeconfig is the path to the kubeconfig file to use when running outside a Kubernetes cluster.
 	kubeconfig string
+	// logLevel is the log level to use.
+	logLevel string
 	// podNamespace is the name of the namespace in which the current instance of the application is deployed (used to perform leader election).
 	podNamespace string
 	// podName is the identity of the current instance of the application (used to perform leader election).
@@ -41,7 +41,6 @@ var (
 )
 
 func init() {
-	flag.BoolVar(&debug, "debug", false, "whether to enable debug logging")
 	flag.StringVar(&edgelbOptions.BearerToken, "edgelb-bearer-token", "", "the (optional) bearer token to use when communicating with the edgelb api server")
 	flag.StringVar(&edgelbOptions.Host, "edgelb-host", constants.DefaultEdgeLBHost, "the host at which the edgelb api server can be reached")
 	flag.BoolVar(&edgelbOptions.InsecureSkipTLSVerify, "edgelb-insecure-skip-tls-verify", false, "whether to skip verification of the tls certificate presented by the edgelb api server")
@@ -49,6 +48,7 @@ func init() {
 	flag.StringVar(&edgelbOptions.Scheme, "edgelb-scheme", constants.DefaultEdgeLBScheme, "the scheme to use when communicating with the edgelb api server")
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "the path to the kubeconfig file to use when running outside a kubernetes cluster")
 	flag.StringVar(&cluster.KubernetesClusterFrameworkName, "kubernetes-cluster-framework-name", "", "the name of the mesos framework that corresponds to the current kubernetes cluster")
+	flag.StringVar(&logLevel, "log-level", log.InfoLevel.String(), "the log level to use")
 	flag.StringVar(&podNamespace, "pod-namespace", "", "the name of the namespace in which the current instance of the application is deployed (used to perform leader election)")
 	flag.StringVar(&podName, "pod-name", "", "the identity of the current instance of the application (used to perform leader election)")
 	flag.DurationVar(&resyncPeriod, "resync-period", constants.DefaultResyncPeriod, "the maximum amount of time that may elapse between two consecutive synchronizations of ingress/service resources and the status of edgelb pools")
@@ -58,10 +58,12 @@ func main() {
 	// Parse the provided command-line flags.
 	flag.Parse()
 
-	// Enable debug logging if requested.
-	if debug {
-		log.SetLevel(log.DebugLevel)
+	// Enable logging at the requested level.
+	l, err := log.ParseLevel(logLevel)
+	if err != nil {
+		log.Fatalf("%q is not a valid log level", logLevel)
 	}
+	log.SetLevel(l)
 
 	// Make sure that all necessary flags have been set and have adequate values.
 	if podNamespace == "" {
