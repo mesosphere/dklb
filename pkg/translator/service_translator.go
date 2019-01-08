@@ -18,6 +18,8 @@ import (
 
 // ServiceTranslator is the base implementation of ServiceTranslator.
 type ServiceTranslator struct {
+	// clusterName is the name of the Mesos framework that corresponds to the current Kubernetes cluster.
+	clusterName string
 	// service is the Service resource to be translated.
 	service *corev1.Service
 	// options is the set of options used to perform translation.
@@ -29,12 +31,13 @@ type ServiceTranslator struct {
 }
 
 // NewServiceTranslator returns a service translator that can be used to translate the specified Service resource into an EdgeLB pool.
-func NewServiceTranslator(service *corev1.Service, options ServiceTranslationOptions, manager manager.EdgeLBManager) *ServiceTranslator {
+func NewServiceTranslator(clusterName string, service *corev1.Service, options ServiceTranslationOptions, manager manager.EdgeLBManager) *ServiceTranslator {
 	return &ServiceTranslator{
-		service: service,
-		options: options,
-		manager: manager,
-		logger:  log.WithField("service", kubernetesutil.Key(service)),
+		clusterName: clusterName,
+		service:     service,
+		options:     options,
+		manager:     manager,
+		logger:      log.WithField("service", kubernetesutil.Key(service)),
 	}
 }
 
@@ -138,7 +141,7 @@ func (st *ServiceTranslator) createEdgeLBPoolObject() *models.V2Pool {
 	// Iterate over port definitions and create the corresponding backend and frontend objects.
 	for _, port := range st.service.Spec.Ports {
 		// Compute the backend and frontend for the current service port.
-		backend, frontend := computeBackendForServicePort(st.service, port), computeFrontendForServicePort(st.service, port, st.options)
+		backend, frontend := computeBackendForServicePort(st.clusterName, st.service, port), computeFrontendForServicePort(st.clusterName, st.service, port, st.options)
 		// Append the backend to the slice of backends.
 		backends = append(backends, backend)
 		// Append the frontend to the slice of frontends.
@@ -180,8 +183,8 @@ func (st *ServiceTranslator) updateEdgeLBPoolObject(pool *models.V2Pool) (wasCha
 	if !serviceDeleted {
 		for _, port := range st.service.Spec.Ports {
 			desiredBackendFrontends[port.Port] = servicePortBackendFrontend{
-				Backend:  computeBackendForServicePort(st.service, port),
-				Frontend: computeFrontendForServicePort(st.service, port, st.options),
+				Backend:  computeBackendForServicePort(st.clusterName, st.service, port),
+				Frontend: computeFrontendForServicePort(st.clusterName, st.service, port, st.options),
 			}
 		}
 	}
@@ -200,7 +203,7 @@ func (st *ServiceTranslator) updateEdgeLBPoolObject(pool *models.V2Pool) (wasCha
 		// Parse the name of the backend in order to determine if the current service owns it.
 		// If the current backend isn't owned by the current service, it is left unchanged.
 		backendMetadata, err := computeServiceOwnedEdgeLBObjectMetadata(backend.Name)
-		if err != nil || !backendMetadata.IsOwnedBy(st.service) {
+		if err != nil || !backendMetadata.IsOwnedBy(st.clusterName, st.service) {
 			updatedBackends = append(updatedBackends, backend)
 			report.Report("no changes required for backend %q (not owned by %s)", backend.Name, kubernetesutil.Key(st.service))
 			continue
@@ -247,7 +250,7 @@ func (st *ServiceTranslator) updateEdgeLBPoolObject(pool *models.V2Pool) (wasCha
 		// Parse the name of the frontend in order to determine if the current service owns it.
 		// If the current frontend isn't owned by the current service, it is left unchanged.
 		frontendMetadata, err := computeServiceOwnedEdgeLBObjectMetadata(frontend.Name)
-		if err != nil || !frontendMetadata.IsOwnedBy(st.service) {
+		if err != nil || !frontendMetadata.IsOwnedBy(st.clusterName, st.service) {
 			updatedFrontends = append(updatedFrontends, frontend)
 			report.Report("no changes required for frontend %q (not owned by %s)", frontend.Name, kubernetesutil.Key(st.service))
 			continue

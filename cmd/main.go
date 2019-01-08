@@ -15,7 +15,6 @@ import (
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 
 	"github.com/mesosphere/dklb/pkg/cache"
-	"github.com/mesosphere/dklb/pkg/cluster"
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/controllers"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
@@ -26,6 +25,8 @@ import (
 )
 
 var (
+	// clusterName is the name of the Mesos framework that corresponds to the current Kubernetes cluster.
+	clusterName string
 	// edgelbOptions is the set of options used to configure the EdgeLB Manager.
 	edgelbOptions manager.EdgeLBManagerOptions
 	// kubeconfig is the path to the kubeconfig file to use when running outside a Kubernetes cluster.
@@ -47,7 +48,7 @@ func init() {
 	flag.StringVar(&edgelbOptions.Path, "edgelb-path", constants.DefaultEdgeLBPath, "the path at which the edgelb api server can be reached")
 	flag.StringVar(&edgelbOptions.Scheme, "edgelb-scheme", constants.DefaultEdgeLBScheme, "the scheme to use when communicating with the edgelb api server")
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "the path to the kubeconfig file to use when running outside a kubernetes cluster")
-	flag.StringVar(&cluster.KubernetesClusterFrameworkName, "kubernetes-cluster-framework-name", "", "the name of the mesos framework that corresponds to the current kubernetes cluster")
+	flag.StringVar(&clusterName, "kubernetes-cluster-framework-name", "", "the name of the mesos framework that corresponds to the current kubernetes cluster")
 	flag.StringVar(&logLevel, "log-level", log.InfoLevel.String(), "the log level to use")
 	flag.StringVar(&podNamespace, "pod-namespace", "", "the name of the namespace in which the current instance of the application is deployed (used to perform leader election)")
 	flag.StringVar(&podName, "pod-name", "", "the identity of the current instance of the application (used to perform leader election)")
@@ -75,7 +76,7 @@ func main() {
 	if podName == "" {
 		log.Fatalf("--pod-name must be set")
 	}
-	if cluster.KubernetesClusterFrameworkName == "" {
+	if clusterName == "" {
 		log.Fatalf("--kubernetes-cluster-framework-name must be set")
 	}
 
@@ -161,9 +162,9 @@ func run(ctx context.Context, kubeClient kubernetes.Interface, edgelbManager man
 	// Create a cache for Kubernetes resources based on the shared informer factory.
 	kubeCache := cache.NewKubernetesResourceCache(kubeInformerFactory)
 	// Create an instance of the ingress controller that uses an ingress informer for watching Ingress resources.
-	ingressController := controllers.NewIngressController(kubeClient, kubeInformerFactory.Extensions().V1beta1().Ingresses(), kubeCache, edgelbManager)
+	ingressController := controllers.NewIngressController(clusterName, kubeClient, kubeInformerFactory.Extensions().V1beta1().Ingresses(), kubeCache, edgelbManager)
 	// Create an instance of the service controller that uses a service informer for watching Service resources.
-	serviceController := controllers.NewServiceController(kubeClient, kubeInformerFactory.Core().V1().Services(), kubeCache, edgelbManager)
+	serviceController := controllers.NewServiceController(clusterName, kubeClient, kubeInformerFactory.Core().V1().Services(), kubeCache, edgelbManager)
 	// Start the shared informer factory.
 	go kubeInformerFactory.Start(ctx.Done())
 

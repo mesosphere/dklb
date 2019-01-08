@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"k8s.io/api/core/v1"
 
-	"github.com/mesosphere/dklb/pkg/cluster"
 	servicetestutil "github.com/mesosphere/dklb/test/util/kubernetes/service"
 )
 
@@ -41,8 +40,7 @@ func TestBackendNameForServicePort(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Logf("test case: %s", test.description)
-		cluster.KubernetesClusterFrameworkName = test.clusterName
-		assert.Equal(t, test.backendName, backendNameForServicePort(test.service, test.port))
+		assert.Equal(t, test.backendName, backendNameForServicePort(test.clusterName, test.service, test.port))
 	}
 }
 
@@ -76,8 +74,7 @@ func TestFrontendNameForServicePort(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Logf("test case: %s", test.description)
-		cluster.KubernetesClusterFrameworkName = test.clusterName
-		assert.Equal(t, test.frontend, frontendNameForServicePort(test.service, test.port))
+		assert.Equal(t, test.frontend, frontendNameForServicePort(test.clusterName, test.service, test.port))
 	}
 }
 
@@ -141,8 +138,7 @@ func TestServiceOwnedEdgeLBObjectMetadata_IsOwnedBy(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Logf("test case: %s", test.description)
-		cluster.KubernetesClusterFrameworkName = test.clusterName
-		assert.Equal(t, test.result, test.metadata.IsOwnedBy(test.service))
+		assert.Equal(t, test.result, test.metadata.IsOwnedBy(test.clusterName, test.service))
 	}
 }
 
@@ -190,15 +186,14 @@ func TestComputeServiceOwnedEdgeLBObjectMetadata(t *testing.T) {
 
 // TestComputeServiceOwnedEdgeLBObjectMetadataRoundTrip tests that the computed names for backends/frontends can be adequately "traced back" to the original Service resource by computeServiceOwnedEdgeLBObjectMetadata.
 func TestComputeServiceOwnedEdgeLBObjectMetadataRoundTrip(t *testing.T) {
-	for _, fn := range []func(service *v1.Service, port v1.ServicePort) string{backendNameForServicePort, frontendNameForServicePort} {
-		cluster.KubernetesClusterFrameworkName = "dev/kubernetes01"
+	for _, fn := range []func(clusterName string, service *v1.Service, port v1.ServicePort) string{backendNameForServicePort, frontendNameForServicePort} {
 		service := servicetestutil.DummyServiceResource("foo", "bar")
 		port := v1.ServicePort{
 			Port: 12345,
 		}
-		metadata, err := computeServiceOwnedEdgeLBObjectMetadata(fn(service, port))
+		metadata, err := computeServiceOwnedEdgeLBObjectMetadata(fn(testClusterName, service, port))
 		assert.NoError(t, err)
-		assert.Equal(t, cluster.KubernetesClusterFrameworkName, metadata.ClusterName)
+		assert.Equal(t, testClusterName, metadata.ClusterName)
 		assert.Equal(t, service.Namespace, metadata.Namespace)
 		assert.Equal(t, service.Name, metadata.Name)
 		assert.Equal(t, port.Port, metadata.ServicePort)

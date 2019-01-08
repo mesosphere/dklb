@@ -18,6 +18,11 @@ import (
 	servicetestutil "github.com/mesosphere/dklb/test/util/kubernetes/service"
 )
 
+const (
+	// testClusterName is the value used as the name of the Kubernetes cluster in the current file.
+	testClusterName = "dev/kubernetes01"
+)
+
 func TestServiceTranslator_Translate(t *testing.T) {
 	tests := []struct {
 		description    string
@@ -124,7 +129,7 @@ func TestServiceTranslator_Translate(t *testing.T) {
 		m := new(edgelbmanagertestutil.MockEdgeLBManager)
 		test.mockCustomizer(m)
 		// Perform translation of the Service resource.
-		err := translator.NewServiceTranslator(test.service, test.options, m).Translate()
+		err := translator.NewServiceTranslator(testClusterName, test.service, test.options, m).Translate()
 		if test.expectedError != nil {
 			// Make sure we've got the expected error.
 			assert.Equal(t, test.expectedError, err)

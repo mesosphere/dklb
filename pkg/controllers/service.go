@@ -42,10 +42,10 @@ type ServiceController struct {
 }
 
 // NewServiceController creates a new instance of the EdgeLB service controller.
-func NewServiceController(kubeClient kubernetes.Interface, serviceInformer corev1informers.ServiceInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *ServiceController {
+func NewServiceController(clusterName string, kubeClient kubernetes.Interface, serviceInformer corev1informers.ServiceInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *ServiceController {
 	// Create a new instance of the service controller with the specified name and threadiness.
 	c := &ServiceController{
-		genericController: newGenericController(serviceControllerName, serviceControllerThreadiness),
+		genericController: newGenericController(clusterName, serviceControllerName, serviceControllerThreadiness),
 		kubeClient:        kubeClient,
 		kubeCache:         kubeCache,
 		edgelbManager:     edgelbManager,
@@ -145,7 +145,7 @@ func (c *ServiceController) processQueueItem(workItem WorkItem) error {
 	prettyprint.Logf(log.Debugf, options, "computed service translation options for %q", workItem.Key)
 
 	// Perform translation of the Service resource into an EdgeLB pool.
-	if err := translator.NewServiceTranslator(service, *options, c.edgelbManager).Translate(); err != nil {
+	if err := translator.NewServiceTranslator(c.clusterName, service, *options, c.edgelbManager).Translate(); err != nil {
 		er.Eventf(service, corev1.EventTypeWarning, constants.ReasonTranslationError, "failed to translate service: %v", err)
 		c.logger.Errorf("failed to translate service %q: %v", workItem.Key, err)
 		return err

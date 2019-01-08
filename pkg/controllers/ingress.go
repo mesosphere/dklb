@@ -42,10 +42,10 @@ type IngressController struct {
 }
 
 // NewIngressController creates a new instance of the EdgeLB ingress controller.
-func NewIngressController(kubeClient kubernetes.Interface, ingressInformer extsv1beta1informers.IngressInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *IngressController {
+func NewIngressController(clusterName string, kubeClient kubernetes.Interface, ingressInformer extsv1beta1informers.IngressInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *IngressController {
 	// Create a new instance of the ingress controller with the specified name and threadiness.
 	c := &IngressController{
-		genericController: newGenericController(ingressControllerName, ingressControllerThreadiness),
+		genericController: newGenericController(clusterName, ingressControllerName, ingressControllerThreadiness),
 		kubeClient:        kubeClient,
 		kubeCache:         kubeCache,
 		edgelbManager:     edgelbManager,

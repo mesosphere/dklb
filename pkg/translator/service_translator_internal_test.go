@@ -16,6 +16,11 @@ import (
 	"github.com/mesosphere/dklb/test/util/kubernetes/service"
 )
 
+const (
+	// testClusterName is the value used as the name of the Kubernetes cluster in the current file.
+	testClusterName = "dev/kubernetes01"
+)
+
 var (
 	// serviceExposingPort80 is a dummy Kubernetes Service resource that exposes port 80.
 	serviceExposingPort80 = service.DummyServiceResource("foo", "bar", func(service *v1.Service) {
@@ -59,9 +64,9 @@ var (
 		},
 	}
 	// backendForServiceExposingPort80 is the computed (expected) backend for port 80 of serviceExposingPort80.
-	backendForServiceExposingPort80 = computeBackendForServicePort(serviceExposingPort80, serviceExposingPort80.Spec.Ports[0])
+	backendForServiceExposingPort80 = computeBackendForServicePort(testClusterName, serviceExposingPort80, serviceExposingPort80.Spec.Ports[0])
 	// frontendForServiceExposingPort80 is the computed (expected) frontend for port 80 of serviceExposingPort80.
-	frontendForServiceExposingPort80 = computeFrontendForServicePort(serviceExposingPort80, serviceExposingPort80.Spec.Ports[0], serviceTranslationOptionsForPort80)
+	frontendForServiceExposingPort80 = computeFrontendForServicePort(testClusterName, serviceExposingPort80, serviceExposingPort80.Spec.Ports[0], serviceTranslationOptionsForPort80)
 	// preExistingBackend1 is used to represent a pre-existing EdgeLB backend.
 	preExistingBackend1 = &models.V2Backend{
 		Name: "pre-existing-backend-1",
@@ -116,7 +121,7 @@ func TestCreateEdgeLBPoolObject(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Logf("test case: %s", test.description)
-		pool := NewServiceTranslator(test.service, test.options, nil).createEdgeLBPoolObject()
+		pool := NewServiceTranslator(testClusterName, test.service, test.options, nil).createEdgeLBPoolObject()
 		assert.Equal(t, test.expectedName, pool.Name)
 		assert.Equal(t, test.expectedRole, pool.Role)
 		assert.Equal(t, test.expectedCpus, pool.Cpus)
@@ -183,7 +188,7 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 			options:     serviceTranslationOptionsForPort80,
 			pool: edgelbpooltestutil.DummyEdgeLBPool("baz", func(p *models.V2Pool) {
 				// Change the target port for the backend.
-				backend := computeBackendForServicePort(serviceExposingPort80, serviceExposingPort80.Spec.Ports[0])
+				backend := computeBackendForServicePort(testClusterName, serviceExposingPort80, serviceExposingPort80.Spec.Ports[0])
 				backend.Services[0].Endpoint.Port = 10101
 				p.Haproxy.Backends = []*models.V2Backend{
 					// Will have to be replaced by "backendForServiceExposingPort80".
@@ -211,7 +216,7 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 					backendForServiceExposingPort80,
 				}
 				// Change the bind port for the frontend.
-				frontend := computeFrontendForServicePort(serviceExposingPort80, serviceExposingPort80.Spec.Ports[0], serviceTranslationOptionsForPort80)
+				frontend := computeFrontendForServicePort(testClusterName, serviceExposingPort80, serviceExposingPort80.Spec.Ports[0], serviceTranslationOptionsForPort80)
 				frontend.BindPort = pointers.NewInt32(10101)
 				p.Haproxy.Frontends = []*models.V2Frontend{
 					// Will have to be replaced by "frontendForServiceExposingPort80".
@@ -269,7 +274,7 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 					preExistingBackend3,
 					backendForServiceExposingPort80,
 					// Add an extra backend owned by "serviceExposingPort80" to simulate removal of a port.
-					computeBackendForServicePort(serviceExposingPort80, v1.ServicePort{
+					computeBackendForServicePort(testClusterName, serviceExposingPort80, v1.ServicePort{
 						NodePort:   34568,
 						Port:       90,
 						Protocol:   v1.ProtocolTCP,
@@ -281,7 +286,7 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 					preExistingFrontend2,
 					frontendForServiceExposingPort80,
 					// Add an extra frontend owned by "serviceExposingPort80" to simulate removal of a port.
-					computeFrontendForServicePort(serviceExposingPort80, v1.ServicePort{
+					computeFrontendForServicePort(testClusterName, serviceExposingPort80, v1.ServicePort{
 						NodePort:   34568,
 						Port:       90,
 						Protocol:   v1.ProtocolTCP,
@@ -306,7 +311,7 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 	for _, test := range tests {
 		t.Logf("test case: %s", test.description)
 		// Update the EdgeLB pool object in-place.
-		mustUpdate, _ := NewServiceTranslator(test.service, test.options, nil).updateEdgeLBPoolObject(test.pool)
+		mustUpdate, _ := NewServiceTranslator(testClusterName, test.service, test.options, nil).updateEdgeLBPoolObject(test.pool)
 		// Check that the need for a pool update was adequately detected.
 		assert.Equal(t, test.expectedWasChanged, mustUpdate)
 		// Check that all expected backends are present.
