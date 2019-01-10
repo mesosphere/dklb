@@ -32,12 +32,12 @@ type servicePortBackendFrontend struct {
 
 // backendNameForServicePort computes the name of the backend used for the specified service port.
 func backendNameForServicePort(clusterName string, service *corev1.Service, port corev1.ServicePort) string {
-	return fmt.Sprintf(serviceBackendNameFormatString, stringsutil.ReplaceSlashes(clusterName), service.Namespace, service.Name, port.Port)
+	return fmt.Sprintf(serviceBackendNameFormatString, stringsutil.ReplaceForwardSlashesWithDots(clusterName), service.Namespace, service.Name, port.Port)
 }
 
 // frontendNameForServicePort computes the name of the frontend used for the specified service port.
 func frontendNameForServicePort(clusterName string, service *corev1.Service, port corev1.ServicePort) string {
-	return fmt.Sprintf(serviceFrontendNameFormatString, stringsutil.ReplaceSlashes(clusterName), service.Namespace, service.Name, port.Port)
+	return fmt.Sprintf(serviceFrontendNameFormatString, stringsutil.ReplaceForwardSlashesWithDots(clusterName), service.Namespace, service.Name, port.Port)
 }
 
 // serviceOwnedEdgeLBObjectMetadata groups together information about about the Service resource that owns a given EdgeLB backend/frontend.
@@ -136,7 +136,7 @@ func computeServiceOwnedEdgeLBObjectMetadata(name string) (*serviceOwnedEdgeLBOb
 		return nil, errors.New("invalid backend/frontend name for service")
 	}
 	return &serviceOwnedEdgeLBObjectMetadata{
-		ClusterName: stringsutil.ReplaceDots(parts[0]),
+		ClusterName: stringsutil.ReplaceDotsWithForwardSlashes(parts[0]),
 		Namespace:   parts[1],
 		Name:        parts[2],
 		ServicePort: int32(p),

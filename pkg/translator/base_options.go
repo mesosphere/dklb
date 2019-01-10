@@ -31,17 +31,16 @@ type BaseTranslationOptions struct {
 
 // parseBaseTranslationOptions attempts to compute base, common translation options from the specified set of annotations.
 // In case options cannot be computed or are invalid, the error message MUST be suitable to be used as the message for a Kubernetes event associated with the resource.
-func parseBaseTranslationOptions(annotations map[string]string) (*BaseTranslationOptions, error) {
+func parseBaseTranslationOptions(clusterName, namespace, name string, annotations map[string]string) (*BaseTranslationOptions, error) {
 	// Create a "BaseTranslationOptions" struct to hold the computed options.
 	res := &BaseTranslationOptions{}
 
-	// Parse the name of the target EdgeLB pool.
-	// This annotation is MANDATORY.
-	v, exists := annotations[constants.EdgeLBPoolNameAnnotationKey]
-	if !exists || v == "" {
-		return nil, fmt.Errorf("required annotation %q has not been provided", constants.EdgeLBPoolNameAnnotationKey)
+	// Parse or compute the name of the target EdgeLB pool.
+	if v, exists := annotations[constants.EdgeLBPoolNameAnnotationKey]; !exists || v == "" {
+		res.EdgeLBPoolName = computeEdgeLBPoolName(clusterName, namespace, name)
+	} else {
+		res.EdgeLBPoolName = v
 	}
-	res.EdgeLBPoolName = v
 
 	// Parse the role of the target EdgeLB pool.
 	if v, exists := annotations[constants.EdgeLBPoolRoleAnnotationKey]; !exists || v == "" {

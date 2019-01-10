@@ -21,18 +21,35 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 		options     *translator.ServiceTranslationOptions
 		error       error
 	}{
-		// Test computing options for a Service resource without the required annotations.
-		// Make sure an error is returned.
+		// Test computing options for a Service resource without any annotations.
+		// Make sure the name of the EdgeLB pool is computed as expected, and that the default values are used everywhere else.
 		{
 			description: "compute options for a Service resource without the required annotations",
 			annotations: map[string]string{},
-			options:     nil,
-			error:       fmt.Errorf("required annotation %q has not been provided", constants.EdgeLBPoolNameAnnotationKey),
+			ports: []corev1.ServicePort{
+				{
+					Port: 80,
+				},
+			},
+			options: &translator.ServiceTranslationOptions{
+				BaseTranslationOptions: translator.BaseTranslationOptions{
+					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
+					EdgeLBPoolRole:             translator.DefaultEdgeLBPoolRole,
+					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
+					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
+					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
+					EdgeLBPoolCreationStrategy: translator.DefaultEdgeLBPoolCreationStrategy,
+				},
+				EdgeLBPoolPortMap: map[int32]int32{
+					80: 80,
+				},
+			},
+			error: fmt.Errorf("required annotation %q has not been provided", constants.EdgeLBPoolNameAnnotationKey),
 		},
-		// Test computing options for a Service resource with just the required annotations.
+		// Test computing options for a Service resource specifying the name of the target EdgeLB pool.
 		// Make sure the name of the EdgeLB pool is captured as expected, and that the default values are used everywhere else.
 		{
-			description: "compute options for a Service resource with just the required annotations",
+			description: "compute options for a Service resource specifying the name of the target EdgeLB pool",
 			annotations: map[string]string{
 				constants.EdgeLBPoolNameAnnotationKey: "foo",
 			},
@@ -57,11 +74,10 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 			error: nil,
 		},
 		// Test computing options for a Service resource with a custom port mapping.
-		// Make sure the name of the EdgeLB pool and the port mapping are captured as expected, and that the default values are used everywhere else.
+		// Make sure the port mapping is captured as expected, and that the default values are used everywhere else.
 		{
 			description: "compute options for a Service resource with a custom port mapping",
 			annotations: map[string]string{
-				constants.EdgeLBPoolNameAnnotationKey:                         "foo",
 				fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, 80): "8080",
 			},
 			ports: []corev1.ServicePort{
@@ -74,7 +90,7 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 			},
 			options: &translator.ServiceTranslationOptions{
 				BaseTranslationOptions: translator.BaseTranslationOptions{
-					EdgeLBPoolName:             "foo",
+					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
 					EdgeLBPoolRole:             translator.DefaultEdgeLBPoolRole,
 					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
 					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
@@ -93,7 +109,6 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 		{
 			description: "compute options for a Service resource with a custom but invalid port mapping",
 			annotations: map[string]string{
-				constants.EdgeLBPoolNameAnnotationKey:                          "foo",
 				fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, 443): "74511",
 			},
 			ports: []corev1.ServicePort{
@@ -111,9 +126,7 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 		// Make sure an error is returned.
 		{
 			description: "compute options for a Service resource using an unsupported protocol",
-			annotations: map[string]string{
-				constants.EdgeLBPoolNameAnnotationKey: "foo",
-			},
+			annotations: map[string]string{},
 			ports: []corev1.ServicePort{
 				{
 					Port:     80,
@@ -128,7 +141,6 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 		{
 			description: "compute options for a Service resource having duplicate port mappings",
 			annotations: map[string]string{
-				constants.EdgeLBPoolNameAnnotationKey:                           "foo",
 				fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, 8080): "18080",
 				fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, 8081): "18080",
 			},
@@ -150,7 +162,6 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 		{
 			description: "compute options for a Service resource having an invalid port mapping",
 			annotations: map[string]string{
-				constants.EdgeLBPoolNameAnnotationKey:                           "foo",
 				fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, 8080): "18080",
 				fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, 8081): "foo",
 			},
@@ -170,7 +181,6 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 		{
 			description: "compute options for a Service resource having an invalid CPU request",
 			annotations: map[string]string{
-				constants.EdgeLBPoolNameAnnotationKey: "foo",
 				constants.EdgeLBPoolCpusAnnotationKey: "foo",
 			},
 			ports: []corev1.ServicePort{
@@ -186,8 +196,7 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 		{
 			description: "compute options for a Service resource having an invalid memory request",
 			annotations: map[string]string{
-				constants.EdgeLBPoolNameAnnotationKey: "foo",
-				constants.EdgeLBPoolMemAnnotationKey:  "foo",
+				constants.EdgeLBPoolMemAnnotationKey: "foo",
 			},
 			ports: []corev1.ServicePort{
 				{
@@ -202,7 +211,6 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 		{
 			description: "compute options for a Service resource having an invalid (malformed) size request",
 			annotations: map[string]string{
-				constants.EdgeLBPoolNameAnnotationKey: "foo",
 				constants.EdgeLBPoolSizeAnnotationKey: "foo",
 			},
 			ports: []corev1.ServicePort{
@@ -218,7 +226,6 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 		{
 			description: "compute options for a Service resource having an invalid (negative) size request",
 			annotations: map[string]string{
-				constants.EdgeLBPoolNameAnnotationKey: "foo",
 				constants.EdgeLBPoolSizeAnnotationKey: "-1",
 			},
 			ports: []corev1.ServicePort{
@@ -236,7 +243,7 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 		// Create a dummy Service resource containing the annotations for the current test.
 		r := servicetestutil.DummyServiceResource("foo", "bar", servicetestutil.WithAnnotations(test.annotations), servicetestutil.WithPorts(test.ports))
 		// Compute the translation options for the resource.
-		o, err := translator.ComputeServiceTranslationOptions(r)
+		o, err := translator.ComputeServiceTranslationOptions(testClusterName, r)
 		if err != nil {
 			// Make sure the error matches the expected one.
 			assert.EqualError(t, err, test.error.Error())

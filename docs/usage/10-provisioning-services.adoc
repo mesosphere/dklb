@@ -29,17 +29,21 @@ In particular, exposing UDP or SCTP services is **NOT** supported.
 === Using `dklb` to provision a Kubernetes service
 
 To expose a TCP application running on MKE to either inside or outside the DC/OS cluster, a Kubernetes https://kubernetes.io/docs/concepts/services-networking/service/[`Service`] resource of type https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer[`LoadBalancer`] must be created.
-Furthermore, and in order for `dklb` to provision said service using EdgeLB, the service must be https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/[annotated] with the following annotation:
+`dklb` will react to this event by provisioning an EdgeLB pool (henceforth referred to as the _target EdgeLB pool_) for the `Service` resource based on its specification.
+
+=== Customizing the name of the EdgeLB pool
+
+By default, `dklb` uses the MKE cluster's name and the `Service` resource's namespace and name to compute the name of the target EdgeLB pool.
+To specify a custom name for said EdgeLB pool, one may https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/[annotate] the `Service` resource with the following annotation:
 
 [source,text]
 ----
 kubernetes.dcos.io/edgelb-pool-name: "<edgelb-pool-name>"
 ----
 
-This annotation lets `dklb` know about the EdgeLB pool it should use to provision the service (henceforth referred to as the _target EdgeLB pool_).
-Depending on whether the target EdgeLB pool exists or not, `dklb` will create or update it in order to expose all ports defined in the `Service` resource.
+Depending on whether the "<edgelb-pool-name>" EdgeLB pool exists or not, `dklb` will create or update it in order to expose all ports defined in the `Service` resource.
 
-IMPORTANT: One must not remove or change the value of this annotation at any time after the `Service` resource is created.
+IMPORTANT: One must not remove or change the value of this annotation at any time after it is added to a given `Service` resource.
 
 === Intra-DC/OS vs external exposure
 

@@ -19,7 +19,7 @@ type ServiceTranslationOptions struct {
 
 // ComputeServiceTranslationOptions computes the set of options to use for "translating" the specified Service resource into an EdgeLB pool.
 // In case options cannot be computed or are invalid, the error message MUST be suitable to be used as the message for a Kubernetes event associated with the resource.
-func ComputeServiceTranslationOptions(obj *corev1.Service) (*ServiceTranslationOptions, error) {
+func ComputeServiceTranslationOptions(clusterName string, obj *corev1.Service) (*ServiceTranslationOptions, error) {
 	// Create an "ServiceTranslationOptions" struct to hold the computed options.
 	res := &ServiceTranslationOptions{
 		EdgeLBPoolPortMap: make(map[int32]int32, len(obj.Spec.Ports)),
@@ -35,7 +35,7 @@ func ComputeServiceTranslationOptions(obj *corev1.Service) (*ServiceTranslationO
 	}
 
 	// Parse base translation options.
-	b, err := parseBaseTranslationOptions(annotations)
+	b, err := parseBaseTranslationOptions(clusterName, obj.Namespace, obj.Name, annotations)
 	if err != nil {
 		return nil, err
 	}

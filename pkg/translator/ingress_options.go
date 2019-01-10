@@ -19,7 +19,7 @@ type IngressTranslationOptions struct {
 
 // ComputeIngressTranslationOptions computes the set of options to use for "translating" the specified Ingress resource into an EdgeLB pool.
 // In case options cannot be computed or are invalid, the error message MUST be suitable to be used as the message for a Kubernetes event associated with the resource.
-func ComputeIngressTranslationOptions(obj *extsv1beta1.Ingress) (*IngressTranslationOptions, error) {
+func ComputeIngressTranslationOptions(clusterName string, obj *extsv1beta1.Ingress) (*IngressTranslationOptions, error) {
 	// Create an "IngressTranslationOptions" struct to hold the computed options.
 	res := &IngressTranslationOptions{}
 	var annotations map[string]string
@@ -33,7 +33,7 @@ func ComputeIngressTranslationOptions(obj *extsv1beta1.Ingress) (*IngressTransla
 	}
 
 	// Parse base translation options.
-	b, err := parseBaseTranslationOptions(annotations)
+	b, err := parseBaseTranslationOptions(clusterName, obj.Namespace, obj.Name, annotations)
 	if err != nil {
 		return nil, err
 	}

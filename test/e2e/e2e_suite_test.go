@@ -4,11 +4,11 @@ package e2e_test
 
 import (
 	"flag"
-	"log"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
@@ -44,6 +44,8 @@ func init() {
 var _ = BeforeSuite(func() {
 	// Create a new instance of the test framework.
 	f = e2eframework.New(edgelbOptions, kubeconfig)
+	// Output some information about the current MKE cluster.
+	log.Infof("running the end-to-end test suite against the %q cluster", f.ClusterName)
 })
 
 var _ = BeforeEach(func() {

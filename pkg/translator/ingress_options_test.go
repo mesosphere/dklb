@@ -20,18 +20,28 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 		options     *translator.IngressTranslationOptions
 		error       error
 	}{
-		// Test computing options for an Ingress resource without the required annotations.
-		// Make sure an error is returned.
+		// Test computing options for an Ingress resource without any annotations.
+		// Make sure the name of the EdgeLB pool is computed as expected, and that the default values are used everywhere else.
 		{
-			description: "compute options for an Ingress resource without the required annotations",
+			description: "compute options for an Ingress resource without any annotations",
 			annotations: map[string]string{},
-			options:     nil,
-			error:       fmt.Errorf("required annotation %q has not been provided", constants.EdgeLBPoolNameAnnotationKey),
+			options: &translator.IngressTranslationOptions{
+				BaseTranslationOptions: translator.BaseTranslationOptions{
+					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
+					EdgeLBPoolRole:             translator.DefaultEdgeLBPoolRole,
+					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
+					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
+					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
+					EdgeLBPoolCreationStrategy: translator.DefaultEdgeLBPoolCreationStrategy,
+				},
+				EdgeLBPoolPort: translator.DefaultEdgeLBPoolPort,
+			},
+			error: nil,
 		},
-		// Test computing options for an Ingress resource with just the required annotations.
+		// Test computing options for an Ingress resource specifying the name of the target EdgeLB pool.
 		// Make sure the name of the EdgeLB pool is captured as expected, and that the default values are used everywhere else.
 		{
-			description: "compute options for an Ingress resource with just the required annotations",
+			description: "compute options for an Ingress resource specifying the name of the target EdgeLB pool",
 			annotations: map[string]string{
 				constants.EdgeLBPoolNameAnnotationKey: "foo",
 			},
@@ -49,16 +59,15 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 			error: nil,
 		},
 		// Test computing options for an Ingress resource defining a custom frontend bind port.
-		// Make sure the name of the EdgeLB pool and the frontend bind port are captured as expected, and that the default values are used everywhere else.
+		// Make sure the frontend bind port is captured as expected, and that the default values are used everywhere else.
 		{
 			description: "compute options for an Ingress resource defining a custom frontend bind port",
 			annotations: map[string]string{
-				constants.EdgeLBPoolNameAnnotationKey: "foo",
-				constants.EdgeLBPoolPortKey:           "14708",
+				constants.EdgeLBPoolPortKey: "14708",
 			},
 			options: &translator.IngressTranslationOptions{
 				BaseTranslationOptions: translator.BaseTranslationOptions{
-					EdgeLBPoolName:             "foo",
+					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
 					EdgeLBPoolRole:             translator.DefaultEdgeLBPoolRole,
 					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
 					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
@@ -74,8 +83,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 		{
 			description: "compute options for an Ingress resource defining an invalid value for the frontend bind port",
 			annotations: map[string]string{
-				constants.EdgeLBPoolNameAnnotationKey: "foo",
-				constants.EdgeLBPoolPortKey:           "74511",
+				constants.EdgeLBPoolPortKey: "74511",
 			},
 			options: nil,
 			error:   fmt.Errorf("%d is not a valid port number", 74511),
@@ -113,8 +121,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 		{
 			description: "compute options for an Ingress resource with a custom but invalid port mapping",
 			annotations: map[string]string{
-				constants.EdgeLBPoolNameAnnotationKey: "foo",
-				constants.EdgeLBPoolPortKey:           "74511",
+				constants.EdgeLBPoolPortKey: "74511",
 			},
 			options: nil,
 			error:   fmt.Errorf("%d is not a valid port number", 74511),
@@ -124,8 +131,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 		{
 			description: "compute options for a Service resource having an invalid port mapping",
 			annotations: map[string]string{
-				constants.EdgeLBPoolNameAnnotationKey: "foo",
-				constants.EdgeLBPoolPortKey:           "foo",
+				constants.EdgeLBPoolPortKey: "foo",
 			},
 			options: nil,
 			error:   fmt.Errorf("failed to parse %q as the frontend bind port to use: %v", "foo", "strconv.Atoi: parsing \"foo\": invalid syntax"),
@@ -137,7 +143,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 		// Create a dummy Ingress resource containing the annotations for the current test.
 		r := ingresstestutil.DummyIngressResource("foo", "bar", ingresstestutil.WithAnnotations(test.annotations))
 		// Compute the translation options for the resource.
-		o, err := translator.ComputeIngressTranslationOptions(r)
+		o, err := translator.ComputeIngressTranslationOptions(testClusterName, r)
 		if err != nil {
 			// Make sure the error matches the expected one.
 			assert.EqualError(t, err, test.error.Error())

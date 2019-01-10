@@ -13,6 +13,7 @@ import (
 	"github.com/mongodb/mongo-go-driver/mongo/readpref"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -21,6 +22,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/util/kubernetes"
 	"github.com/mesosphere/dklb/pkg/util/pointers"
 	"github.com/mesosphere/dklb/pkg/util/retry"
+	"github.com/mesosphere/dklb/pkg/util/strings"
 	"github.com/mesosphere/dklb/test/e2e/framework"
 )
 
@@ -63,8 +65,6 @@ var _ = Describe("Service", func() {
 				// Create a service of type LoadBalancer targeting the pod created above.
 				redisSvc, err = f.CreateServiceOfTypeLoadBalancer(namespace.Name, "redis", func(svc *corev1.Service) {
 					svc.ObjectMeta.Annotations = map[string]string{
-						// Request for the pool to be called "<namespace-name>".
-						constants.EdgeLBPoolNameAnnotationKey: namespace.Name,
 						// Request for the pool to be deployed to an agent with the "slave_public" role.
 						constants.EdgeLBPoolRoleAnnotationKey: constants.EdgeLBRolePublic,
 						// Request for the pool to be given 0.2 CPUs.
@@ -88,17 +88,20 @@ var _ = Describe("Service", func() {
 				})
 				Expect(err).NotTo(HaveOccurred(), "failed to create test service")
 
+				// Compute the (expected) name of the target EdgeLB pool.
+				expectedPoolName := fmt.Sprintf("%s--%s--%s", strings.ReplaceForwardSlashes(f.ClusterName, "--"), redisSvc.Namespace, redisSvc.Name)
+
 				// Wait for EdgeLB to acknowledge the pool's creation.
 				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
 					ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryInterval/2)
 					defer fn()
-					pool, err = f.EdgeLBManager.GetPoolByName(ctx, redisSvc.Annotations[constants.EdgeLBPoolNameAnnotationKey])
+					pool, err = f.EdgeLBManager.GetPoolByName(ctx, expectedPoolName)
 					return err == nil, nil
 				})
 				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
 
-				// Make sure the pool is reporting the requested configuration.
-				Expect(pool.Name).To(Equal(redisSvc.Annotations[constants.EdgeLBPoolNameAnnotationKey]))
+				// Make sure the pool is reporting the requested configuration, as well as a name that contains the Service resource's namespace and name.
+				Expect(pool.Name).To(Equal(expectedPoolName))
 				Expect(pool.Role).To(Equal(redisSvc.Annotations[constants.EdgeLBPoolRoleAnnotationKey]))
 				Expect(pool.Cpus).To(Equal(0.2))
 				Expect(pool.Mem).To(Equal(int32(256)))
@@ -320,8 +323,6 @@ var _ = Describe("Service", func() {
 				// Create a service of type LoadBalancer targeting the pod created above.
 				redisSvc, err = f.CreateServiceOfTypeLoadBalancer(namespace.Name, "redis", func(svc *corev1.Service) {
 					svc.ObjectMeta.Annotations = map[string]string{
-						// Request for the pool to be called "<namespace-name>".
-						constants.EdgeLBPoolNameAnnotationKey: namespace.Name,
 						// Request for the pool to be deployed to an agent with the "slave_public" role.
 						constants.EdgeLBPoolRoleAnnotationKey: constants.EdgeLBRolePublic,
 						// Request for the pool to be given 0.2 CPUs.
@@ -345,11 +346,14 @@ var _ = Describe("Service", func() {
 				})
 				Expect(err).NotTo(HaveOccurred(), "failed to create test service")
 
+				// Compute the (expected) name of the target EdgeLB pool.
+				expectedPoolName := fmt.Sprintf("%s--%s--%s", strings.ReplaceForwardSlashes(f.ClusterName, "--"), redisSvc.Namespace, redisSvc.Name)
+
 				// Wait for EdgeLB to acknowledge the pool's creation.
 				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
 					ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryInterval/2)
 					defer fn()
-					pool, err = f.EdgeLBManager.GetPoolByName(ctx, redisSvc.Annotations[constants.EdgeLBPoolNameAnnotationKey])
+					pool, err = f.EdgeLBManager.GetPoolByName(ctx, expectedPoolName)
 					return err == nil, nil
 				})
 				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")

@@ -126,7 +126,7 @@ func (c *IngressController) processQueueItem(workItem WorkItem) error {
 	er := kubernetesutil.NewEventRecorderForNamespace(c.kubeClient, ingress.Namespace)
 
 	// Compute the set of options that will be used to translate the Ingress resource into an EdgeLB pool.
-	options, err := translator.ComputeIngressTranslationOptions(ingress)
+	options, err := translator.ComputeIngressTranslationOptions(c.clusterName, ingress)
 	if err != nil {
 		// Emit an event and log an error, but do not re-enqueue as the resource's spec was found to be invalid.
 		er.Eventf(ingress, corev1.EventTypeWarning, constants.ReasonInvalidAnnotations, "the resource's annotations are not valid: %v", err)

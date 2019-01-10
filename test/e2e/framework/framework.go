@@ -10,10 +10,22 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	edgelbmanager "github.com/mesosphere/dklb/pkg/edgelb/manager"
+	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
+)
+
+const (
+	// mkeClusterInfoConfigMapNamespace is the namespace where the configmap holding metadata for an MKE cluster lives.
+	mkeClusterInfoConfigMapNamespace = "kube-system"
+	// mkeClusterInfoConfigMapName is the name of the configmap holding metadata for an MKE cluster.
+	mkeClusterInfoConfigMapName = "mke-cluster-info"
+	// mkeClusterInfoConfigMapClusterNameKey is the name of the configmap key containing the MKE cluster's name.
+	mkeClusterInfoConfigMapClusterNameKey = "CLUSTER_NAME"
 )
 
 // Framework groups together utility methods and clients used by test functions.
 type Framework struct {
+	// ClusterName is the name of the Mesos framework that corresponds to the Kubernetes cluster where testing will be performed.
+	ClusterName string
 	// EdgeLBManager is the instance of the EdgeLB manager to use.
 	EdgeLBManager edgelbmanager.EdgeLBManager
 	// KubeClient is a client to the Kubernetes base APIs.
@@ -37,7 +49,21 @@ func New(edgelbOptions edgelbmanager.EdgeLBManagerOptions, kubeconfig string) *F
 	if err != nil {
 		log.Fatalf("failed to build edgelb manager: %v", err)
 	}
+	// Detect the name of the MKE cluster.
+	var (
+		clusterName string
+	)
+	m, err := kubeClient.CoreV1().ConfigMaps(mkeClusterInfoConfigMapNamespace).Get(mkeClusterInfoConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		log.Fatalf("failed to read the \"%s/%s\" configmap: %v", mkeClusterInfoConfigMapNamespace, mkeClusterInfoConfigMapName, err)
+	}
+	if v, exists := m.Data[mkeClusterInfoConfigMapClusterNameKey]; !exists || v == "" {
+		log.Fatalf("the mke cluster's name is not present in the %q configmap", kubernetesutil.Key(m))
+	} else {
+		clusterName = v
+	}
 	return &Framework{
+		ClusterName:   clusterName,
 		EdgeLBManager: manager,
 		KubeClient:    kubeClient,
 	}
