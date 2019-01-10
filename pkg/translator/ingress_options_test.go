@@ -29,6 +29,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 				BaseTranslationOptions: translator.BaseTranslationOptions{
 					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
 					EdgeLBPoolRole:             translator.DefaultEdgeLBPoolRole,
+					EdgeLBPoolNetwork:          "",
 					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
 					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
 					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
@@ -49,6 +50,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 				BaseTranslationOptions: translator.BaseTranslationOptions{
 					EdgeLBPoolName:             "foo",
 					EdgeLBPoolRole:             translator.DefaultEdgeLBPoolRole,
+					EdgeLBPoolNetwork:          "",
 					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
 					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
 					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
@@ -69,6 +71,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 				BaseTranslationOptions: translator.BaseTranslationOptions{
 					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
 					EdgeLBPoolRole:             translator.DefaultEdgeLBPoolRole,
+					EdgeLBPoolNetwork:          "",
 					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
 					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
 					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
@@ -95,6 +98,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 			annotations: map[string]string{
 				constants.EdgeLBPoolNameAnnotationKey:             "foo",
 				constants.EdgeLBPoolRoleAnnotationKey:             "custom_role",
+				constants.EdgeLBPoolNetworkAnnotationKey:          "foo_network",
 				constants.EdgeLBPoolCpusAnnotationKey:             "250m",
 				constants.EdgeLBPoolMemAnnotationKey:              "2Gi",
 				constants.EdgeLBPoolSizeAnnotationKey:             "3",
@@ -106,6 +110,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 				BaseTranslationOptions: translator.BaseTranslationOptions{
 					EdgeLBPoolName:              "foo",
 					EdgeLBPoolRole:              "custom_role",
+					EdgeLBPoolNetwork:           "foo_network",
 					EdgeLBPoolCpus:              resource.MustParse("250m"),
 					EdgeLBPoolMem:               resource.MustParse("2Gi"),
 					EdgeLBPoolSize:              3,

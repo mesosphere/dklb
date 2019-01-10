@@ -162,6 +162,14 @@ func (st *ServiceTranslator) createEdgeLBPoolObject() *models.V2Pool {
 			Frontends: frontends,
 		},
 	}
+	// Request for the pool to join the requested DC/OS virtual network if applicable.
+	if st.options.EdgeLBPoolNetwork != "" {
+		p.VirtualNetworks = []*models.V2PoolVirtualNetworksItems0{
+			{
+				Name: st.options.EdgeLBPoolNetwork,
+			},
+		}
+	}
 	return p
 }
 

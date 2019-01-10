@@ -16,6 +16,8 @@ const (
 	DefaultEdgeLBPoolPort = 80
 	// DefaultEdgeLBPoolRole is the role to use for an EdgeLB pool when a value is not provided.
 	DefaultEdgeLBPoolRole = constants.EdgeLBRolePublic
+	// DefaultEdgeLBPoolNetwork is the name of the DC/OS virtual network to use when creating an EdgeLB pool for which no custom value was specified.
+	DefaultEdgeLBPoolNetwork = constants.DefaultDCOSVirtualNetworkName
 	// DefaultEdgeLBPoolSize is the size to use for an EdgeLB pool when a value is not provided.
 	DefaultEdgeLBPoolSize = 1
 )

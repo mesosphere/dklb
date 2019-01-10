@@ -35,6 +35,7 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 				BaseTranslationOptions: translator.BaseTranslationOptions{
 					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
 					EdgeLBPoolRole:             translator.DefaultEdgeLBPoolRole,
+					EdgeLBPoolNetwork:          "",
 					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
 					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
 					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
@@ -62,6 +63,7 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 				BaseTranslationOptions: translator.BaseTranslationOptions{
 					EdgeLBPoolName:             "foo",
 					EdgeLBPoolRole:             translator.DefaultEdgeLBPoolRole,
+					EdgeLBPoolNetwork:          "",
 					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
 					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
 					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
@@ -92,6 +94,7 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 				BaseTranslationOptions: translator.BaseTranslationOptions{
 					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
 					EdgeLBPoolRole:             translator.DefaultEdgeLBPoolRole,
+					EdgeLBPoolNetwork:          "",
 					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
 					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
 					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
@@ -235,6 +238,107 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 			},
 			options: nil,
 			error:   fmt.Errorf("%d is not a valid size", -1),
+		},
+		// Test computing options for a Service resource requested for public exposure in an empty DC/OS virtual network.
+		// Make sure that no error occurs.
+		{
+			description: "compute options for a Service resource requested for public exposure in a empty DC/OS virtual network",
+			annotations: map[string]string{
+				constants.EdgeLBPoolRoleAnnotationKey:    constants.EdgeLBRolePublic,
+				constants.EdgeLBPoolNetworkAnnotationKey: "",
+			},
+			ports: []corev1.ServicePort{
+				{
+					Port: 80,
+				},
+			},
+			options: &translator.ServiceTranslationOptions{
+				BaseTranslationOptions: translator.BaseTranslationOptions{
+					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
+					EdgeLBPoolRole:             constants.EdgeLBRolePublic,
+					EdgeLBPoolNetwork:          "",
+					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
+					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
+					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
+					EdgeLBPoolCreationStrategy: translator.DefaultEdgeLBPoolCreationStrategy,
+				},
+				EdgeLBPoolPortMap: map[int32]int32{
+					80: 80,
+				},
+			},
+			error: nil,
+		},
+		// Test computing options for a Service resource requested for public exposure in a non-empty DC/OS virtual network.
+		// Make sure an error is returned.
+		{
+			description: "compute options for a Service resource requested for public exposure in a non-empty DC/OS virtual network",
+			annotations: map[string]string{
+				constants.EdgeLBPoolRoleAnnotationKey:    constants.EdgeLBRolePublic,
+				constants.EdgeLBPoolNetworkAnnotationKey: "foo",
+			},
+			ports: []corev1.ServicePort{
+				{
+					Port: 80,
+				},
+			},
+			options: nil,
+			error:   fmt.Errorf("cannot join a dcos virtual network when the pool's role is %q", constants.EdgeLBRolePublic),
+		},
+		// Test computing options for a Service resource requested for "private" exposure in an empty DC/OS virtual network.
+		// Make sure that the name of the DC/OS virtual network is defaulted.
+		{
+			description: "compute options for a Service resource requested for \"private\" exposure in an empty DC/OS virtual network",
+			annotations: map[string]string{
+				constants.EdgeLBPoolRoleAnnotationKey:    "foo",
+				constants.EdgeLBPoolNetworkAnnotationKey: "",
+			},
+			ports: []corev1.ServicePort{
+				{
+					Port: 80,
+				},
+			},
+			options: &translator.ServiceTranslationOptions{
+				BaseTranslationOptions: translator.BaseTranslationOptions{
+					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
+					EdgeLBPoolRole:             "foo",
+					EdgeLBPoolNetwork:          constants.DefaultDCOSVirtualNetworkName,
+					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
+					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
+					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
+					EdgeLBPoolCreationStrategy: translator.DefaultEdgeLBPoolCreationStrategy,
+				},
+				EdgeLBPoolPortMap: map[int32]int32{
+					80: 80,
+				},
+			},
+		},
+		// Test computing options for a Service resource requested for "private" exposure in a non-empty DC/OS virtual network.
+		// Make sure that the name of the DC/OS virtual network is captured adequately.
+		{
+			description: "compute options for a Service resource requested for \"private\" exposure in a non-empty DC/OS virtual network",
+			annotations: map[string]string{
+				constants.EdgeLBPoolRoleAnnotationKey:    "foo",
+				constants.EdgeLBPoolNetworkAnnotationKey: "bar",
+			},
+			ports: []corev1.ServicePort{
+				{
+					Port: 80,
+				},
+			},
+			options: &translator.ServiceTranslationOptions{
+				BaseTranslationOptions: translator.BaseTranslationOptions{
+					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
+					EdgeLBPoolRole:             "foo",
+					EdgeLBPoolNetwork:          "bar",
+					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
+					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
+					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
+					EdgeLBPoolCreationStrategy: translator.DefaultEdgeLBPoolCreationStrategy,
+				},
+				EdgeLBPoolPortMap: map[int32]int32{
+					80: 80,
+				},
+			},
 		},
 	}
 	// Run each of the tests defined above.

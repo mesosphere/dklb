@@ -33,6 +33,8 @@ const (
 	EdgeLBPoolMemAnnotationKey = annotationKeyPrefix + "edgelb-pool-mem"
 	// EdgeLBPoolNameAnnotationKey is the key of the annotation that holds the name of the EdgeLB pool to use for provisioning a given Ingress/Service resource.
 	EdgeLBPoolNameAnnotationKey = annotationKeyPrefix + "edgelb-pool-name"
+	// EdgeLBPoolNetworkAnnotationKey is the key of the annotation that holds the name of the DC/OS virtual network to use when creating the target EdgeLB pool.
+	EdgeLBPoolNetworkAnnotationKey = annotationKeyPrefix + "edgelb-pool-network"
 	// EdgeLBPoolRoleAnnotationKey is the key of the annotation that holds the role of the target EdgeLB pool.
 	EdgeLBPoolRoleAnnotationKey = annotationKeyPrefix + "edgelb-pool-role"
 	// EdgeLBPoolSizeAnnotationKey is the key of the annotation that holds the size to request for the target EdgeLB pool.

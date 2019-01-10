@@ -15,6 +15,8 @@ type BaseTranslationOptions struct {
 	EdgeLBPoolName string
 	// EdgeLBPoolRole is the role to use for the target EdgeLB pool.
 	EdgeLBPoolRole string
+	// EdgeLBPoolNetwork is the name of the DC/OS virtual network to use when creating the target EdgeLB pool.
+	EdgeLBPoolNetwork string
 
 	// EdgeLBPoolCpus is the amount of CPU to request for the target EdgeLB pool.
 	EdgeLBPoolCpus resource.Quantity
@@ -48,6 +50,18 @@ func parseBaseTranslationOptions(clusterName, namespace, name string, annotation
 	} else {
 		res.EdgeLBPoolRole = v
 	}
+
+	// Grab the name of the DC/OS virtual network to use when creating the target EdgeLB pool.
+	networkName := annotations[constants.EdgeLBPoolNetworkAnnotationKey]
+	// If the target EdgeLB pool's role is "slave_public" and a non-empty name for the DC/OS virtual network has been specified, we should fail and warn the user.
+	if res.EdgeLBPoolRole == constants.EdgeLBRolePublic && networkName != "" {
+		return nil, fmt.Errorf("cannot join a dcos virtual network when the pool's role is %q", res.EdgeLBPoolRole)
+	}
+	// If the target EdgeLB pool's role is NOT "slave_public" and no custom name for the DC/OS virtual network has been specified, we should use the default name.
+	if res.EdgeLBPoolRole != constants.EdgeLBRolePublic && networkName == "" {
+		networkName = DefaultEdgeLBPoolNetwork
+	}
+	res.EdgeLBPoolNetwork = networkName
 
 	// Parse the CPU request for the target EdgeLB pool.
 	if v, exists := annotations[constants.EdgeLBPoolCpusAnnotationKey]; !exists || v == "" {
