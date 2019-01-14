@@ -12,7 +12,7 @@ ifdef::env-github[]
 :warning-caption: :warning:
 endif::[]
 
-= Provisioning Kubernetes ingresses with `dklb`
+= Provisioning Kubernetes Ingress(es)
 :icons: font
 
 [discrete]
@@ -72,11 +72,13 @@ The value of this annotation is observed only when the target EdgeLB pool is cre
 In other words, changing the value of this annotation after the target EdgeLB pool has been created and provisioned will produce no effect.
 ====
 
-=== Customizing the frontend bind port
+=== Customizing EdgeLB pool frontend bind port
 
 `dklb` provisions the target EdgeLB pool by looking at the ingress's rules and creating an EdgeLB https://docs.mesosphere.com/services/edge-lb/1.2/pool-configuration/v2-reference/[backend] per referrenced `Service` resource, and a single EdgeLB https://docs.mesosphere.com/services/edge-lb/1.2/pool-configuration/v2-reference/[frontend].
 By default, `dklb` uses port `80` as the frontend's bind port.
-In some situations, however, using a different port number as the frontend's bind port may be required.
+In particular, this means that HTTPS is not supported at the moment (see <<limitations>>).
+
+In some situations, using a different port number as the frontend's bind port may be required.
 In order to accommodate more advanced use cases, `dklb` supports defining a custom port via the following annotation:
 
 [source,text]
@@ -139,6 +141,11 @@ In other words, changing the value of this annotation after the target EdgeLB po
 
 In certain scenarios, it may be desirable to use a pre-existing EdgeLB pool to expose a Kubernetes ingress (instead of having `dklb` creating one).
 This can easily be achieved by providing the name of the pre-existing EdgeLB pool as the value of the `kubernetes.dcos.io/edgelb-pool-name` annotation.
+
+[[limitations]]
+== Limitations
+
+* HTTPS is not supported at the moment.
 
 == Example
 
