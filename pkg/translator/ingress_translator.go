@@ -211,8 +211,8 @@ func (it *IngressTranslator) createEdgeLBPoolObject(backendMap IngressBackendNod
 	})
 	// Create the (single) EdgeLB frontend object.
 	frontend := computeEdgeLBFrontendForIngress(it.clusterName, it.ingress, it.options)
-	// Create and return the EdgeLB pool object.
-	return &models.V2Pool{
+	// Create the base EdgeLB pool object.
+	p := &models.V2Pool{
 		Name:      it.options.EdgeLBPoolName,
 		Namespace: &DefaultEdgeLBPoolNamespace,
 		Role:      it.options.EdgeLBPoolRole,
@@ -224,6 +224,15 @@ func (it *IngressTranslator) createEdgeLBPoolObject(backendMap IngressBackendNod
 			Frontends: []*models.V2Frontend{frontend},
 		},
 	}
+	// Request for the EdgeLB pool to join the requested DC/OS virtual network if applicable.
+	if it.options.EdgeLBPoolNetwork != "" {
+		p.VirtualNetworks = []*models.V2PoolVirtualNetworksItems0{
+			{
+				Name: it.options.EdgeLBPoolNetwork,
+			},
+		}
+	}
+	return p
 }
 
 // updateEdgeLBPoolObject updates the specified EdgeLB pool object in order to reflect the status of the current Ingress resource.
