@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sort"
 
 	"github.com/mesosphere/dcos-edge-lb/models"
 	log "github.com/sirupsen/logrus"
@@ -15,6 +16,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	dklberrors "github.com/mesosphere/dklb/pkg/errors"
 	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
+	"github.com/mesosphere/dklb/pkg/util/pointers"
 	"github.com/mesosphere/dklb/pkg/util/prettyprint"
 )
 
@@ -203,17 +205,20 @@ func (it *IngressTranslator) createEdgeLBPoolObject(backendMap IngressBackendNod
 	for backend, nodePort := range backendMap {
 		backends = append(backends, computeEdgeLBBackendForIngressBackend(it.clusterName, it.ingress, backend, nodePort))
 	}
+	// Sort backends alphabetically in order to get a predictable output, as ranging over a map can produce different results every time.
+	sort.SliceStable(backends, func(i, j int) bool {
+		return backends[i].Name < backends[j].Name
+	})
 	// Create the (single) EdgeLB frontend object.
 	frontend := computeEdgeLBFrontendForIngress(it.clusterName, it.ingress, it.options)
 	// Create and return the EdgeLB pool object.
-	s := int32(it.options.EdgeLBPoolSize)
 	return &models.V2Pool{
 		Name:      it.options.EdgeLBPoolName,
 		Namespace: &DefaultEdgeLBPoolNamespace,
 		Role:      it.options.EdgeLBPoolRole,
 		Cpus:      float64(it.options.EdgeLBPoolCpus.MilliValue()) / 1000,
 		Mem:       int32(it.options.EdgeLBPoolMem.Value() / (1024 * 1024)),
-		Count:     &s,
+		Count:     pointers.NewInt32(int32(it.options.EdgeLBPoolSize)),
 		Haproxy: &models.V2Haproxy{
 			Backends:  backends,
 			Frontends: []*models.V2Frontend{frontend},
@@ -337,14 +342,20 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 
 	// Iterate over all desired Ingress backends in order to understand whether there are new ones.
 	// For every Ingress backend, if the corresponding EdgeLB backend is not present in the EdgeLB pool, we add it.
+	newBackends := make([]*models.V2Backend, 0)
 	for ingressBackend, nodePort := range backendMap {
 		if _, visited := visitedIngressBackends[ingressBackend]; !visited {
 			wasChanged = true
 			desiredBackend := computeEdgeLBBackendForIngressBackend(it.clusterName, it.ingress, ingressBackend, nodePort)
-			pool.Haproxy.Backends = append(pool.Haproxy.Backends, desiredBackend)
+			newBackends = append(newBackends, desiredBackend)
 			report.Report("must create backend %q", desiredBackend.Name)
 		}
 	}
+	// Sort new EdgeLB backends by their name before adding them to the EdgeLB pool in order to guarantee a predictable order.
+	sort.SliceStable(newBackends, func(i, j int) bool {
+		return newBackends[i].Name < newBackends[j].Name
+	})
+	pool.Haproxy.Backends = append(pool.Haproxy.Backends, newBackends...)
 
 	// If the EdgeLB frontend for the current Ingress resource does not exist in the EdgeLB pool, create it now.
 	if !frontendExists {

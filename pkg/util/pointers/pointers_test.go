@@ -26,3 +26,11 @@ func TestNewInt32(t *testing.T) {
 	assert.True(t, v1 != v2)
 	assert.True(t, *v1 == *v2)
 }
+
+// TestNewString tests the "NewString" function.
+func TestNewString(t *testing.T) {
+	v1 := pointers.NewString("foo")
+	v2 := pointers.NewString("foo")
+	assert.True(t, v1 != v2)
+	assert.True(t, *v1 == *v2)
+}

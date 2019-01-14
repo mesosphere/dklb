@@ -2,21 +2,16 @@ package cache_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
 	kubeerrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/apimachinery/pkg/util/wait"
-	kubeinformers "k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes/fake"
-	kubecache "k8s.io/client-go/tools/cache"
 
 	dklbcache "github.com/mesosphere/dklb/pkg/cache"
+	cachetestutil "github.com/mesosphere/dklb/test/util/cache"
 	ingresstestutil "github.com/mesosphere/dklb/test/util/kubernetes/ingress"
 	servicetestutil "github.com/mesosphere/dklb/test/util/kubernetes/service"
 )
@@ -41,14 +36,14 @@ var (
 
 // TestHasSynced tests the "HasSynced" function.
 func TestHasSynced(t *testing.T) {
-	cache := dklbcache.NewKubernetesResourceCache(fakeSharedInformerFactory(dummyIngress1, dummyService1))
+	cache := dklbcache.NewKubernetesResourceCache(cachetestutil.NewFakeSharedInformerFactory(dummyIngress1, dummyService1))
 	// "fakeSharedInformerFactory" already waits for caches to be synced, so this should be trivially true.
 	assert.True(t, cache.HasSynced())
 }
 
 // TestGetIngress tests the "GetIngress" function.
 func TestGetIngress(t *testing.T) {
-	cache := dklbcache.NewKubernetesResourceCache(fakeSharedInformerFactory(dummyIngress1))
+	cache := dklbcache.NewKubernetesResourceCache(cachetestutil.NewFakeSharedInformerFactory(dummyIngress1))
 	tests := []struct {
 		description    string
 		namespace      string
@@ -84,7 +79,7 @@ func TestGetIngress(t *testing.T) {
 
 // TestGetService tests the "GetService" function.
 func TestGetService(t *testing.T) {
-	cache := dklbcache.NewKubernetesResourceCache(fakeSharedInformerFactory(dummyService1))
+	cache := dklbcache.NewKubernetesResourceCache(cachetestutil.NewFakeSharedInformerFactory(dummyService1))
 	tests := []struct {
 		description    string
 		namespace      string
@@ -116,23 +111,4 @@ func TestGetService(t *testing.T) {
 			assert.Equal(t, res, test.expectedResult)
 		}
 	}
-}
-
-// fakeSharedInformerFactory returns a shared informer factory whose listers will list the specified resources.
-func fakeSharedInformerFactory(resources ...runtime.Object) kubeinformers.SharedInformerFactory {
-	// Create a fake Kubernetes clientset that will list the specified resources.
-	fakeClient := fake.NewSimpleClientset(resources...)
-	// Create a shared informer factory that uses the fake Kubernetes clientset.
-	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(fakeClient, 30*time.Second)
-	// Start all the required informers.
-	iInformer := kubeInformerFactory.Extensions().V1beta1().Ingresses()
-	sInformer := kubeInformerFactory.Core().V1().Services()
-	go iInformer.Informer().Run(wait.NeverStop)
-	go sInformer.Informer().Run(wait.NeverStop)
-	// Wait for the caches to be synced.
-	if !kubecache.WaitForCacheSync(wait.NeverStop, iInformer.Informer().HasSynced, sInformer.Informer().HasSynced) {
-		panic("failed to wait for caches to be synced")
-	}
-	// Return the shared informer factory.
-	return kubeInformerFactory
 }

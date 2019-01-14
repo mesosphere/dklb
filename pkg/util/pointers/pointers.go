@@ -9,3 +9,8 @@ func NewBool(v bool) *bool {
 func NewInt32(v int32) *int32 {
 	return &v
 }
+
+// NewString returns a pointer to the specified string value.
+func NewString(v string) *string {
+	return &v
+}
