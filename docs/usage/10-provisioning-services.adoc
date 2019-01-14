@@ -112,11 +112,10 @@ In other words, changing the value of any of these annotations after the target 
 
 ==== Customizing the DC/OS virtual network to join
 
-By design, pools exposing Kubernetes services to _outside_ the DC/OS cluster (i.e. pools using the `slave_public` role) must be scheduled onto the DC/OS host network (i.e. the network where the public DC/OS agents are running on top of).
+By design, pools exposing Kubernetes services to _outside_ the DC/OS cluster (i.e. pools using the `slave_public` role) will run atop the DC/OS agents' host network.
 
-Also by design, pools exposing Kubernetes services to _inside_ the DC/OS cluster must be scheduled onto a https://docs.mesosphere.com/1.12/networking/SDN/[DC/OS virtual network].
-By default, these pools are scheduled onto the `dcos` virtual network.
-It is, however, possible to pick a custom DC/OS virtual network for these pools by providing the following annotation:
+Also by design, pools exposing Kubernetes services to _inside_ the DC/OS cluster will run atop the https://docs.mesosphere.com/1.12/networking/SDN/dcos-overlay/[`dcos` virtual network].
+It is, however, possible to override this and pick any https://docs.mesosphere.com/1.12/networking/SDN/usage/ [custom DC/OS virtual network] for these pools, by providing the following annotation:
 
 [source,text]
 ----
@@ -125,7 +124,7 @@ kubernetes.dcos.io/edgelb-pool-network: "<edgelb-pool-network>"
 
 [WARNING]
 ====
-The value of this annotation is observed only when the target EdgeLB pool is created.
+The value of this annotation is observed only when the target EdgeLB pool is created and the pool role is not `slave_public` (the default).
 
 In other words, changing the value of this annotation after the target EdgeLB pool has been created and provisioned will produce no effect.
 ====
