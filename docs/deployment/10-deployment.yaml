@@ -18,7 +18,7 @@ spec:
       priorityClassName: system-node-critical
       containers:
       - name: dklb
-        image: mesosphere/dklb:0.1.0-alpha.2
+        image: mesosphere/dklb:0.1.0-alpha.3
         imagePullPolicy: Always
         args:
         - /dklb
