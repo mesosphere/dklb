@@ -134,14 +134,6 @@ In other words, changing the value of this annotation after the target EdgeLB po
 
 In certain scenarios, it may be desirable to use a pre-existing EdgeLB pool to expose a Kubernetes service (instead of having `dklb` creating one).
 This can easily be achieved by providing the name of the pre-existing EdgeLB pool as the value of the `kubernetes.dcos.io/edgelb-pool-name` annotation.
-The following additional annotation should also be specified:
-
-[source,text]
-----
-kubernetes.dcos.io/edgelb-pool-creation-strategy: "Never"
-----
-
-This will prevent `dklb` from ever trying to provision an EdgeLB pool for the service (leaving said process up to the user).
 
 ==== Sharing an EdgeLB pool between Kubernetes services
 

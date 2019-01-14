@@ -1,0 +1,252 @@
+:sectnums:
+:numbered:
+:toc: macro
+:toc-title:
+:toclevels: 3
+:numbered!:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+= Provisioning Kubernetes ingresses with `dklb`
+:icons: font
+
+[discrete]
+== Table of Contents
+toc::[]
+
+== Instructions
+
+=== Using `dklb` to provision a Kubernetes ingress
+
+To expose an HTTP application running on MKE to either inside or outside the DC/OS cluster, a Kubernetes https://kubernetes.io/docs/concepts/services-networking/ingress/[`Ingress`] resource must be created.
+Furthermore, said `Ingress` resource must be explicitly https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/[annotated] for provisioning with EdgeLB:
+
+[source,text]
+----
+kubernetes.io/ingress.class: edgelb
+----
+
+`dklb` will react to the creation of such an `Ingress` resource by provisioning an EdgeLB pool (henceforth referred to as the _target EdgeLB pool_) for the `Ingress` resource based on its specification.
+
+==== Supported service types
+
+All Kubernetes services used as backends in an `Ingress` resource annotated for provisioning with EdgeLB **MUST** be of type `NodePort` or `LoadBalancer`.
+In particular, services of type `ClusterIP` and headless services cannot be used as the backends for `Ingress` resources to be provisioned by EdgeLB.
+
+=== Customizing the name of the EdgeLB pool
+
+By default, `dklb` uses the MKE cluster's name and the `Ingress` resource's namespace and name to compute the name of the target EdgeLB pool.
+To specify a custom name for said EdgeLB pool, one may annotate the `Ingress` resource with the following annotation:
+
+[source,text]
+----
+kubernetes.dcos.io/edgelb-pool-name: "<edgelb-pool-name>"
+----
+
+Depending on whether the "<edgelb-pool-name>" EdgeLB pool exists or not, `dklb` will create or update it in order to expose all rules defined in the `Ingress` resource.
+
+IMPORTANT: One must not remove or change the value of this annotation at any time after it is added to a given `Ingress` resource.
+
+=== Intra-DC/OS vs external exposure
+
+By default, `dklb` exposes ingresses to _outside_ the DC/OS cluster by requesting for the target EdgeLB pool to be scheduled onto a https://docs.mesosphere.com/1.12/overview/architecture/node-types/#public-agent-nodes[public DC/OS agent].
+However, and in order to accommodate all possible needs, `dklb` supports explicitly specifying a http://mesos.apache.org/documentation/latest/roles/[Mesos role] for the target EdgeLB pool:
+
+[source,text]
+----
+kubernetes.dcos.io/edgelb-pool-role: "<edgelb-pool-role>"
+----
+
+In particular, to expose an ingress to _inside_ DC/OS only, `*` should be used as the value of `<edgelb-pool-role>`.
+Providing said value will cause `dklb` to request for the target EdgeLB pool to be scheduled onto a https://docs.mesosphere.com/1.12/overview/architecture/node-types/#private-agent-nodes[private DC/OS agent].
+
+[WARNING]
+====
+The value of this annotation is observed only when the target EdgeLB pool is created.
+
+In other words, changing the value of this annotation after the target EdgeLB pool has been created and provisioned will produce no effect.
+====
+
+=== Customizing the frontend bind port
+
+`dklb` provisions the target EdgeLB pool by looking at the ingress's rules and creating an EdgeLB https://docs.mesosphere.com/services/edge-lb/1.2/pool-configuration/v2-reference/[backend] per referrenced `Service` resource, and a single EdgeLB https://docs.mesosphere.com/services/edge-lb/1.2/pool-configuration/v2-reference/[frontend].
+By default, `dklb` uses port `80` as the frontend's bind port.
+In some situations, however, using a different port number as the frontend's bind port may be required.
+In order to accommodate more advanced use cases, `dklb` supports defining a custom port via the following annotation:
+
+[source,text]
+----
+kubernetes.dcos.io/edgelb-pool-port: "<frontend-bind-port>"
+----
+
+When such an annotation is provided, `dklb` will use `<frontend-bind-port>` instead of port `80` as the actual frontend bind port.
+
+[WARNING]
+====
+Changing the value of this annotation after the `Ingress` resource is created is supported, but may cause disruption (as the target EdgeLB pool will most likely be re-deployed).
+====
+
+=== Customizing the target EdgeLB pool
+
+`dklb` supports customizing CPU, memory and size requests for the target EdgeLB pool.
+Custom values for these requests can be specified using the following annotations:
+
+[source,text]
+----
+kubernetes.dcos.io/edgelb-pool-cpus: "<edgelb-pool-cpus>"
+kubernetes.dcos.io/edgelb-pool-mem: "<edgelb-pool-mem>"
+kubernetes.dcos.io/edgelb-pool-size: "<edgelb-pool-size>"
+----
+
+The values of `<edgelb-pool-cpus>` and `<edgelb-pool-mem>` must obey the same format as https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/[container resource requests and limits] (e.g. `200m` for 0.2 CPU and `32Mi` for 32MiB RAM).
+The value of `<edgelb-pool-size>` must be a positive integer.
+
+[WARNING]
+====
+The value of these annotations are observed only when the target EdgeLB pool is created.
+
+In other words, changing the value of any of these annotations after the target EdgeLB pool has been created and provisioned will produce no effect.
+====
+
+=== Advanced topics
+
+==== Using a pre-existing pool to expose a Kubernetes ingress
+
+In certain scenarios, it may be desirable to use a pre-existing EdgeLB pool to expose a Kubernetes ingress (instead of having `dklb` creating one).
+This can easily be achieved by providing the name of the pre-existing EdgeLB pool as the value of the `kubernetes.dcos.io/edgelb-pool-name` annotation.
+
+== Example
+
+=== Exposing two HTTP "echo" applications
+
+This example illustrates how to expose two different HTTP applications to outside the DC/OS cluster.
+To start with, two simple "echo" pods will be created:
+
+[source,console]
+----
+$ kubectl run --restart=Never --image hashicorp/http-echo --labels app=http-echo-1,owner=dklb --port 80 http-echo-1 -- -listen=:80 --text='Hello from http-echo-1!'
+$ kubectl run --restart=Never --image hashicorp/http-echo --labels app=http-echo-2,owner=dklb --port 80 http-echo-2 -- -listen=:80 --text='Hello from http-echo-2!'
+----
+[source,console]
+----
+$ kubectl get pod --selector "owner=dklb"
+NAME          READY   STATUS    RESTARTS   AGE
+http-echo-1   1/1     Running   0          5s
+http-echo-2   1/1     Running   0          3s
+----
+
+Additionally, each of these pods will be exposed via a service of type `NodePort`:
+
+[source,console]
+----
+$ kubectl expose pod http-echo-1 --port 80 --target-port 80 --type NodePort --name "http-echo-1"
+$ kubectl expose pod http-echo-2 --port 80 --target-port 80 --type NodePort --name "http-echo-2"
+----
+[source,console]
+----
+$ kubectl get svc --selector "owner=dklb"
+NAME          TYPE       CLUSTER-IP       EXTERNAL-IP   PORT(S)        AGE
+http-echo-1   NodePort   10.100.174.194   <none>        80:32070/TCP   5s
+http-echo-2   NodePort   10.100.213.12    <none>        80:30383/TCP   3s
+----
+
+Then, an `Ingress` resource annotated for provisioning with EdgeLB and targeting the aforementioned services will be created:
+
+[source,console]
+----
+$ cat <<EOF | kubectl create -f -
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: edgelb
+    kubernetes.dcos.io/edgelb-pool-name: dklb-echo
+  labels:
+    owner: dklb
+  name: dklb-echo
+spec:
+  rules:
+  - host: "http-echo-1.com"
+    http:
+      paths:
+      - backend:
+          serviceName: http-echo-1
+          servicePort: 80
+  - host: "http-echo-2.com"
+    http:
+      paths:
+      - backend:
+          serviceName: http-echo-2
+          servicePort: 80
+EOF
+ingress.extensions/dklb-echo created
+----
+[source,console]
+----
+$ kubectl get ingress --selector "owner=dklb"
+NAME        HOSTS                             ADDRESS   PORTS   AGE
+dklb-echo   http-echo-1.com,http-echo-2.com             80      3s
+----
+
+The annotations defined on this `Ingress` resource will cause `dklb` to expose the ingress using an EdgeLB pool called `dklb-echo`.
+At this point, querying the EdgeLB API should confirm the existence of a pool called `dklb-echo` exposing port `80`:
+
+[source,console]
+----
+$ dcos edgelb list
+  NAME       APIVERSION  COUNT  ROLE          PORTS
+  dklb-echo  V2          1      slave_public  9090, 80
+----
+
+This means that `dklb` has successfully created and provisioned the target EdgeLB pool based on the spec of the `dklb-echo` `Ingress` resource.
+
+=== Testing the ingress rules
+
+[NOTE]
+====
+Host-based routing depends on the establishment of adequate DNS records for each host.
+Hence, and since DNS configuration is out-of-scope, `curl` will be used to set the required `Host` headers for each request.
+====
+
+As of this writing, `dklb` is still unable to report the IP(s)/name(s) at which the ingress is exposed.
+Hence, at this point and in order to test connectivity, it is necessary to manually check which public DC/OS agent the target EdgeLB pool was scheduled onto.
+Assuming this IP is `<public-dcos-agent-ip>`, `curl` may be used to confirm that the ingress is correctly exposed to outside the DC/OS cluster:
+
+[source,console]
+----
+$ curl -H "Host: http-echo-1.com" http://<public-dcos-agent-ip>
+Hello from http-echo-1!
+$ curl -H "Host: http-echo-2.com" http://<public-dcos-agent-ip>
+Hello from http-echo-2!
+----
+
+This means that requests made to the `http-echo-1.com` host are being forwarded to the `http-echo-1` service, and that a similar routing is in place between the `http-echo-2.com` host and the `http-echo-2` service.
+It should be noted that since no https://kubernetes.io/docs/concepts/services-networking/ingress/#default-backend[default backend] has been specified in the `dklb-echo` ingress, requests without a matching `Host` header will get `503` as a response:
+
+[source,console]
+----
+$ curl -v http://<public-dcos-agent-ip>
+(...)
+> Host: <public-dcos-agent-ip>
+(...)
+< HTTP/1.0 503 Service Unavailable
+(...)
+----
+
+=== Cleaning up
+
+After testing finishes, cleanup of the Kubernetes pods, services and ingresses and of the target EdgeLB pool can be done by running the following commands:
+
+[source,console]
+----
+$ kubectl delete ingress --selector "owner=dklb"
+$ kubectl delete svc --selector "owner=dklb"
+$ kubectl delete pod --selector "owner=dklb"
+----
+
+The `dklb-echo` EdgeLB pool will be automatically deleted.
