@@ -23,6 +23,8 @@ var (
 	edgelbOptions manager.EdgeLBManagerOptions
 	// kubeconfig is the path to the kubeconfig file to use when running outside a Kubernetes cluster.
 	kubeconfig string
+	// logLevel is the log level to use while running the test suite.
+	logLevel string
 )
 
 var (
@@ -38,6 +40,7 @@ func init() {
 	flag.StringVar(&edgelbOptions.Path, "edgelb-path", constants.DefaultEdgeLBPath, "the path at which the edgelb api server can be reached")
 	flag.StringVar(&edgelbOptions.Scheme, "edgelb-scheme", constants.DefaultEdgeLBScheme, "the scheme to use when communicating with the edgelb api server")
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "the path to the kubeconfig file to user")
+	flag.StringVar(&logLevel, "log-level", log.InfoLevel.String(), "the log level to use while running the test suite")
 	flag.Parse()
 }
 
@@ -56,6 +59,13 @@ var _ = BeforeEach(func() {
 })
 
 func TestEndToEnd(t *testing.T) {
+	// Set the log level to the requested value.
+	if l, err := log.ParseLevel(logLevel); err != nil {
+		log.Fatal(err)
+	} else {
+		log.SetLevel(l)
+	}
+	// Register a failure handler and run the test suite.
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "dklb end-to-end test suite")
 }

@@ -2,7 +2,9 @@ package framework
 
 import (
 	"context"
+	"net/http"
 
+	"github.com/glendc/go-external-ip"
 	. "github.com/onsi/gomega"
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,6 +30,10 @@ type Framework struct {
 	ClusterName string
 	// EdgeLBManager is the instance of the EdgeLB manager to use.
 	EdgeLBManager edgelbmanager.EdgeLBManager
+	// ExternalIP is the external IP of the host where the test suite is running on.
+	ExternalIP string
+	// HTTPClient is the client used to make HTTP requests.
+	HTTPClient *http.Client
 	// KubeClient is a client to the Kubernetes base APIs.
 	KubeClient kubernetes.Interface
 }
@@ -44,7 +50,7 @@ func New(edgelbOptions edgelbmanager.EdgeLBManagerOptions, kubeconfig string) *F
 	if err != nil {
 		log.Fatalf("failed to build kubernetes client: %v", err)
 	}
-	// Return a new instance of the testing framework.
+	// Create a new instance of the EdgeLB manager.
 	manager, err := edgelbmanager.NewEdgeLBManager(edgelbOptions)
 	if err != nil {
 		log.Fatalf("failed to build edgelb manager: %v", err)
@@ -62,10 +68,23 @@ func New(edgelbOptions edgelbmanager.EdgeLBManagerOptions, kubeconfig string) *F
 	} else {
 		clusterName = v
 	}
+	// Determine our external IP.
+	ip, err := determineExternalIP()
+	if err != nil {
+		log.Fatalf("failed to determine our external ip: %v", err)
+	}
+	// Return a new instance of the testing framework.
 	return &Framework{
 		ClusterName:   clusterName,
 		EdgeLBManager: manager,
-		KubeClient:    kubeClient,
+		ExternalIP:    ip,
+		HTTPClient: &http.Client{
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				// Do not follow redirects.
+				return http.ErrUseLastResponse
+			},
+		},
+		KubeClient: kubeClient,
 	}
 }
 
@@ -80,12 +99,26 @@ func (f *Framework) CheckTestPrerequisites() error {
 	for _, ns := range namespaces.Items {
 		Expect(ns.Name).NotTo(HavePrefix(KubernetesNamespacePrefix), "expected no pre-existing namespaces with prefix %q", KubernetesNamespacePrefix)
 	}
+	log.Debugf("no pre-existing namespaces found")
+
 	// Check that there are no pre-existing EdgeLB pools.
 	ctx, fn := context.WithTimeout(context.Background(), DefaultEdgeLBOperationTimeout)
 	defer fn()
 	pools, err := f.EdgeLBManager.GetPools(ctx)
 	Expect(err).NotTo(HaveOccurred(), "failed to list edgelb pools")
 	Expect(len(pools)).To(Equal(0), "expected no pre-existing edgelb pools")
+	log.Debugf("no pre-existing edgelb pools found")
+
 	// Signal that we're good to go.
 	return nil
+}
+
+// determineExternalIP attempts to determine the external IP of the host where the test suite is running on.
+func determineExternalIP() (string, error) {
+	c := externalip.DefaultConsensus(nil, nil)
+	i, err := c.ExternalIP()
+	if err != nil {
+		return "", err
+	}
+	return i.String(), nil
 }
