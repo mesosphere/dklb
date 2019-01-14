@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/mesosphere/dklb/pkg/constants"
+	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
 	"github.com/mesosphere/dklb/pkg/util/pointers"
 	dklbstrings "github.com/mesosphere/dklb/pkg/util/strings"
 )
@@ -118,7 +119,7 @@ func computeEdgeLBFrontendForIngress(clusterName string, ingress *extsv1beta1.In
 	pathItems := make([]*models.V2FrontendLinkBackendMapItems0, 0)
 
 	// Iterate over Ingress backends, building the corresponding "V2FrontendLinkBackendMapItems0" EdgeLB object.
-	forEachIngresBackend(ingress, func(host, path *string, backend extsv1beta1.IngressBackend) {
+	kubernetesutil.ForEachIngresBackend(ingress, func(host, path *string, backend extsv1beta1.IngressBackend) {
 		switch {
 		case host == nil && path == nil:
 			frontend.LinkBackend.DefaultBackend = computeEdgeLBBackendNameForIngressBackend(clusterName, ingress, backend)
@@ -191,25 +192,5 @@ func computeIngressOwnedEdgeLBObjectMetadata(name string) (*ingressOwnedEdgeLBOb
 		// The provided name is composed of a different number of parts.
 		// Hence, it does not correspond to an Ingress-owned EdgeLB object.
 		return nil, errors.New("invalid backend/frontend name for ingress")
-	}
-}
-
-// forEachIngressBackend iterates over Ingress backends defined on the specified Ingress resource, calling "fn" with each Ingress backend object and the associated host and path whenever applicable.
-func forEachIngresBackend(ingress *extsv1beta1.Ingress, fn func(host *string, path *string, backend extsv1beta1.IngressBackend)) {
-	if ingress.Spec.Backend != nil {
-		// Use nil values for "host" and "path" so that the caller can identify the current Ingress backend as the default one if it needs to.
-		fn(nil, nil, *ingress.Spec.Backend)
-	}
-	for _, rule := range ingress.Spec.Rules {
-		// Pin "rule" so we can take its address.
-		rule := rule
-		if rule.HTTP != nil {
-			for _, path := range rule.HTTP.Paths {
-				// Pin "path" so we can take its address.
-				path := path
-				// Use the specified (possibly empty) values for "host" and "path".
-				fn(&rule.Host, &path.Path, path.Backend)
-			}
-		}
 	}
 }

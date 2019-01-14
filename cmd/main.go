@@ -162,7 +162,7 @@ func run(ctx context.Context, kubeClient kubernetes.Interface, edgelbManager man
 	// Create a cache for Kubernetes resources based on the shared informer factory.
 	kubeCache := cache.NewKubernetesResourceCache(kubeInformerFactory)
 	// Create an instance of the ingress controller that uses an ingress informer for watching Ingress resources.
-	ingressController := controllers.NewIngressController(clusterName, kubeClient, kubeInformerFactory.Extensions().V1beta1().Ingresses(), kubeCache, edgelbManager)
+	ingressController := controllers.NewIngressController(clusterName, kubeClient, kubeInformerFactory.Extensions().V1beta1().Ingresses(), kubeInformerFactory.Core().V1().Services(), kubeCache, edgelbManager)
 	// Create an instance of the service controller that uses a service informer for watching Service resources.
 	serviceController := controllers.NewServiceController(clusterName, kubeClient, kubeInformerFactory.Core().V1().Services(), kubeCache, edgelbManager)
 	// Start the shared informer factory.

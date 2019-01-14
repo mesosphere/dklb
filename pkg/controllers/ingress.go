@@ -10,6 +10,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
+	corev1informers "k8s.io/client-go/informers/core/v1"
 	extsv1beta1informers "k8s.io/client-go/informers/extensions/v1beta1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -43,7 +44,7 @@ type IngressController struct {
 }
 
 // NewIngressController creates a new instance of the EdgeLB ingress controller.
-func NewIngressController(clusterName string, kubeClient kubernetes.Interface, ingressInformer extsv1beta1informers.IngressInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *IngressController {
+func NewIngressController(clusterName string, kubeClient kubernetes.Interface, ingressInformer extsv1beta1informers.IngressInformer, serviceInformer corev1informers.ServiceInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *IngressController {
 	// Create a new instance of the ingress controller with the specified name and threadiness.
 	c := &IngressController{
 		genericController: newGenericController(clusterName, ingressControllerName, ingressControllerThreadiness),
@@ -87,6 +88,19 @@ func NewIngressController(clusterName string, kubeClient kubernetes.Interface, i
 				return
 			}
 			c.enqueueTombstone(ingress)
+		},
+	})
+	// Setup an event handler to inform us when Service resources change.
+	// This allows us to enqueue all ingresses that reference said Service resource.
+	serviceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			c.enqueueReferencingIngresses(obj.(*corev1.Service))
+		},
+		UpdateFunc: func(_, obj interface{}) {
+			c.enqueueReferencingIngresses(obj.(*corev1.Service))
+		},
+		DeleteFunc: func(obj interface{}) {
+			c.enqueueReferencingIngresses(obj.(*corev1.Service))
 		},
 	})
 
@@ -160,6 +174,25 @@ func (c *IngressController) processQueueItem(workItem WorkItem) error {
 		}
 	}
 	return nil
+}
+
+// enqueueReferencingIngresses enqueues Ingress resources that reference the provided Service resource.
+func (c *IngressController) enqueueReferencingIngresses(service *corev1.Service) {
+	// Grab a list of all Ingress resources in the same namespace as the Service resource.
+	ingresses, err := c.kubeCache.GetIngresses(service.Namespace)
+	if err != nil {
+		c.logger.Errorf("failed to list all ingresses in namespace %q: %v", service.Name, err)
+		return
+	}
+	// Iterate over all Ingress resources in the same namespace, checking whether each one references this Service resource and enqueueing it if it does.
+	for _, ingress := range ingresses {
+		obj := ingress
+		kubernetesutil.ForEachIngresBackend(obj, func(_, _ *string, backend extsv1beta1.IngressBackend) {
+			if backend.ServiceName == service.Name {
+				c.enqueue(obj)
+			}
+		})
+	}
 }
 
 // isEdgeLBIngress returns a value indicating whether the specified Ingress resource is meant to be provisioned by EdgeLB.

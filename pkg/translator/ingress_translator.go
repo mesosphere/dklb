@@ -87,7 +87,7 @@ func (it *IngressTranslator) computeIngressBackendNodePortMap() (IngressBackendN
 	// backends is the slice containing all Ingress backends present in the current Ingress resource.
 	backends := make([]extsv1beta1.IngressBackend, 0)
 	// Iterate over all Ingress backends, adding them to the slice of results.
-	forEachIngresBackend(it.ingress, func(_, _ *string, backend extsv1beta1.IngressBackend) {
+	kubernetesutil.ForEachIngresBackend(it.ingress, func(_, _ *string, backend extsv1beta1.IngressBackend) {
 		backends = append(backends, backend)
 	})
 	// Create the map that we will be populating and returning.
