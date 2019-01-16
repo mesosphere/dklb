@@ -156,8 +156,8 @@ func (c *IngressController) processQueueItem(workItem WorkItem) error {
 		return nil
 	}
 
-	// Output some debugging information about the computed set of options.
-	prettyprint.Logf(log.Debugf, options, "computed ingress translation options for %q", workItem.Key)
+	// Output some tracing information about the computed set of options.
+	prettyprint.LogfSpew(log.Tracef, options, "computed ingress translation options for %q", workItem.Key)
 
 	// Perform translation of the Ingress resource into an EdgeLB pool.
 	if err := translator.NewIngressTranslator(c.clusterName, ingress, *options, c.kubeCache, c.edgelbManager).Translate(); err != nil {

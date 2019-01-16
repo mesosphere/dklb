@@ -150,7 +150,9 @@ func (it *IngressTranslator) createEdgeLBPool(backendMap IngressBackendNodePortM
 	// At this point, we know that we must create the target EdgeLB pool based on the specified options and Ingress backend map.
 	// TODO (@bcustodio) Wait for the EdgeLB pool to be provisioned and check for its IP(s) so that the Ingress resource's ".status" field can be updated.
 	pool := it.createEdgeLBPoolObject(backendMap)
-	prettyprint.Logf(log.Debugf, pool, "computed edgelb pool object for ingress %q", kubernetesutil.Key(it.ingress))
+	// Print the compputed EdgeLB pool object in "spew" and JSON formats.
+	prettyprint.LogfSpew(log.Tracef, pool, "computed edgelb pool object for ingress %q", kubernetesutil.Key(it.ingress))
+	prettyprint.LogfJSON(log.Debugf, pool, "computed edgelb pool object for ingress %q", kubernetesutil.Key(it.ingress))
 	ctx, fn := context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
 	defer fn()
 	_, err := it.manager.CreatePool(ctx, pool)
@@ -164,7 +166,10 @@ func (it *IngressTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool, backe
 	// Check whether the EdgeLB pool object must be updated.
 	wasChanged, report := it.updateEdgeLBPoolObject(pool, backendMap)
 	// Report the status of the EdgeLB pool.
-	prettyprint.Logf(log.Debugf, report, "inspection report for edgelb pool %q", pool.Name)
+	prettyprint.LogfSpew(log.Tracef, report, "inspection report for edgelb pool %q", pool.Name)
+	// Print the compputed EdgeLB pool object in "spew" and JSON formats.
+	prettyprint.LogfSpew(log.Tracef, pool, "computed edgelb pool object for ingress %q", kubernetesutil.Key(it.ingress))
+	prettyprint.LogfJSON(log.Debugf, pool, "computed edgelb pool object for ingress %q", kubernetesutil.Key(it.ingress))
 
 	// If the EdgeLB pool doesn't need to be updated, we just return.
 	if !wasChanged {

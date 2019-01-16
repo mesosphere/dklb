@@ -85,7 +85,9 @@ func (st *ServiceTranslator) createEdgeLBPool() error {
 	// At this point, we know that we must create the target EdgeLB pool based on the specified options.
 	// TODO (@bcustodio) Wait for the pool to be provisioned and check for its IP(s) so that the service resource's ".status" field can be updated.
 	pool := st.createEdgeLBPoolObject()
-	prettyprint.Logf(log.Debugf, pool, "computed edgelb pool object for service %q", kubernetesutil.Key(st.service))
+	// Print the compputed EdgeLB pool object in "spew" and JSON formats.
+	prettyprint.LogfSpew(log.Tracef, pool, "computed edgelb pool object for service %q", kubernetesutil.Key(st.service))
+	prettyprint.LogfJSON(log.Debugf, pool, "computed edgelb pool object for service %q", kubernetesutil.Key(st.service))
 	ctx, fn := context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
 	defer fn()
 	_, err := st.manager.CreatePool(ctx, pool)
@@ -99,7 +101,10 @@ func (st *ServiceTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool) error
 	// Check whether the pool object must be updated.
 	wasChanged, report := st.updateEdgeLBPoolObject(pool)
 	// Report the status of the pool.
-	prettyprint.Logf(log.Debugf, report, "inspection report for edgelb pool %q", pool.Name)
+	prettyprint.LogfSpew(log.Tracef, report, "inspection report for edgelb pool %q", pool.Name)
+	// Print the compputed EdgeLB pool object in "spew" and JSON formats.
+	prettyprint.LogfSpew(log.Tracef, pool, "computed edgelb pool object for service %q", kubernetesutil.Key(st.service))
+	prettyprint.LogfJSON(log.Debugf, pool, "computed edgelb pool object for service %q", kubernetesutil.Key(st.service))
 
 	// If the pool doesn't need to be updated, we just return.
 	if !wasChanged {

@@ -23,7 +23,7 @@ spec:
     # NOTE: Populated from the "kube-system/mke-cluster-info" configmap.
     - "$(CLUSTER_NAME)"
     - --log-level
-    - debug
+    - trace
     ports:
     - containerPort: 10250
     envFrom:

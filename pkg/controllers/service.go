@@ -141,8 +141,8 @@ func (c *ServiceController) processQueueItem(workItem WorkItem) error {
 		return nil
 	}
 
-	// Output some debugging information about the computed set of options.
-	prettyprint.Logf(log.Debugf, options, "computed service translation options for %q", workItem.Key)
+	// Output some tracing information about the computed set of options.
+	prettyprint.LogfSpew(log.Tracef, options, "computed service translation options for %q", workItem.Key)
 
 	// Perform translation of the Service resource into an EdgeLB pool.
 	if err := translator.NewServiceTranslator(c.clusterName, service, *options, c.edgelbManager).Translate(); err != nil {
