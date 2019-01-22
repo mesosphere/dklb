@@ -70,7 +70,7 @@ var (
 )
 
 func init() {
-	flag.StringVar(&admissionFailurePolicy, admissionFailurePolicyFlagName, "fail", "the failure policy to use when registering the admission webhook")
+	flag.StringVar(&admissionFailurePolicy, admissionFailurePolicyFlagName, "ignore", "the failure policy to use when registering the admission webhook")
 	flag.StringVar(&admissionTLSCaBundle, admissionTLSCaBundleFlagName, "", "the base64-encoded ca bundle to use for registering the admission webhook")
 	flag.StringVar(&admissionTLSCertFile, admissionTLSCertFileFlagName, "", "the path to the file containing the certificate to use for serving the admission webhook")
 	flag.StringVar(&admissionTLSPrivateKeyFile, admissionTLSPrivateKeyFlagName, "", "the path to the file containing the private key to use for serving the admission webhook")
