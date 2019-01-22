@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"flag"
 	"os"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 
+	"github.com/mesosphere/dklb/pkg/admission"
 	"github.com/mesosphere/dklb/pkg/cache"
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/controllers"
@@ -39,6 +41,12 @@ var (
 	podName string
 	// resyncPeriod is the maximum amount of time that may elapse between two consecutive synchronizations of Ingress/Service resources and the status of EdgeLB pools.
 	resyncPeriod time.Duration
+	// tlsCertFile is the path to the file containing the certificate to use for serving the admission webhook.
+	tlsCertFile string
+	// tlsPrivateKeyFile is the path to the file containing the private key to use for serving the admission webhook.
+	tlsPrivateKeyFile string
+	// whWaitGroup is a WaitGroup used to wait for the admission webhook server to shutdown.
+	whWaitGroup sync.WaitGroup
 )
 
 func init() {
@@ -52,6 +60,8 @@ func init() {
 	flag.StringVar(&logLevel, "log-level", log.InfoLevel.String(), "the log level to use")
 	flag.StringVar(&podNamespace, "pod-namespace", "", "the name of the namespace in which the current instance of the application is deployed (used to perform leader election)")
 	flag.StringVar(&podName, "pod-name", "", "the identity of the current instance of the application (used to perform leader election)")
+	flag.StringVar(&tlsCertFile, "tls-cert-file", "", "the path to the file containing the certificate to use for serving the admission webhook")
+	flag.StringVar(&tlsPrivateKeyFile, "tls-private-key-file", "", "the path to the file containing the private key to use for serving the admission webhook")
 	flag.DurationVar(&resyncPeriod, "resync-period", constants.DefaultResyncPeriod, "the maximum amount of time that may elapse between two consecutive synchronizations of ingress/service resources and the status of edgelb pools")
 }
 
@@ -78,6 +88,12 @@ func main() {
 	}
 	if clusterName == "" {
 		log.Fatalf("--kubernetes-cluster-framework-name must be set")
+	}
+	if tlsCertFile == "" {
+		log.Fatalf("--tls-cert-file must be set")
+	}
+	if tlsPrivateKeyFile == "" {
+		log.Fatalf("--tls-private-key-file must be set")
 	}
 
 	// Setup a signal handler so we can gracefully shutdown when requested to.
@@ -110,6 +126,21 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to build kubernetes client: %v", err)
 	}
+
+	// Launch the admission webhook.
+	whWaitGroup.Add(1)
+	go func() {
+		defer whWaitGroup.Done()
+		// Try to load the provided TLS certificate and private key.
+		p, err := tls.LoadX509KeyPair(tlsCertFile, tlsPrivateKeyFile)
+		if err != nil {
+			log.Fatalf("failed to read the tls certificate: %v", err)
+		}
+		// Create and start the admission webhook.
+		if err := admission.NewWebhook(p).Run(stopCh); err != nil {
+			log.Fatalf("failed to serve the admission webhook: %v", err)
+		}
+	}()
 
 	// Setup a resource lock so we can perform leader election.
 	rl, _ := resourcelock.New(
@@ -182,6 +213,8 @@ func run(ctx context.Context, kubeClient kubernetes.Interface, edgelbManager man
 
 	// Wait for the controllers to stop.
 	wg.Wait()
+	// Wait for the admission webhook to stop.
+	whWaitGroup.Wait()
 	// Confirm successful shutdown.
 	log.WithField("version", version.Version).Infof("%s is shutting down", constants.ComponentName)
 	// There is a goroutine in the background trying to renew the leader election lock.

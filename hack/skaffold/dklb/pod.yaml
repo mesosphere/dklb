@@ -24,8 +24,20 @@ spec:
     - "$(CLUSTER_NAME)"
     - --log-level
     - trace
+    - --tls-cert-file
+    - /tls/tls.crt
+    - --tls-private-key-file
+    - /tls/tls.key
     ports:
-    - containerPort: 10250
+    - name: admission
+      containerPort: 8443
+    - name: metrics
+      containerPort: 10250
+    readinessProbe:
+      httpGet:
+        path: /healthz
+        port: admission
+        scheme: HTTPS
     envFrom:
     - configMapRef:
         name: mke-cluster-info
@@ -42,4 +54,12 @@ spec:
       requests:
         memory: "64Mi"
         cpu: "10m"
+    volumeMounts:
+    - name: dklb-tls
+      mountPath: /tls
+      readOnly: true
   serviceAccountName: dklb
+  volumes:
+  - name: dklb-tls
+    secret:
+      secretName: dklb-tls
