@@ -2,6 +2,8 @@ package kubernetes
 
 import (
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
+
+	"github.com/mesosphere/dklb/pkg/constants"
 )
 
 // ForEachIngressBackend iterates over Ingress backends defined on the specified Ingress resource, calling "fn" with each Ingress backend object and the associated host and path whenever applicable.
@@ -22,4 +24,15 @@ func ForEachIngresBackend(ingress *extsv1beta1.Ingress, fn func(host *string, pa
 			}
 		}
 	}
+}
+
+// IsEdgeLBIngress returns a value indicating whether the specified Ingress resource is meant to be provisioned by EdgeLB.
+func IsEdgeLBIngress(ingress *extsv1beta1.Ingress) bool {
+	// If the required annotation is not present, return false.
+	v, exists := ingress.Annotations[constants.EdgeLBIngressClassAnnotationKey]
+	if !exists {
+		return false
+	}
+	// Return whether the value of the annotation matches the expected one.
+	return v == constants.EdgeLBIngressClassAnnotationValue
 }

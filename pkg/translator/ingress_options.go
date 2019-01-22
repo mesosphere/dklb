@@ -56,3 +56,8 @@ func ComputeIngressTranslationOptions(clusterName string, obj *extsv1beta1.Ingre
 	// Return the computed set of options
 	return res, nil
 }
+
+// ValidateIngressTranslationOptionsUpdate validates the transition between "previousOptions" and "currentOptions".
+func ValidateIngressTranslationOptionsUpdate(previousOptions, currentOptions *IngressTranslationOptions) error {
+	return ValidateBaseTranslationOptionsUpdate(&previousOptions.BaseTranslationOptions, &currentOptions.BaseTranslationOptions)
+}

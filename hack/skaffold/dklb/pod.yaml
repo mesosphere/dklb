@@ -1,4 +1,20 @@
 apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: dklb
+  name: dklb
+  namespace: kube-system
+spec:
+  selector:
+    app: dklb
+  ports:
+  - name: admission
+    port: 443
+    targetPort: 8443
+  type: ClusterIP
+---
+apiVersion: v1
 kind: Pod
 metadata:
   labels:

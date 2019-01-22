@@ -137,7 +137,7 @@ func main() {
 			log.Fatalf("failed to read the tls certificate: %v", err)
 		}
 		// Create and start the admission webhook.
-		if err := admission.NewWebhook(p).Run(stopCh); err != nil {
+		if err := admission.NewWebhook(clusterName, p).Run(stopCh); err != nil {
 			log.Fatalf("failed to serve the admission webhook: %v", err)
 		}
 	}()

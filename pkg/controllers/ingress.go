@@ -69,7 +69,7 @@ func NewIngressController(clusterName string, kubeClient kubernetes.Interface, i
 	ingressInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			ingress := obj.(*extsv1beta1.Ingress)
-			if !isEdgeLBIngress(ingress) {
+			if !kubernetesutil.IsEdgeLBIngress(ingress) {
 				return
 			}
 			c.enqueue(ingress)
@@ -77,14 +77,14 @@ func NewIngressController(clusterName string, kubeClient kubernetes.Interface, i
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			oldIngress := oldObj.(*extsv1beta1.Ingress)
 			newIngress := newObj.(*extsv1beta1.Ingress)
-			if !isEdgeLBIngress(oldIngress) && !isEdgeLBIngress(newIngress) {
+			if !kubernetesutil.IsEdgeLBIngress(oldIngress) && !kubernetesutil.IsEdgeLBIngress(newIngress) {
 				return
 			}
 			c.enqueue(newIngress)
 		},
 		DeleteFunc: func(obj interface{}) {
 			ingress := obj.(*extsv1beta1.Ingress)
-			if !isEdgeLBIngress(ingress) {
+			if !kubernetesutil.IsEdgeLBIngress(ingress) {
 				return
 			}
 			c.enqueueTombstone(ingress)
@@ -193,15 +193,4 @@ func (c *IngressController) enqueueReferencingIngresses(service *corev1.Service)
 			}
 		})
 	}
-}
-
-// isEdgeLBIngress returns a value indicating whether the specified Ingress resource is meant to be provisioned by EdgeLB.
-func isEdgeLBIngress(ingress *extsv1beta1.Ingress) bool {
-	// If the required annotation is not present, return false.
-	v, exists := ingress.Annotations[constants.EdgeLBIngressClassAnnotationKey]
-	if !exists {
-		return false
-	}
-	// Return whether the value of the annotation matches the expected one.
-	return v == constants.EdgeLBIngressClassAnnotationValue
 }

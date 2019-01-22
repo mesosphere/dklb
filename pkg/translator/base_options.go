@@ -1,7 +1,9 @@
 package translator
 
 import (
+	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -31,6 +33,35 @@ type BaseTranslationOptions struct {
 	EdgeLBPoolTranslationPaused bool
 }
 
+// ValidateBaseTranslationOptionsUpdate validates the transition between "previousOptions" and "currentOptions".
+func ValidateBaseTranslationOptionsUpdate(previousOptions, currentOptions *BaseTranslationOptions) error {
+	// Prevent the name of the EdgeLB pool from changing.
+	if currentOptions.EdgeLBPoolName != previousOptions.EdgeLBPoolName {
+		return errors.New("the name of the target edgelb pool cannot be changed")
+	}
+	// Prevent the role of the EdgeLB pool from changing.
+	if currentOptions.EdgeLBPoolRole != previousOptions.EdgeLBPoolRole {
+		return errors.New("the role of the target edgelb pool cannot be changed")
+	}
+	// Prevent the CPU request for the EdgeLB pool from changing.
+	if currentOptions.EdgeLBPoolCpus != previousOptions.EdgeLBPoolCpus {
+		return errors.New("the cpu request for the target edgelb pool cannot be changed")
+	}
+	// Prevent the memory request for the EdgeLB pool from changing.
+	if currentOptions.EdgeLBPoolMem != previousOptions.EdgeLBPoolMem {
+		return errors.New("the memory request for the target edgelb pool cannot be changed")
+	}
+	// Prevent the size of the EdgeLB pool from changing.
+	if currentOptions.EdgeLBPoolSize != previousOptions.EdgeLBPoolSize {
+		return errors.New("the size of the target edgelb pool cannot be changed")
+	}
+	// Prevent the virtual network of the target EdgeLB pool from changing.
+	if currentOptions.EdgeLBPoolNetwork != previousOptions.EdgeLBPoolNetwork {
+		return errors.New("the virtual network of the target edgelb pool cannot be changed")
+	}
+	return nil
+}
+
 // parseBaseTranslationOptions attempts to compute base, common translation options from the specified set of annotations.
 // In case options cannot be computed or are invalid, the error message MUST be suitable to be used as the message for a Kubernetes event associated with the resource.
 func parseBaseTranslationOptions(clusterName, namespace, name string, annotations map[string]string) (*BaseTranslationOptions, error) {
@@ -38,11 +69,14 @@ func parseBaseTranslationOptions(clusterName, namespace, name string, annotation
 	res := &BaseTranslationOptions{}
 
 	// Parse or compute the name of the target EdgeLB pool.
-	if v, exists := annotations[constants.EdgeLBPoolNameAnnotationKey]; !exists || v == "" {
-		res.EdgeLBPoolName = computeEdgeLBPoolName(clusterName, namespace, name)
-	} else {
-		res.EdgeLBPoolName = v
+	poolName := annotations[constants.EdgeLBPoolNameAnnotationKey]
+	if poolName == "" {
+		poolName = ComputeEdgeLBPoolName(clusterName, namespace, name)
 	}
+	if !regexp.MustCompile(constants.EdgeLBPoolNameRegex).MatchString(poolName) {
+		return nil, fmt.Errorf("%q is not valid as an edgelb pool name", poolName)
+	}
+	res.EdgeLBPoolName = poolName
 
 	// Parse the role of the target EdgeLB pool.
 	if v, exists := annotations[constants.EdgeLBPoolRoleAnnotationKey]; !exists || v == "" {

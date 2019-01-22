@@ -15,7 +15,7 @@ const (
 	edgeLBPoolNameFormatString = "%s" + edgeLBPoolNameComponentSeparator + "%s" + edgeLBPoolNameComponentSeparator + "%s"
 )
 
-// computeEdgeLBPoolName computes the name of the EdgeLB pool that corresponds to the Kubernetes resource corresponding to the provided coordinates.
-func computeEdgeLBPoolName(clusterName, namespace, name string) string {
+// ComputeEdgeLBPoolName computes the name of the EdgeLB pool that corresponds to the Kubernetes resource corresponding to the provided coordinates.
+func ComputeEdgeLBPoolName(clusterName, namespace, name string) string {
 	return fmt.Sprintf(edgeLBPoolNameFormatString, strings.ReplaceForwardSlashes(clusterName, edgeLBPoolNameComponentSeparator), namespace, name)
 }

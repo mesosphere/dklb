@@ -77,3 +77,8 @@ func ComputeServiceTranslationOptions(clusterName string, obj *corev1.Service) (
 	// Return the computed set of options
 	return res, nil
 }
+
+// ValidateServiceTranslationOptionsUpdate validates the transition between "previousOptions" and "currentOptions".
+func ValidateServiceTranslationOptionsUpdate(previousOptions, currentOptions *ServiceTranslationOptions) error {
+	return ValidateBaseTranslationOptionsUpdate(&previousOptions.BaseTranslationOptions, &currentOptions.BaseTranslationOptions)
+}

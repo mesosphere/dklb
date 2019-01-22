@@ -1,6 +1,7 @@
 module github.com/mesosphere/dklb
 
 require (
+	github.com/appscode/jsonpatch v0.0.0-20190108182946-7c0e3b262f30
 	github.com/davecgh/go-spew v1.1.1
 	github.com/evanphx/json-patch v4.1.0+incompatible // indirect
 	github.com/glendc/go-external-ip v0.0.0-20170425150139-139229dcdddd
