@@ -20,6 +20,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/controllers"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
+	"github.com/mesosphere/dklb/pkg/features"
 	_ "github.com/mesosphere/dklb/pkg/metrics"
 	"github.com/mesosphere/dklb/pkg/signals"
 	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
@@ -31,6 +32,10 @@ var (
 	clusterName string
 	// edgelbOptions is the set of options used to configure the EdgeLB Manager.
 	edgelbOptions manager.EdgeLBManagerOptions
+	// featureGates is a comma-separated list of "key=value" pairs used to toggle certain features.
+	featureGates string
+	// featureMap is the mapping between features and their current status.
+	featureMap features.FeatureMap
 	// kubeconfig is the path to the kubeconfig file to use when running outside a Kubernetes cluster.
 	kubeconfig string
 	// logLevel is the log level to use.
@@ -41,6 +46,8 @@ var (
 	podName string
 	// resyncPeriod is the maximum amount of time that may elapse between two consecutive synchronizations of Ingress/Service resources and the status of EdgeLB pools.
 	resyncPeriod time.Duration
+	// tlsCaBundle is the base64-encoded CA bundle to use for registering the admission webhook.
+	tlsCaBundle string
 	// tlsCertFile is the path to the file containing the certificate to use for serving the admission webhook.
 	tlsCertFile string
 	// tlsPrivateKeyFile is the path to the file containing the private key to use for serving the admission webhook.
@@ -55,11 +62,13 @@ func init() {
 	flag.BoolVar(&edgelbOptions.InsecureSkipTLSVerify, "edgelb-insecure-skip-tls-verify", false, "whether to skip verification of the tls certificate presented by the edgelb api server")
 	flag.StringVar(&edgelbOptions.Path, "edgelb-path", constants.DefaultEdgeLBPath, "the path at which the edgelb api server can be reached")
 	flag.StringVar(&edgelbOptions.Scheme, "edgelb-scheme", constants.DefaultEdgeLBScheme, "the scheme to use when communicating with the edgelb api server")
+	flag.StringVar(&featureGates, "feature-gates", "", "a comma-separated list of \"key=value\" pairs used to toggle certain features")
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "the path to the kubeconfig file to use when running outside a kubernetes cluster")
 	flag.StringVar(&clusterName, "kubernetes-cluster-framework-name", "", "the name of the mesos framework that corresponds to the current kubernetes cluster")
 	flag.StringVar(&logLevel, "log-level", log.InfoLevel.String(), "the log level to use")
 	flag.StringVar(&podNamespace, "pod-namespace", "", "the name of the namespace in which the current instance of the application is deployed (used to perform leader election)")
 	flag.StringVar(&podName, "pod-name", "", "the identity of the current instance of the application (used to perform leader election)")
+	flag.StringVar(&tlsCaBundle, "tls-ca-bundle", "", "the base64-encoded ca bundle to use for registering the admission webhook")
 	flag.StringVar(&tlsCertFile, "tls-cert-file", "", "the path to the file containing the certificate to use for serving the admission webhook")
 	flag.StringVar(&tlsPrivateKeyFile, "tls-private-key-file", "", "the path to the file containing the private key to use for serving the admission webhook")
 	flag.DurationVar(&resyncPeriod, "resync-period", constants.DefaultResyncPeriod, "the maximum amount of time that may elapse between two consecutive synchronizations of ingress/service resources and the status of edgelb pools")
@@ -89,11 +98,15 @@ func main() {
 	if clusterName == "" {
 		log.Fatalf("--kubernetes-cluster-framework-name must be set")
 	}
-	if tlsCertFile == "" {
-		log.Fatalf("--tls-cert-file must be set")
+
+	// Build the map of features based on the value of "--feature-gates".
+	featureMap, err = features.ParseFeatureMap(featureGates)
+	if err != nil {
+		log.Errorf("failed to parse feature gates: %v", err)
 	}
-	if tlsPrivateKeyFile == "" {
-		log.Fatalf("--tls-private-key-file must be set")
+	// Fallback to the default features in case we couldn't parse the value of "--feature-gates".
+	if featureMap == nil {
+		featureMap = features.DefaultFeatureMap
 	}
 
 	// Setup a signal handler so we can gracefully shutdown when requested to.
@@ -127,20 +140,38 @@ func main() {
 		log.Fatalf("failed to build kubernetes client: %v", err)
 	}
 
-	// Launch the admission webhook.
-	whWaitGroup.Add(1)
-	go func() {
-		defer whWaitGroup.Done()
-		// Try to load the provided TLS certificate and private key.
-		p, err := tls.LoadX509KeyPair(tlsCertFile, tlsPrivateKeyFile)
-		if err != nil {
-			log.Fatalf("failed to read the tls certificate: %v", err)
+	// Launch the admission webhook if the "ServeAdmissionWebhook" feature is enabled.
+	if featureMap.IsEnabled(features.ServeAdmissionWebhook) {
+		if tlsCertFile == "" {
+			log.Fatalf("--tls-cert-file must be set since the %q feature is enabled", features.ServeAdmissionWebhook)
 		}
-		// Create and start the admission webhook.
-		if err := admission.NewWebhook(clusterName, p).Run(stopCh); err != nil {
-			log.Fatalf("failed to serve the admission webhook: %v", err)
+		if tlsPrivateKeyFile == "" {
+			log.Fatalf("--tls-private-key-file must be set since the %q feature is enabled", features.ServeAdmissionWebhook)
 		}
-	}()
+		whWaitGroup.Add(1)
+		go func() {
+			defer whWaitGroup.Done()
+			// Try to load the provided TLS certificate and private key.
+			p, err := tls.LoadX509KeyPair(tlsCertFile, tlsPrivateKeyFile)
+			if err != nil {
+				log.Fatalf("failed to read the tls certificate: %v", err)
+			}
+			// Create and start the admission webhook.
+			if err := admission.NewWebhook(clusterName, p).Run(stopCh); err != nil {
+				log.Fatalf("failed to serve the admission webhook: %v", err)
+			}
+		}()
+	}
+
+	// Register the admission webhook if the "RegisterAdmissionWebhook" feature is enabled.
+	if featureMap.IsEnabled(features.RegisterAdmissionWebhook) {
+		if tlsCaBundle == "" {
+			log.Fatalf("--tls-ca-bundle must be set since the %q feature is enabled", features.RegisterAdmissionWebhook)
+		}
+		if err := admission.RegisterWebhook(kubeClient, tlsCaBundle); err != nil {
+			log.Fatalf("failed to register the admission webhook: %v", err)
+		}
+	}
 
 	// Setup a resource lock so we can perform leader election.
 	rl, _ := resourcelock.New(

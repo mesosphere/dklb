@@ -60,6 +60,15 @@ rules:
   - services/status
   verbs:
   - update
+# Allow for reading, creating and updating MutatingWebhookConfiguration resources.
+- apiGroups:
+  - "admissionregistration.k8s.io"
+  resources:
+  - mutatingwebhookconfigurations
+  verbs:
+  - create
+  - get
+  - update
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

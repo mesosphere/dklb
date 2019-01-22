@@ -40,6 +40,8 @@ spec:
     - "$(CLUSTER_NAME)"
     - --log-level
     - trace
+    - --tls-ca-bundle
+    - "$(CA_BUNDLE)"
     - --tls-cert-file
     - /tls/tls.crt
     - --tls-private-key-file

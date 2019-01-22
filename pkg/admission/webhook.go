@@ -21,8 +21,6 @@ import (
 )
 
 const (
-	// admissionPAth is the path where the admission endpoint is served.
-	admissionPath = "/admissionrequests"
 	// bindAddress is the address ("host:port") which to bind to.
 	bindAddress = "0.0.0.0:8443"
 	// healthzPath is the path where the "health" endpoint is served.
@@ -30,6 +28,8 @@ const (
 )
 
 var (
+	// admissionPath is the path where the admission endpoint is served.
+	admissionPath = "/admissionrequests"
 	// ingressGvk is the "GroupVersionKind" that corresponds to "Ingress" resources.
 	ingressGvk = &schema.GroupVersionKind{Group: "extensions", Version: "v1beta1", Kind: "Ingress"}
 	// ingressGvr is the "GroupVersionResource" that corresponds to "Ingress" resources.
