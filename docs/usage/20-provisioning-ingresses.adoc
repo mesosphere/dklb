@@ -50,7 +50,7 @@ kubernetes.dcos.io/edgelb-pool-name: "<edgelb-pool-name>"
 
 Depending on whether the "<edgelb-pool-name>" EdgeLB pool exists or not, `dklb` will create or update it in order to expose all rules defined in the `Ingress` resource.
 
-IMPORTANT: One must not remove or change the value of this annotation at any time after it is added to a given `Ingress` resource.
+IMPORTANT: This annotation cannot be removed or changed after the `Ingress` resource is created.
 
 === Intra-DC/OS vs external exposure
 
@@ -65,12 +65,7 @@ kubernetes.dcos.io/edgelb-pool-role: "<edgelb-pool-role>"
 In particular, to expose an ingress to _inside_ DC/OS only, `*` should be used as the value of `<edgelb-pool-role>`.
 Providing said value will cause `dklb` to request for the target EdgeLB pool to be scheduled onto a https://docs.mesosphere.com/1.12/overview/architecture/node-types/#private-agent-nodes[private DC/OS agent].
 
-[WARNING]
-====
-The value of this annotation is observed only when the target EdgeLB pool is created.
-
-In other words, changing the value of this annotation after the target EdgeLB pool has been created and provisioned will produce no effect.
-====
+IMPORTANT: This annotation cannot be removed or changed after the `Ingress` resource is created.
 
 === Customizing EdgeLB pool frontend bind port
 
@@ -88,10 +83,7 @@ kubernetes.dcos.io/edgelb-pool-port: "<frontend-bind-port>"
 
 When such an annotation is provided, `dklb` will use `<frontend-bind-port>` instead of port `80` as the actual frontend bind port.
 
-[WARNING]
-====
-Changing the value of this annotation after the `Ingress` resource is created is supported, but may cause disruption (as the target EdgeLB pool will most likely be re-deployed).
-====
+WARNING: Changing the value of this annotation after the `Ingress` resource is created is supported, but may cause disruption (as the target EdgeLB pool will most likely be re-deployed).
 
 === Customizing the target EdgeLB pool
 
@@ -108,12 +100,7 @@ kubernetes.dcos.io/edgelb-pool-size: "<edgelb-pool-size>"
 The values of `<edgelb-pool-cpus>` and `<edgelb-pool-mem>` must obey the same format as https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/[container resource requests and limits] (e.g. `200m` for 0.2 CPU and `32Mi` for 32MiB RAM).
 The value of `<edgelb-pool-size>` must be a positive integer.
 
-[WARNING]
-====
-The value of these annotations are observed only when the target EdgeLB pool is created.
-
-In other words, changing the value of any of these annotations after the target EdgeLB pool has been created and provisioned will produce no effect.
-====
+IMPORTANT: These annotations cannot be removed or changed after the `Ingress` resource is created.
 
 === Advanced topics
 
@@ -130,12 +117,7 @@ It is, however, possible to pick a custom DC/OS virtual network for these pools 
 kubernetes.dcos.io/edgelb-pool-network: "<edgelb-pool-network>"
 ----
 
-[WARNING]
-====
-The value of this annotation is observed only when the target EdgeLB pool is created.
-
-In other words, changing the value of this annotation after the target EdgeLB pool has been created and provisioned will produce no effect.
-====
+IMPORTANT: This annotation cannot be removed or changed after the `Ingress` resource is created.
 
 ==== Using a pre-existing pool to expose a Kubernetes ingress
 

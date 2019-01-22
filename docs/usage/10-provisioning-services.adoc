@@ -43,7 +43,7 @@ kubernetes.dcos.io/edgelb-pool-name: "<edgelb-pool-name>"
 
 Depending on whether the "<edgelb-pool-name>" EdgeLB pool exists or not, `dklb` will create or update it in order to expose all ports defined in the `Service` resource.
 
-IMPORTANT: One must not remove or change the value of this annotation at any time after it is added to a given `Service` resource.
+IMPORTANT: This annotation cannot be removed or changed after the `Service` resource is created.
 
 === Intra-DC/OS vs external exposure
 
@@ -58,12 +58,7 @@ kubernetes.dcos.io/edgelb-pool-role: "<edgelb-pool-role>"
 In particular, to expose a service to _inside_ DC/OS only, `*` should be used as the value of `<edgelb-pool-role>`.
 Providing said value will cause `dklb` to request for the target EdgeLB pool to be scheduled onto a https://docs.mesosphere.com/1.12/overview/architecture/node-types/#private-agent-nodes[private DC/OS agent].
 
-[WARNING]
-====
-The value of this annotation is observed only when the target EdgeLB pool is created.
-
-In other words, changing the value of this annotation after the target EdgeLB pool has been created and provisioned will produce no effect.
-====
+IMPORTANT: This annotation cannot be removed or changed after the `Service` resource is created.
 
 === Customizing the exposed ports
 
@@ -101,12 +96,7 @@ kubernetes.dcos.io/edgelb-pool-size: "<edgelb-pool-size>"
 The values of `<edgelb-pool-cpus>` and `<edgelb-pool-mem>` must obey the same format as https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/[container resource requests and limits] (e.g. `200m` for 0.2 CPU and `32Mi` for 32MiB RAM).
 The value of `<edgelb-pool-size>` must be a positive integer.
 
-[WARNING]
-====
-The value of these annotations are observed only when the target EdgeLB pool is created.
-
-In other words, changing the value of any of these annotations after the target EdgeLB pool has been created and provisioned will produce no effect.
-====
+IMPORTANT: These annotations cannot be removed or changed after the `Service` resource is created.
 
 === Advanced topics
 
@@ -122,12 +112,7 @@ It is, however, possible to override this and pick any https://docs.mesosphere.c
 kubernetes.dcos.io/edgelb-pool-network: "<edgelb-pool-network>"
 ----
 
-[WARNING]
-====
-The value of this annotation is observed only when the target EdgeLB pool is created and the pool role is not `slave_public` (the default).
-
-In other words, changing the value of this annotation after the target EdgeLB pool has been created and provisioned will produce no effect.
-====
+IMPORTANT: This annotation cannot be removed or changed after the `Service` resource is created.
 
 ==== Using a pre-existing pool to expose a Kubernetes service
 
