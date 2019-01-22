@@ -29,6 +29,15 @@ spec:
     imagePullPolicy: Always
     args:
     - /dklb
+    # NOTE: For development, we explicitly set the failure policy to "Ignore" so that "make skaffold" can (re-)create the "dklb" service as required.
+    - --admission-failure-policy
+    - ignore
+    - --admission-tls-ca-bundle
+    - "$(CA_BUNDLE)"
+    - --admission-tls-cert-file
+    - /tls/tls.crt
+    - --admission-tls-private-key-file
+    - /tls/tls.key
     - --pod-namespace
     # NOTE: Populated from the "downward API".
     - "$(POD_NAMESPACE)"
@@ -40,12 +49,6 @@ spec:
     - "$(CLUSTER_NAME)"
     - --log-level
     - trace
-    - --tls-ca-bundle
-    - "$(CA_BUNDLE)"
-    - --tls-cert-file
-    - /tls/tls.crt
-    - --tls-private-key-file
-    - /tls/tls.key
     ports:
     - name: admission
       containerPort: 8443

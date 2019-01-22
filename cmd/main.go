@@ -27,7 +27,26 @@ import (
 	"github.com/mesosphere/dklb/pkg/version"
 )
 
+const (
+	// admissionFailurePolicyFlag name is the name of the flag that specifies the failure policy to use when registering the admission webhook.
+	admissionFailurePolicyFlagName = "admission-failure-policy"
+	// admissionTLSCaBundleFlagName is the name of the flag that specifies the base64-encoded CA bundle to use for registering the admission webhook.
+	admissionTLSCaBundleFlagName = "admission-tls-ca-bundle"
+	// admissionTLSCertFileFlagName is the name of the flag that specifies the path to the file containing the certificate to use for serving the admission webhook.
+	admissionTLSCertFileFlagName = "admission-tls-cert-file"
+	// admissionTLSPrivateKeyFlagName is the name of the flag that specifies the path to the file containing the private key to use for serving the admission webhook.
+	admissionTLSPrivateKeyFlagName = "admission-tls-private-key-file"
+)
+
 var (
+	// admissionFailurePolicy is the failure policy to use when registering the admission webhook.
+	admissionFailurePolicy string
+	// admissionTLSCaBundle is the base64-encoded CA bundle to use for registering the admission webhook.
+	admissionTLSCaBundle string
+	// admissionTLSCertFile is the path to the file containing the certificate to use for serving the admission webhook.
+	admissionTLSCertFile string
+	// admissionTLSPrivateKeyFile is the path to the file containing the private key to use for serving the admission webhook.
+	admissionTLSPrivateKeyFile string
 	// clusterName is the name of the Mesos framework that corresponds to the current Kubernetes cluster.
 	clusterName string
 	// edgelbOptions is the set of options used to configure the EdgeLB Manager.
@@ -46,17 +65,15 @@ var (
 	podName string
 	// resyncPeriod is the maximum amount of time that may elapse between two consecutive synchronizations of Ingress/Service resources and the status of EdgeLB pools.
 	resyncPeriod time.Duration
-	// tlsCaBundle is the base64-encoded CA bundle to use for registering the admission webhook.
-	tlsCaBundle string
-	// tlsCertFile is the path to the file containing the certificate to use for serving the admission webhook.
-	tlsCertFile string
-	// tlsPrivateKeyFile is the path to the file containing the private key to use for serving the admission webhook.
-	tlsPrivateKeyFile string
 	// whWaitGroup is a WaitGroup used to wait for the admission webhook server to shutdown.
 	whWaitGroup sync.WaitGroup
 )
 
 func init() {
+	flag.StringVar(&admissionFailurePolicy, admissionFailurePolicyFlagName, "fail", "the failure policy to use when registering the admission webhook")
+	flag.StringVar(&admissionTLSCaBundle, admissionTLSCaBundleFlagName, "", "the base64-encoded ca bundle to use for registering the admission webhook")
+	flag.StringVar(&admissionTLSCertFile, admissionTLSCertFileFlagName, "", "the path to the file containing the certificate to use for serving the admission webhook")
+	flag.StringVar(&admissionTLSPrivateKeyFile, admissionTLSPrivateKeyFlagName, "", "the path to the file containing the private key to use for serving the admission webhook")
 	flag.StringVar(&edgelbOptions.BearerToken, "edgelb-bearer-token", "", "the (optional) bearer token to use when communicating with the edgelb api server")
 	flag.StringVar(&edgelbOptions.Host, "edgelb-host", constants.DefaultEdgeLBHost, "the host at which the edgelb api server can be reached")
 	flag.BoolVar(&edgelbOptions.InsecureSkipTLSVerify, "edgelb-insecure-skip-tls-verify", false, "whether to skip verification of the tls certificate presented by the edgelb api server")
@@ -68,9 +85,6 @@ func init() {
 	flag.StringVar(&logLevel, "log-level", log.InfoLevel.String(), "the log level to use")
 	flag.StringVar(&podNamespace, "pod-namespace", "", "the name of the namespace in which the current instance of the application is deployed (used to perform leader election)")
 	flag.StringVar(&podName, "pod-name", "", "the identity of the current instance of the application (used to perform leader election)")
-	flag.StringVar(&tlsCaBundle, "tls-ca-bundle", "", "the base64-encoded ca bundle to use for registering the admission webhook")
-	flag.StringVar(&tlsCertFile, "tls-cert-file", "", "the path to the file containing the certificate to use for serving the admission webhook")
-	flag.StringVar(&tlsPrivateKeyFile, "tls-private-key-file", "", "the path to the file containing the private key to use for serving the admission webhook")
 	flag.DurationVar(&resyncPeriod, "resync-period", constants.DefaultResyncPeriod, "the maximum amount of time that may elapse between two consecutive synchronizations of ingress/service resources and the status of edgelb pools")
 }
 
@@ -142,17 +156,17 @@ func main() {
 
 	// Launch the admission webhook if the "ServeAdmissionWebhook" feature is enabled.
 	if featureMap.IsEnabled(features.ServeAdmissionWebhook) {
-		if tlsCertFile == "" {
-			log.Fatalf("--tls-cert-file must be set since the %q feature is enabled", features.ServeAdmissionWebhook)
+		if admissionTLSCertFile == "" {
+			log.Fatalf("--%s must be set since the %q feature is enabled", admissionTLSCertFileFlagName, features.ServeAdmissionWebhook)
 		}
-		if tlsPrivateKeyFile == "" {
-			log.Fatalf("--tls-private-key-file must be set since the %q feature is enabled", features.ServeAdmissionWebhook)
+		if admissionTLSPrivateKeyFile == "" {
+			log.Fatalf("--%s must be set since the %q feature is enabled", admissionTLSPrivateKeyFlagName, features.ServeAdmissionWebhook)
 		}
 		whWaitGroup.Add(1)
 		go func() {
 			defer whWaitGroup.Done()
 			// Try to load the provided TLS certificate and private key.
-			p, err := tls.LoadX509KeyPair(tlsCertFile, tlsPrivateKeyFile)
+			p, err := tls.LoadX509KeyPair(admissionTLSCertFile, admissionTLSPrivateKeyFile)
 			if err != nil {
 				log.Fatalf("failed to read the tls certificate: %v", err)
 			}
@@ -165,10 +179,10 @@ func main() {
 
 	// Register the admission webhook if the "RegisterAdmissionWebhook" feature is enabled.
 	if featureMap.IsEnabled(features.RegisterAdmissionWebhook) {
-		if tlsCaBundle == "" {
-			log.Fatalf("--tls-ca-bundle must be set since the %q feature is enabled", features.RegisterAdmissionWebhook)
+		if admissionTLSCaBundle == "" {
+			log.Fatalf("--%s must be set since the %q feature is enabled", admissionTLSCaBundleFlagName, features.RegisterAdmissionWebhook)
 		}
-		if err := admission.RegisterWebhook(kubeClient, tlsCaBundle); err != nil {
+		if err := admission.RegisterWebhook(kubeClient, admissionTLSCaBundle, admissionFailurePolicy); err != nil {
 			log.Fatalf("failed to register the admission webhook: %v", err)
 		}
 	}

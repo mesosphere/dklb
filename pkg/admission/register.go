@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"reflect"
+	"strings"
 
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -24,20 +25,24 @@ const (
 	webhookName = "dklb.kubernetes.dcos.io"
 )
 
-var (
-	// failurePolicy is the failure policy to use when registering the admission webhook.
-	// A failure policy of "Ignore" means that a resource will be accepted whenever Kubernetes cannot reach the webhook.
-	// The failure policy must not be "Fail" as that would make it impossible to create/update Ingress/Service resources whenever dklb is not reachable.
-	// However, a failure policy of "Ignore" means that, in these scenarios, invalid Ingress/Service resources may be admitted.
-	failurePolicy = admissionregistrationv1beta1.Ignore
-)
-
 // RegisterWebhook registers the admission webhook.
-func RegisterWebhook(kubeClient kubernetes.Interface, tlsCaBundle string) error {
-	// Base64-decode "tlsCaBundle", as we'll need the (raw) PEM-encoded string.
-	caBundle, err := base64.StdEncoding.DecodeString(tlsCaBundle)
+func RegisterWebhook(kubeClient kubernetes.Interface, admissionTLSCaBundle, admissionFailurePolicy string) error {
+	// Base64-decode "admissionTLSCaBundle", as we'll need the (raw) PEM-encoded string.
+	tlsCaBundle, err := base64.StdEncoding.DecodeString(admissionTLSCaBundle)
 	if err != nil {
 		return fmt.Errorf("failed to base64-decode the ca bundle: %v", err)
+	}
+	// Parse "admissionFailurePolicy" as a failure policy.
+	var (
+		failurePolicy admissionregistrationv1beta1.FailurePolicyType
+	)
+	switch {
+	case strings.EqualFold(admissionFailurePolicy, string(admissionregistrationv1beta1.Fail)):
+		failurePolicy = admissionregistrationv1beta1.Fail
+	case strings.EqualFold(admissionFailurePolicy, string(admissionregistrationv1beta1.Ignore)):
+		failurePolicy = admissionregistrationv1beta1.Ignore
+	default:
+		return fmt.Errorf("%q is not a valid failure policy for the admission webhook", admissionFailurePolicy)
 	}
 	// Create the webhook configuration object containing the desired configuration
 	desiredCfg := &admissionregistrationv1beta1.MutatingWebhookConfiguration{
@@ -89,7 +94,7 @@ func RegisterWebhook(kubeClient kubernetes.Interface, tlsCaBundle string) error 
 						Namespace: constants.KubeSystemNamespaceName,
 						Path:      &admissionPath,
 					},
-					CABundle: caBundle,
+					CABundle: tlsCaBundle,
 				},
 				FailurePolicy: &failurePolicy,
 			},

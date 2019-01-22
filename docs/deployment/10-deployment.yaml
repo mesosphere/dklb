@@ -22,6 +22,12 @@ spec:
         imagePullPolicy: Always
         args:
         - /dklb
+        - --admission-tls-ca-bundle
+        - "$(CA_BUNDLE)"
+        - --admission-tls-cert-file
+        - /tls/tls.crt
+        - --admission-tls-private-key-file
+        - /tls/tls.key
         - --pod-namespace
         # NOTE: Populated from the "downward API".
         - "$(POD_NAMESPACE)"
@@ -33,10 +39,6 @@ spec:
         - "$(CLUSTER_NAME)"
         - --log-level
         - debug
-        - --tls-cert-file
-        - /tls/tls.crt
-        - --tls-private-key-file
-        - /tls/tls.key
         ports:
         - name: admission
           containerPort: 8443
