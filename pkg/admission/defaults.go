@@ -24,7 +24,6 @@ func setBaseDefaults(object metav1.Object, options *translator.BaseTranslationOp
 	annotations[constants.EdgeLBPoolCpusAnnotationKey] = options.EdgeLBPoolCpus.String()
 	annotations[constants.EdgeLBPoolMemAnnotationKey] = options.EdgeLBPoolMem.String()
 	annotations[constants.EdgeLBPoolSizeAnnotationKey] = strconv.Itoa(options.EdgeLBPoolSize)
-	annotations[constants.EdgeLBPoolTranslationPaused] = strconv.FormatBool(options.EdgeLBPoolTranslationPaused)
 	object.SetAnnotations(annotations)
 }
 

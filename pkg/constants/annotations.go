@@ -49,6 +49,9 @@ const (
 	EdgeLBPoolPortMapKeyPrefix = annotationKeyPrefix + "edgelb-pool-portmap."
 
 	// EdgeLBPoolTranslationPaused is the key of the annotation that holds whether a given resource is currently paused.
-	// Used mostly to facilitate end-to-end testing.
+	// While this annotation is set to "true" on a given Ingress/Service resource, dklb will not perform any calls to the EdgeLB API server regarding said resource.
+	// This means that the only actions that dlkb will perform is validation and defaulting (via the admission webhook).
+	// It is used mostly to facilitate end-to-end testing, as it allows to simulate certain scenarios that would otherwise be very hard to simulate.
+	// It also allows for performing end-to-end testing on the admission webhook without the need for provisioning EdgeLB pools.
 	EdgeLBPoolTranslationPaused = annotationKeyPrefix + "edgelb-pool-translation-paused"
 )
