@@ -31,7 +31,7 @@ func setBaseDefaults(object metav1.Object, options *translator.BaseTranslationOp
 // setDefaultsOnIngress sets default values for each missing annotation on the specified "Ingress" resource.
 func setDefaultsOnIngress(ingress *extsv1beta1.Ingress, options *translator.IngressTranslationOptions) {
 	setBaseDefaults(ingress, &options.BaseTranslationOptions)
-	ingress.Annotations[constants.EdgeLBPoolPortKey] = strconv.Itoa(int(options.EdgeLBPoolPort))
+	ingress.Annotations[constants.EdgeLBPoolPortAnnotationKey] = strconv.Itoa(int(options.EdgeLBPoolPort))
 }
 
 // setDefaultsOnService sets default values for each missing annotation on the specified "Service" resource.

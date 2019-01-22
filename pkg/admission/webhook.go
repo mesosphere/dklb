@@ -232,6 +232,7 @@ func (w *Webhook) validateAndMutateResource(rev admissionv1beta1.AdmissionReview
 // admissionResponseFromError creates an admission response based on the specified error.
 func admissionResponseFromError(err error) *admissionv1beta1.AdmissionResponse {
 	return &admissionv1beta1.AdmissionResponse{
+		Allowed: false,
 		Result: &metav1.Status{
 			Message: err.Error(),
 		},

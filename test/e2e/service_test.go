@@ -13,7 +13,9 @@ import (
 	"github.com/mongodb/mongo-go-driver/mongo/readpref"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -26,7 +28,201 @@ import (
 )
 
 var _ = Describe("Service", func() {
+	Context("of type other than LoadBalancer", func() {
+		It("is ignored by the admission webhook [TCP] [Admission]", func() {
+			// Create a temporary namespace for the current test.
+			f.WithTemporaryNamespace(func(namespace *corev1.Namespace) {
+				// Test every type of service other than "LoadBalancer".
+				for _, t := range []corev1.ServiceType{corev1.ServiceTypeClusterIP, corev1.ServiceTypeNodePort, corev1.ServiceTypeExternalName, ""} {
+					log.Infof("test case: service of type %q", t)
+					_, err := f.CreateService(namespace.Name, "", func(service *corev1.Service) {
+						// Set an annotation with a value that would be invalid should the Service resource be of type "LoadBalancer".
+						service.Annotations = map[string]string{
+							constants.EdgeLBPoolNameAnnotationKey: "__invalid_edgelb_pool_name__",
+						}
+						// ExternalName must be set for a service of type "ExternalName" to be valid.
+						service.Spec.ExternalName = "foo"
+						// Use a randomly-generated name for the Service resource.
+						service.GenerateName = fmt.Sprintf("%s-", namespace.Name)
+						// Define a basic set of ports.
+						service.Spec.Ports = []corev1.ServicePort{
+							{
+								Port: 80,
+							},
+						}
+						// Define a basic selector.
+						service.Spec.Selector = map[string]string{
+							"foo": "bar",
+						}
+						// Use "t" as the type of the service.
+						service.Spec.Type = t
+					})
+					// Make sure that no error occurred (meaning the admission webhook has ignored the Service resource).
+					Expect(err).NotTo(HaveOccurred())
+				}
+			})
+		})
+	})
+
 	Context("of type LoadBalancer", func() {
+		It("created with an invalid configuration is rejected by the admission webhook [TCP] [Admission]", func() {
+			// Create a temporary namespace for the current test.
+			f.WithTemporaryNamespace(func(namespace *corev1.Namespace) {
+				tests := []struct {
+					description               string
+					fn                        framework.ServiceCustomizer
+					expectedErrorMessageRegex string
+				}{
+					{
+						description: "invalid edgelb pool name",
+						fn: func(service *corev1.Service) {
+							service.Annotations = map[string]string{
+								constants.EdgeLBPoolNameAnnotationKey: "__foo__",
+							}
+						},
+						expectedErrorMessageRegex: "\"__foo__\" is not valid as an edgelb pool name",
+					},
+					{
+						description: "invalid edgelb pool network",
+						fn: func(service *corev1.Service) {
+							service.Annotations = map[string]string{
+								constants.EdgeLBPoolNetworkAnnotationKey: "dcos",
+							}
+						},
+						expectedErrorMessageRegex: "cannot join a dcos virtual network when the pool's role is \"slave_public\"",
+					},
+					{
+						description: "invalid edgelb pool cpu request",
+						fn: func(service *corev1.Service) {
+							service.Annotations = map[string]string{
+								constants.EdgeLBPoolCpusAnnotationKey: "foo",
+							}
+						},
+						expectedErrorMessageRegex: "failed to parse \"foo\" as the amount of cpus to request",
+					},
+					{
+						description: "invalid edgelb pool memory request",
+						fn: func(service *corev1.Service) {
+							service.Annotations = map[string]string{
+								constants.EdgeLBPoolMemAnnotationKey: "foo",
+							}
+						},
+						expectedErrorMessageRegex: "failed to parse \"foo\" as the amount of memory to request",
+					},
+					{
+						description: "invalid edgelb pool size request",
+						fn: func(service *corev1.Service) {
+							service.Annotations = map[string]string{
+								constants.EdgeLBPoolSizeAnnotationKey: "foo",
+							}
+						},
+						expectedErrorMessageRegex: "failed to parse \"foo\" as the size to request for the edgelb pool",
+					},
+					{
+						description: "invalid edgelb pool creation strategy",
+						fn: func(service *corev1.Service) {
+							service.Annotations = map[string]string{
+								constants.EdgeLBPoolCreationStrategyAnnotationKey: "InvalidStrategy",
+							}
+						},
+						expectedErrorMessageRegex: "failed to parse \"InvalidStrategy\" as a pool creation strategy",
+					},
+					{
+						description: "invalid edgelb pool port map",
+						fn: func(service *corev1.Service) {
+							service.Annotations = map[string]string{
+								fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, 80): "-1",
+							}
+							service.Spec.Ports = []corev1.ServicePort{
+								{
+									Port: 80,
+								},
+							}
+						},
+						expectedErrorMessageRegex: "-1 is not a valid port number",
+					},
+				}
+				for _, test := range tests {
+					log.Infof("test case: %s", test.description)
+					_, err := f.CreateServiceOfTypeLoadBalancer(namespace.Name, "foo", test.fn)
+					Expect(err).To(HaveOccurred())
+					statusErr, ok := err.(*errors.StatusError)
+					Expect(ok).To(BeTrue())
+					Expect(statusErr.ErrStatus.Message).To(MatchRegexp(test.expectedErrorMessageRegex))
+				}
+			})
+		})
+
+		It("created with a valid configuration and updated to an invalid one is rejected by the admission webhook [TCP] [Admission]", func() {
+			// Create a temporary namespace for the current test.
+			f.WithTemporaryNamespace(func(namespace *corev1.Namespace) {
+				var (
+					err         error
+					originalSvc *corev1.Service
+				)
+
+				// Create a dummy Service resource of type LoadBalancer.
+				originalSvc, err = f.CreateServiceOfTypeLoadBalancer(namespace.Name, "redis", func(svc *corev1.Service) {
+					svc.ObjectMeta.Annotations = map[string]string{
+						// Request for the pool to be called "<namespace>".
+						constants.EdgeLBPoolNameAnnotationKey: namespace.Name,
+						// Request for the pool to be deployed to a private DC/OS agent.
+						constants.EdgeLBPoolRoleAnnotationKey: "*",
+						// Request for translation to be paused so that no EdgeLB pool is actually created.
+						constants.EdgeLBPoolTranslationPaused: "true",
+					}
+					svc.Spec.Ports = []corev1.ServicePort{
+						{
+							Port: 80,
+						},
+					}
+				})
+				Expect(err).NotTo(HaveOccurred(), "failed to create test service")
+
+				// Attempt to perform some forbidden updates on the values of the annotations and make sure an error is returned.
+				tests := []struct {
+					description               string
+					fn                        func(*corev1.Service)
+					expecterErrorMessageRegex string
+				}{
+					{
+						description: "update the target edgelb pool's name",
+						fn: func(service *corev1.Service) {
+							service.Annotations[constants.EdgeLBPoolNameAnnotationKey] = "new-name"
+						},
+						expecterErrorMessageRegex: "the name of the target edgelb pool cannot be changed",
+					},
+					{
+						description: "update the target edgelb pool's role",
+						fn: func(service *corev1.Service) {
+							service.Annotations[constants.EdgeLBPoolRoleAnnotationKey] = "new-role"
+						},
+						expecterErrorMessageRegex: "the role of the target edgelb pool cannot be changed",
+					},
+					{
+						description: "update the target edgelb pool's virtual network",
+						fn: func(service *corev1.Service) {
+							service.Annotations[constants.EdgeLBPoolNetworkAnnotationKey] = "new-name"
+						},
+						expecterErrorMessageRegex: "the virtual network of the target edgelb pool cannot be changed",
+					},
+				}
+				for _, test := range tests {
+					log.Infof("test case: %s", test.description)
+					// Create a clone of "originalSvc" so we can start each test case with a fresh, valid copy.
+					updatedSvc := originalSvc.DeepCopy()
+					// Update the clone.
+					test.fn(updatedSvc)
+					// Make sure an error is returned.
+					_, err := f.KubeClient.CoreV1().Services(updatedSvc.Namespace).Update(updatedSvc)
+					Expect(err).To(HaveOccurred())
+					statusErr, ok := err.(*errors.StatusError)
+					Expect(ok).To(BeTrue())
+					Expect(statusErr.ErrStatus.Message).To(MatchRegexp(test.expecterErrorMessageRegex))
+				}
+			})
+		})
+
 		It("requested for public exposure is correctly provisioned by EdgeLB [TCP] [Public]", func() {
 			// Create a temporary namespace for the current test.
 			f.WithTemporaryNamespace(func(namespace *corev1.Namespace) {

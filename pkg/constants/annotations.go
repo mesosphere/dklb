@@ -40,9 +40,9 @@ const (
 	// EdgeLBPoolSizeAnnotationKey is the key of the annotation that holds the size to request for the target EdgeLB pool.
 	EdgeLBPoolSizeAnnotationKey = annotationKeyPrefix + "edgelb-pool-size"
 
-	// EdgeLBPoolPortKey is the key of the annotation that holds the port to use as a frontend bind port by the target EdgeLB pool.
+	// EdgeLBPoolPortAnnotationKey is the key of the annotation that holds the port to use as a frontend bind port by the target EdgeLB pool.
 	// This annotation is specific to Ingress resources.
-	EdgeLBPoolPortKey = annotationKeyPrefix + "edgelb-pool-port"
+	EdgeLBPoolPortAnnotationKey = annotationKeyPrefix + "edgelb-pool-port"
 
 	// EdgeLBPoolPortMapKeyPrefix is the prefix of the key of the annotation that holds the port to use as a frontend bind port by the target EdgeLB pool.
 	// This annotation is specific to Service resources.

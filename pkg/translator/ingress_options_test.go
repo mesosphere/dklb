@@ -65,7 +65,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 		{
 			description: "compute options for an Ingress resource defining a custom frontend bind port",
 			annotations: map[string]string{
-				constants.EdgeLBPoolPortKey: "14708",
+				constants.EdgeLBPoolPortAnnotationKey: "14708",
 			},
 			options: &translator.IngressTranslationOptions{
 				BaseTranslationOptions: translator.BaseTranslationOptions{
@@ -86,7 +86,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 		{
 			description: "compute options for an Ingress resource defining an invalid value for the frontend bind port",
 			annotations: map[string]string{
-				constants.EdgeLBPoolPortKey: "74511",
+				constants.EdgeLBPoolPortAnnotationKey: "74511",
 			},
 			options: nil,
 			error:   fmt.Errorf("%d is not a valid port number", 74511),
@@ -103,7 +103,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 				constants.EdgeLBPoolMemAnnotationKey:              "2Gi",
 				constants.EdgeLBPoolSizeAnnotationKey:             "3",
 				constants.EdgeLBPoolCreationStrategyAnnotationKey: string(constants.EdgeLBPoolCreationStrategyOnce),
-				constants.EdgeLBPoolPortKey:                       "14708",
+				constants.EdgeLBPoolPortAnnotationKey:             "14708",
 				constants.EdgeLBPoolTranslationPaused:             "1",
 			},
 			options: &translator.IngressTranslationOptions{
@@ -126,7 +126,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 		{
 			description: "compute options for an Ingress resource with a custom but invalid port mapping",
 			annotations: map[string]string{
-				constants.EdgeLBPoolPortKey: "74511",
+				constants.EdgeLBPoolPortAnnotationKey: "74511",
 			},
 			options: nil,
 			error:   fmt.Errorf("%d is not a valid port number", 74511),
@@ -136,7 +136,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 		{
 			description: "compute options for a Service resource having an invalid port mapping",
 			annotations: map[string]string{
-				constants.EdgeLBPoolPortKey: "foo",
+				constants.EdgeLBPoolPortAnnotationKey: "foo",
 			},
 			options: nil,
 			error:   fmt.Errorf("failed to parse %q as the frontend bind port to use: %v", "foo", "strconv.Atoi: parsing \"foo\": invalid syntax"),

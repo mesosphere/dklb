@@ -13,7 +13,7 @@ import (
 // IngressTranslationOptions groups together options used to "translate" an Ingress resource into an EdgeLB pool.
 type IngressTranslationOptions struct {
 	BaseTranslationOptions
-	// EdgeLBPoolPortKey is the port to be used as a frontend bind port by the EdgeLB pool.
+	// EdgeLBPoolPortAnnotationKey is the port to be used as a frontend bind port by the EdgeLB pool.
 	EdgeLBPoolPort int32
 }
 
@@ -40,7 +40,7 @@ func ComputeIngressTranslationOptions(clusterName string, obj *extsv1beta1.Ingre
 	res.BaseTranslationOptions = *b
 	// Parse the port to use as a frontend bind port.
 	// TODO (@bcustodio) Split into HTTP/HTTPS port when TLS support is introduced.
-	if v, exists := annotations[constants.EdgeLBPoolPortKey]; !exists || v == "" {
+	if v, exists := annotations[constants.EdgeLBPoolPortAnnotationKey]; !exists || v == "" {
 		res.EdgeLBPoolPort = DefaultEdgeLBPoolPort
 	} else {
 		r, err := strconv.Atoi(v)
