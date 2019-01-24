@@ -60,6 +60,13 @@ var (
 			},
 		}
 	})
+	// dummyIngress2 is a dummy Kubernetes Ingress resource that doesn't define a default backend and has no rules.
+	dummyIngress2 = ingresstestutil.DummyIngressResource("foo", "bar", func(ingress *extsv1beta1.Ingress) {
+		ingress.Annotations = map[string]string{
+			constants.EdgeLBIngressClassAnnotationKey: constants.EdgeLBIngressClassAnnotationValue,
+		}
+		ingress.Spec.Rules = []extsv1beta1.IngressRule{}
+	})
 	// dummyIngress1WithoutDummyIngress1BackendBaz is a dummy Kubernetes Ingress resource built from "dummyIngress1" by removing the "dummyIngress1BackendBaz" backend..
 	dummyIngress1WithoutDummyIngress1BackendBaz = ingresstestutil.DummyIngressResource("foo", "bar", func(ingress *extsv1beta1.Ingress) {
 		ingress.Annotations = map[string]string{
@@ -175,6 +182,8 @@ var (
 		},
 		EdgeLBPoolPort: 18080,
 	}
+	// dummyIngress2TranslationOptions represents a set of translation options that can be used to translate "dummyIngress2".
+	dummyIngress2TranslationOptions = dummyIngress1TranslationOptions
 
 	// backendForIngress1Foo is the computed (expected) backend for path "/bar" of "dummyIngress1.
 	backendForDummyIngress1Bar = computeEdgeLBBackendForIngressBackend(testClusterName, dummyIngress1, dummyIngress1.Spec.Rules[0].HTTP.Paths[0].Backend, dummyIngress1BackendBar.Spec.Ports[0].NodePort)
@@ -182,23 +191,41 @@ var (
 	backendForDummyIngress1Baz = computeEdgeLBBackendForIngressBackend(testClusterName, dummyIngress1, dummyIngress1.Spec.Rules[0].HTTP.Paths[1].Backend, dummyIngress1BackendBaz.Spec.Ports[0].NodePort)
 	// defaultBackendForDummyIngress1 is the computed (expected) default backend for "dummyIngress1".
 	defaultBackendForDummyIngress1 = computeEdgeLBBackendForIngressBackend(testClusterName, dummyIngress1, *dummyIngress1.Spec.Backend, dummyIngress1BackendFoo.Spec.Ports[0].NodePort)
+	// defaultBackendForDummyIngress2 is the computed (expected) default backend for "dummyIngress1".
+	// For this Ingress resource, we expect the default backend to be injected and used.
+	defaultBackendForDummyIngress2 = computeEdgeLBBackendForIngressBackend(testClusterName, dummyIngress2, extsv1beta1.IngressBackend{
+		ServiceName: defaultBackendServiceName,
+		ServicePort: defaultBackendServicePort,
+	}, defaultBackendNodePort)
 	// frontendForDummyIngress1 is the computed (expected) frontend for "dummyIngress1".
 	frontendForDummyIngress1 = computeEdgeLBFrontendForIngress(testClusterName, dummyIngress1, dummyIngress1TranslationOptions)
+	// frontendForDummyIngress2 is the computed (expected) frontend for "dummyIngress2".
+	// For this Ingress resource, we expect the default backend to be injected and used.
+	frontendForDummyIngress2 = &models.V2Frontend{
+		BindAddress: constants.EdgeLBFrontendBindAddress,
+		BindPort:    pointers.NewInt32(dummyIngress2TranslationOptions.EdgeLBPoolPort),
+		LinkBackend: &models.V2FrontendLinkBackend{
+			DefaultBackend: "dev.kubernetes01:foo:bar:default-backend:0",
+		},
+		Name:     "dev.kubernetes01:foo:bar",
+		Protocol: models.V2ProtocolHTTP,
+	}
 )
 
 func TestCreateEdgeLBPoolObjectForIngress(t *testing.T) {
 	tests := []struct {
-		description       string
-		resources         []runtime.Object
-		ingress           *extsv1beta1.Ingress
-		options           IngressTranslationOptions
-		expectedName      string
-		expectedRole      string
-		expectedCpus      float64
-		expectedMem       int32
-		expectedSize      int
-		expectedBackends  []*models.V2Backend
-		expectedFrontends []*models.V2Frontend
+		description        string
+		resources          []runtime.Object
+		ingress            *extsv1beta1.Ingress
+		options            IngressTranslationOptions
+		expectedName       string
+		expectedRole       string
+		expectedCpus       float64
+		expectedMem        int32
+		expectedSize       int
+		expectedBackends   []*models.V2Backend
+		expectedFrontends  []*models.V2Frontend
+		expectedEventCount int
 	}{
 		{
 			description: "create an edgelb pool based on valid translation options",
@@ -222,6 +249,28 @@ func TestCreateEdgeLBPoolObjectForIngress(t *testing.T) {
 			expectedFrontends: []*models.V2Frontend{
 				frontendForDummyIngress1,
 			},
+			expectedEventCount: 0,
+		},
+		{
+			description: "create an edgelb pool based on valid translation options for an ingress resource that doesn't define a default backend",
+			resources: []runtime.Object{
+				dummyIngress1BackendBar,
+				dummyIngress1BackendBaz,
+			},
+			ingress:      dummyIngress2,
+			options:      dummyIngress2TranslationOptions,
+			expectedName: "baz",
+			expectedRole: "custom_role",
+			expectedCpus: 5010.203,
+			expectedMem:  3724,
+			expectedSize: 3,
+			expectedBackends: []*models.V2Backend{
+				defaultBackendForDummyIngress2,
+			},
+			expectedFrontends: []*models.V2Frontend{
+				frontendForDummyIngress2,
+			},
+			expectedEventCount: 1,
 		},
 	}
 	for _, test := range tests {
@@ -244,6 +293,7 @@ func TestCreateEdgeLBPoolObjectForIngress(t *testing.T) {
 		assert.Equal(t, pointers.NewInt32(int32(test.expectedSize)), pool.Count)
 		assert.Equal(t, test.expectedBackends, pool.Haproxy.Backends)
 		assert.Equal(t, test.expectedFrontends, pool.Haproxy.Frontends)
+		assert.Equal(t, test.expectedEventCount, len(recorder.Events))
 	}
 }
 

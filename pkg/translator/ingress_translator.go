@@ -10,6 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 
 	dklbcache "github.com/mesosphere/dklb/pkg/cache"
@@ -19,6 +20,15 @@ import (
 	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
 	"github.com/mesosphere/dklb/pkg/util/pointers"
 	"github.com/mesosphere/dklb/pkg/util/prettyprint"
+)
+
+var (
+	// defaultBackendServiceName is the value used internally as ".serviceName" to signal the fact that dklb should be used as the default backend.
+	// It will also end up being used as part of the name of an EdgeLB backend whenever an Ingress resource doesn't define a default backend or a referenced Service resource is missing or otherwise invalid.
+	defaultBackendServiceName = "default-backend"
+	// defaultBackendServicePort is the value used internally as ".servicePort" to signal the fact that dklb should be used as the default backend.
+	// It will also end up being used as part of the name of an EdgeLB backend whenever an Ingress resource doesn't define a default backend or a referenced Service resource is missing or otherwise invalid.
+	defaultBackendServicePort = intstr.FromInt(0)
 )
 
 // IngressTranslator is the base implementation of IngressTranslator.
@@ -43,12 +53,13 @@ type IngressTranslator struct {
 func NewIngressTranslator(clusterName string, ingress *extsv1beta1.Ingress, options IngressTranslationOptions, kubeCache dklbcache.KubernetesResourceCache, manager manager.EdgeLBManager, recorder record.EventRecorder) *IngressTranslator {
 	return &IngressTranslator{
 		clusterName: clusterName,
-		ingress:     ingress,
-		options:     options,
-		kubeCache:   kubeCache,
-		manager:     manager,
-		logger:      log.WithField("ingress", kubernetesutil.Key(ingress)),
-		recorder:    recorder,
+		// Use a clone of the Ingress resource as we may need to modify it in order to inject the default backend.
+		ingress:   ingress.DeepCopy(),
+		options:   options,
+		kubeCache: kubeCache,
+		manager:   manager,
+		logger:    log.WithField("ingress", kubernetesutil.Key(ingress)),
+		recorder:  recorder,
 	}
 }
 
@@ -105,9 +116,18 @@ func (it *IngressTranslator) determineDefaultBackendNodePort() (int32, error) {
 
 // computeIngressBackendNodePortMap computes the mapping between (unique) Ingress backends defined on the current Ingress resource and their target node ports.
 // It starts by compiling a set of all (possibly duplicate) Ingress backends defined on the Ingress resource.
+// In case a default backend hasn't been specified, dklb's default backend is injected as the default one.
 // Then, it iterates over said set and checks whether the referenced service port exists, adding them to the map or using the default backend's node port instead.
 // As the returned object is in fact a map, duplicate Ingress backends are automatically removed.
 func (it *IngressTranslator) computeIngressBackendNodePortMap(defaultBackendNodePort int32) IngressBackendNodePortMap {
+	// Inject dklb as the default backend in case none is specified.
+	if it.ingress.Spec.Backend == nil {
+		it.ingress.Spec.Backend = &extsv1beta1.IngressBackend{
+			ServiceName: defaultBackendServiceName,
+			ServicePort: defaultBackendServicePort,
+		}
+		it.recorder.Eventf(it.ingress, corev1.EventTypeWarning, constants.ReasonNoDefaultBackendSpecified, "%s will be used as the default backend since none was specified", constants.ComponentName)
+	}
 	// backends is the slice containing all Ingress backends present in the current Ingress resource.
 	backends := make([]extsv1beta1.IngressBackend, 0)
 	// Iterate over all Ingress backends, adding them to the slice of results.
@@ -118,6 +138,11 @@ func (it *IngressTranslator) computeIngressBackendNodePortMap(defaultBackendNode
 	res := make(IngressBackendNodePortMap, len(backends))
 	// Iterate over the set of Ingress backends, computing the target node port.
 	for _, backend := range backends {
+		// If the target service's name corresponds to "defaultBackendServiceName", we use the default backend's node port.
+		if backend.ServiceName == defaultBackendServiceName && backend.ServicePort == defaultBackendServicePort {
+			res[backend] = defaultBackendNodePort
+			continue
+		}
 		if nodePort, err := it.computeNodePortForIngressBackend(backend); err == nil {
 			res[backend] = nodePort
 		} else {

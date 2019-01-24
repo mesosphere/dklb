@@ -1,7 +1,9 @@
 package constants
 
 const (
-	// ReasonInvalidBackendService is the reason used in Kubernetes event emitted due to a missing or otherwise invalid Service resource referenced by an Ingress resource.
+	// ReasonNoDefaultBackendSpecified is the reason used in Kubernetes events emitted whenever an Ingress resource doesn't define a default backend.
+	ReasonNoDefaultBackendSpecified = "NoDefaultBackendSpecified"
+	// ReasonInvalidBackendService is the reason used in Kubernetes events emitted due to a missing or otherwise invalid Service resource referenced by an Ingress resource.
 	ReasonInvalidBackendService = "InvalidBackendService"
 	// ReasonInvalidAnnotations is the reason used in Kubernetes events emitted due to missing/invalid annotations on a Service/Ingress resource.
 	ReasonInvalidAnnotations = "InvalidAnnotations"
