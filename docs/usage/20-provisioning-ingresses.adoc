@@ -38,6 +38,15 @@ kubernetes.io/ingress.class: edgelb
 All Kubernetes services used as backends in an `Ingress` resource annotated for provisioning with EdgeLB **MUST** be of type `NodePort` or `LoadBalancer`.
 In particular, services of type `ClusterIP` and headless services cannot be used as the backends for `Ingress` resources to be provisioned by EdgeLB.
 
+
+==== `dklb` as the default backend
+
+In case an invalid `Service` resource is specified as a backend for a given `Ingress` resource, or whenever a default backend is not explicitly defined, `dklb` will be used as the (default) backend instead.
+`dklb` will respond to requests arriving at the default backend with `503 SERVICE UNAVAILABLE` and with a short error message.
+
+Whenever `dklb` gets to be used as a backend, a Kubernetes event will be emitted and associated with the `Ingress` resource being processed.
+This event contains useful information about the reason why `dklb` is being used instead of the intended backend, and may be used for diagnosing problems.
+
 === Customizing the name of the EdgeLB pool
 
 By default, `dklb` uses the MKE cluster's name and the `Ingress` resource's namespace and name to compute the name of the target EdgeLB pool.
