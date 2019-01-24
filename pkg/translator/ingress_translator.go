@@ -10,6 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
+	"k8s.io/client-go/tools/record"
 
 	dklbcache "github.com/mesosphere/dklb/pkg/cache"
 	"github.com/mesosphere/dklb/pkg/constants"
@@ -34,10 +35,12 @@ type IngressTranslator struct {
 	manager manager.EdgeLBManager
 	// logger is the logger to use when performing translation.
 	logger *log.Entry
+	// recorder is the event recorder used to emit events associated with a given Ingress resource.
+	recorder record.EventRecorder
 }
 
 // NewIngressTranslator returns an ingress translator that can be used to translate the specified Ingress resource into an EdgeLB pool.
-func NewIngressTranslator(clusterName string, ingress *extsv1beta1.Ingress, options IngressTranslationOptions, kubeCache dklbcache.KubernetesResourceCache, manager manager.EdgeLBManager) *IngressTranslator {
+func NewIngressTranslator(clusterName string, ingress *extsv1beta1.Ingress, options IngressTranslationOptions, kubeCache dklbcache.KubernetesResourceCache, manager manager.EdgeLBManager, recorder record.EventRecorder) *IngressTranslator {
 	return &IngressTranslator{
 		clusterName: clusterName,
 		ingress:     ingress,
@@ -45,11 +48,18 @@ func NewIngressTranslator(clusterName string, ingress *extsv1beta1.Ingress, opti
 		kubeCache:   kubeCache,
 		manager:     manager,
 		logger:      log.WithField("ingress", kubernetesutil.Key(ingress)),
+		recorder:    recorder,
 	}
 }
 
 // Translate performs translation of the associated Ingress resource into an EdgeLB pool.
 func (it *IngressTranslator) Translate() error {
+	// Attempt to determine the node port at which the default backend is exposed.
+	defaultBackendNodePort, err := it.determineDefaultBackendNodePort()
+	if err != nil {
+		return err
+	}
+
 	// Return immediately if translation is paused.
 	if it.options.EdgeLBPoolTranslationPaused {
 		it.logger.Warnf("skipping translation of %q as translation is paused for the resource", kubernetesutil.Key(it.ingress))
@@ -57,10 +67,7 @@ func (it *IngressTranslator) Translate() error {
 	}
 
 	// Compute the mapping between Ingress backends defined on the current Ingress resource and their target node ports.
-	backendMap, err := it.computeIngressBackendNodePortMap()
-	if err != nil {
-		return err
-	}
+	backendMap := it.computeIngressBackendNodePortMap(defaultBackendNodePort)
 
 	// Check whether an EdgeLB pool with the requested name already exists in EdgeLB.
 	ctx, fn := context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
@@ -79,11 +86,28 @@ func (it *IngressTranslator) Translate() error {
 	return it.updateOrDeleteEdgeLBPool(pool, backendMap)
 }
 
+// determineDefaultBackendNodePort attempts to determine the node port at which the default backend is exposed.
+func (it *IngressTranslator) determineDefaultBackendNodePort() (int32, error) {
+	s, err := it.kubeCache.GetService(constants.KubeSystemNamespaceName, constants.DefaultBackendServiceName)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read the \"%s/%s\" service: %v", constants.KubeSystemNamespaceName, constants.DefaultBackendServiceName, err)
+	}
+	if s.Spec.Type != corev1.ServiceTypeNodePort && s.Spec.Type != corev1.ServiceTypeLoadBalancer {
+		return 0, fmt.Errorf("service %q is of unexpected type %q", kubernetesutil.Key(s), s.Spec.Type)
+	}
+	for _, port := range s.Spec.Ports {
+		if port.Port == constants.DefaultBackendServicePort && port.NodePort > 0 {
+			return port.NodePort, nil
+		}
+	}
+	return 0, fmt.Errorf("no valid node port has been assigned to the default backend")
+}
+
 // computeIngressBackendNodePortMap computes the mapping between (unique) Ingress backends defined on the current Ingress resource and their target node ports.
 // It starts by compiling a set of all (possibly duplicate) Ingress backends defined on the Ingress resource.
-// Then, it iterates over said set and checks whether the referenced service port exists, adding them to the map or returning errors as appropriate.
+// Then, it iterates over said set and checks whether the referenced service port exists, adding them to the map or using the default backend's node port instead.
 // As the returned object is in fact a map, duplicate Ingress backends are automatically removed.
-func (it *IngressTranslator) computeIngressBackendNodePortMap() (IngressBackendNodePortMap, error) {
+func (it *IngressTranslator) computeIngressBackendNodePortMap(defaultBackendNodePort int32) IngressBackendNodePortMap {
 	// backends is the slice containing all Ingress backends present in the current Ingress resource.
 	backends := make([]extsv1beta1.IngressBackend, 0)
 	// Iterate over all Ingress backends, adding them to the slice of results.
@@ -97,11 +121,17 @@ func (it *IngressTranslator) computeIngressBackendNodePortMap() (IngressBackendN
 		if nodePort, err := it.computeNodePortForIngressBackend(backend); err == nil {
 			res[backend] = nodePort
 		} else {
-			return nil, err
+			// We've failed to compute the target node port for the current backend.
+			// This may be caused by the specified Service resource being absent or not being of NodePort/LoadBalancer type.
+			// Hence, we use the default backend's node port and report the error as an event, but do not fail.
+			msg := fmt.Sprintf("using the default backend in place of \"%s:%s\": %v", backend.ServiceName, backend.ServicePort.String(), err)
+			it.recorder.Eventf(it.ingress, corev1.EventTypeWarning, constants.ReasonInvalidBackendService, msg)
+			it.logger.Warn(msg)
+			res[backend] = defaultBackendNodePort
 		}
 	}
 	// Return the populated map.
-	return res, nil
+	return res
 }
 
 // computeNodePortForIngressBackend computes the node port targeted by the specified Ingress backend.

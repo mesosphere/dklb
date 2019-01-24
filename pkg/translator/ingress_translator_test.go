@@ -12,6 +12,7 @@ import (
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/tools/record"
 
 	"github.com/mesosphere/dklb/pkg/constants"
 	dklberrors "github.com/mesosphere/dklb/pkg/errors"
@@ -23,6 +24,16 @@ import (
 )
 
 var (
+	// defaultBackendService represents the Service resource used to expose the default backend.
+	defaultBackendService = servicetestutil.DummyServiceResource(constants.KubeSystemNamespaceName, constants.DefaultBackendServiceName, func(service *corev1.Service) {
+		service.Spec.Type = corev1.ServiceTypeNodePort
+		service.Spec.Ports = []corev1.ServicePort{
+			{
+				NodePort: 32000,
+				Port:     constants.DefaultBackendServicePort,
+			},
+		}
+	})
 	// dummyService1 is a dummy Service resource exposing a single port.
 	dummyService1 = servicetestutil.DummyServiceResource("foo", "bar", func(service *corev1.Service) {
 		service.Spec.Type = corev1.ServiceTypeNodePort
@@ -50,7 +61,9 @@ func TestIngressTranslator_Translate(t *testing.T) {
 		// Tests that a pool is created whenever it doesn't exist and the pool creation strategy is set to "IfNotPresent".
 		{
 			description: "pool is created whenever it doesn't exist and the pool creation strategy is set to \"IfNotPresent\"",
-			resources:   []runtime.Object{},
+			resources: []runtime.Object{
+				defaultBackendService,
+			},
 			ingress: ingresstestutil.DummyIngressResource("foo", "bar", func(ingress *extsv1beta1.Ingress) {
 				ingress.Annotations = map[string]string{
 					constants.EdgeLBIngressClassAnnotationKey: constants.EdgeLBIngressClassAnnotationValue,
@@ -73,7 +86,9 @@ func TestIngressTranslator_Translate(t *testing.T) {
 		// Tests that a pool is not created when it doesn't exist and the pool creation strategy is set to "Never".
 		{
 			description: "pool is not created when it doesn't exist and the pool creation strategy is set to \"Never\"",
-			resources:   []runtime.Object{},
+			resources: []runtime.Object{
+				defaultBackendService,
+			},
 			ingress: ingresstestutil.DummyIngressResource("foo", "bar", func(ingress *extsv1beta1.Ingress) {
 				ingress.Annotations = map[string]string{
 					constants.EdgeLBIngressClassAnnotationKey: constants.EdgeLBIngressClassAnnotationValue,
@@ -95,7 +110,9 @@ func TestIngressTranslator_Translate(t *testing.T) {
 		// Tests that a pool is not created when it doesn't exist, the target Ingress resource has a non-empty status field and the pool creation strategy is set to "Once".
 		{
 			description: "pool is not created when it doesn't exist, the target Ingress resource has a non-empty status field and the pool creation strategy is set to \"Once\"",
-			resources:   []runtime.Object{},
+			resources: []runtime.Object{
+				defaultBackendService,
+			},
 			ingress: ingresstestutil.DummyIngressResource("foo", "bar", func(ingress *extsv1beta1.Ingress) {
 				ingress.Annotations = map[string]string{
 					constants.EdgeLBIngressClassAnnotationKey: constants.EdgeLBIngressClassAnnotationValue,
@@ -123,6 +140,7 @@ func TestIngressTranslator_Translate(t *testing.T) {
 		{
 			description: "pool is updated whenever it exists but is not in sync with the target Ingress resource",
 			resources: []runtime.Object{
+				defaultBackendService,
 				dummyService1,
 			},
 			ingress: ingresstestutil.DummyIngressResource("foo", "bar", func(ingress *extsv1beta1.Ingress) {
@@ -172,8 +190,10 @@ func TestIngressTranslator_Translate(t *testing.T) {
 		// Create and customize a mock EdgeLB manager.
 		m := new(edgelbmanagertestutil.MockEdgeLBManager)
 		test.mockCustomizer(m)
+		// Create a new fake event recorder.
+		recorder := record.NewFakeRecorder(1)
 		// Perform translation of the Ingress resource.
-		err := translator.NewIngressTranslator(testClusterName, test.ingress, test.options, k, m).Translate()
+		err := translator.NewIngressTranslator(testClusterName, test.ingress, test.options, k, m, recorder).Translate()
 		if test.expectedError != nil {
 			// Make sure we've got the expected error.
 			assert.Equal(t, test.expectedError, err)

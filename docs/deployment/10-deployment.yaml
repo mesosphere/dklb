@@ -15,7 +15,7 @@ spec:
   - name: admission
     port: 443
     targetPort: 8443
-  type: ClusterIP
+  type: NodePort
 ---
 apiVersion: apps/v1
 kind: Deployment

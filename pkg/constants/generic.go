@@ -7,6 +7,10 @@ import (
 const (
 	// ComponentName is the component name to report when performing leader election and emitting Kubernetes events.
 	ComponentName = "dklb"
+	// DefaultBackendServiceName is the name of the Service resource that exposes dklb as a default backend for Ingress resources.
+	DefaultBackendServiceName = "dklb"
+	// DefaultBackendServicePort is the service port defined in the Service resource that exposes dklb as a default backend for Ingress resources.
+	DefaultBackendServicePort = 80
 	// DefaultEdgeLBHost is the default host at which the EdgeLB API server can be reached.
 	DefaultEdgeLBHost = "api.edgelb.marathon.l4lb.thisdcos.directory"
 	// DefaultEdgeLBPath is the default path at which the EdgeLB API server can be reached.

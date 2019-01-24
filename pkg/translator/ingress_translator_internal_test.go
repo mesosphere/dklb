@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/tools/record"
 
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/util/pointers"
@@ -22,6 +23,8 @@ import (
 )
 
 var (
+	// defaultBackendNodePort is used as the node port at which the default backend is exposed.
+	defaultBackendNodePort = int32(32000)
 	// dummyIngress1 is a dummy Kubernetes Ingress resource.
 	dummyIngress1 = ingresstestutil.DummyIngressResource("foo", "bar", func(ingress *extsv1beta1.Ingress) {
 		ingress.Annotations = map[string]string{
@@ -225,12 +228,12 @@ func TestCreateEdgeLBPoolObjectForIngress(t *testing.T) {
 		t.Logf("test case: %s", test.description)
 		// Create a mock KubernetesResourceCache.
 		kubeCache := cachetestutil.NewFakeKubernetesResourceCache(test.resources...)
+		// Create a new fake event recorder.
+		recorder := record.NewFakeRecorder(1)
 		// Create a new instance of the Ingress translator.
-		translator := NewIngressTranslator(testClusterName, test.ingress, test.options, kubeCache, nil)
+		translator := NewIngressTranslator(testClusterName, test.ingress, test.options, kubeCache, nil, recorder)
 		// Compute the mapping between Ingress backends and Service node ports.
-		m, err := translator.computeIngressBackendNodePortMap()
-		// Make sure no error occurred.
-		assert.NoError(t, err)
+		m := translator.computeIngressBackendNodePortMap(defaultBackendNodePort)
 		// Create the target EdgeLB pool object.
 		pool := translator.createEdgeLBPoolObject(m)
 		// Make sure the resulting EdgeLB pool object meets our expectations.
@@ -461,12 +464,12 @@ func TestUpdateEdgeLBPoolObjectForIngress(t *testing.T) {
 		t.Logf("test case: %s", test.description)
 		// Create a mock KubernetesResourceCache.
 		kubeCache := cachetestutil.NewFakeKubernetesResourceCache(test.resources...)
+		// Create a new fake event recorder.
+		recorder := record.NewFakeRecorder(1)
 		// Create a new instance of the Ingress translator.
-		translator := NewIngressTranslator(testClusterName, test.ingress, test.options, kubeCache, nil)
+		translator := NewIngressTranslator(testClusterName, test.ingress, test.options, kubeCache, nil, recorder)
 		// Compute the mapping between Ingress backends and Service node ports.
-		m, err := translator.computeIngressBackendNodePortMap()
-		// Make sure no error occurred.
-		assert.NoError(t, err)
+		m := translator.computeIngressBackendNodePortMap(defaultBackendNodePort)
 		// Update the EdgeLB pool object in-place.
 		wasChanged, _ := translator.updateEdgeLBPoolObject(test.pool, m)
 		// Check that the need for a pool update was adequately detected.

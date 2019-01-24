@@ -160,7 +160,7 @@ func (c *IngressController) processQueueItem(workItem WorkItem) error {
 	prettyprint.LogfSpew(log.Tracef, options, "computed ingress translation options for %q", workItem.Key)
 
 	// Perform translation of the Ingress resource into an EdgeLB pool.
-	if err := translator.NewIngressTranslator(c.clusterName, ingress, *options, c.kubeCache, c.edgelbManager).Translate(); err != nil {
+	if err := translator.NewIngressTranslator(c.clusterName, ingress, *options, c.kubeCache, c.edgelbManager, er).Translate(); err != nil {
 		er.Eventf(ingress, corev1.EventTypeWarning, constants.ReasonTranslationError, "failed to translate ingress: %v", err)
 		c.logger.Errorf("failed to translate ingress %q: %v", workItem.Key, err)
 		return err
