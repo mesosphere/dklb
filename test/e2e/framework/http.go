@@ -3,6 +3,7 @@ package framework
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"strings"
 )
@@ -34,6 +35,31 @@ func (r *EchoResponse) XForwardedForContains(v string) bool {
 		}
 	}
 	return false
+}
+
+// Request performs a "method" request to the specified host and path, returning the status code and the response's body.
+// TODO (@bcustodio) Add support for HTTPS if/when necessary.
+func (f *Framework) Request(method, host, path string) (int, string, error) {
+	// Build the HTTP request.
+	req, err := http.NewRequest(method, fmt.Sprintf("http://%s%s", host, path), nil)
+	if err != nil {
+		return 0, "", err
+	}
+	// Perform the request.
+	res, err := f.HTTPClient.Do(req)
+	if err != nil {
+		return 0, "", err
+	}
+	// Read the response's body.
+	b, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return 0, "", err
+	}
+	// Close the response's body.
+	if err := res.Body.Close(); err != nil {
+		return 0, "", err
+	}
+	return res.StatusCode, string(b), nil
 }
 
 // EchoRequest performs a "method" request to the specified host and path, returning the resulting "echo" response or an error.

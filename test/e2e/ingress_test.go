@@ -579,5 +579,131 @@ var _ = Describe("Ingress", func() {
 				})
 			})
 		})
+
+		It("uses dklb as its default backend whenever one is not specified or a service is missing [HTTP] [Public]", func() {
+			// Create a temporary namespace for the test.
+			f.WithTemporaryNamespace(func(namespace *corev1.Namespace) {
+				var (
+					echoPod1 *corev1.Pod
+					echoSvc1 *corev1.Service
+					err      error
+					ingress  *extsv1beta1.Ingress
+				)
+
+				// Create the first "echo" pod.
+				echoPod1, err = f.CreateEchoPod(namespace.Name, "http-echo-1")
+				Expect(err).NotTo(HaveOccurred(), "failed to create echo pod")
+				// Create the first "echo" service.
+				echoSvc1, err = f.CreateServiceForEchoPod(echoPod1)
+				Expect(err).NotTo(HaveOccurred(), "failed to create service for echo pod %q", kubernetes.Key(echoPod1))
+
+				// Create an Ingress resource targeting the service above, annotating it to be provisioned by EdgeLB.
+				ingress, err = f.CreateEdgeLBIngress(namespace.Name, "http-echo", func(ingress *extsv1beta1.Ingress) {
+					ingress.Annotations = map[string]string{
+						// Request for the EdgeLB pool to be called "<namespace-name>".
+						constants.EdgeLBPoolNameAnnotationKey: namespace.Name,
+						// Request for the EdgeLB pool to be deployed to an agent with the "slave_public" role.
+						constants.EdgeLBPoolRoleAnnotationKey: constants.EdgeLBRolePublic,
+						// Request for the EdgeLB pool to be given 0.2 CPUs.
+						constants.EdgeLBPoolCpusAnnotationKey: "200m",
+						// Request for the EdgeLB pool to be given 256MiB of RAM.
+						constants.EdgeLBPoolMemAnnotationKey: "256Mi",
+						// Request for the EdgeLB pool to be deployed into a single agent.
+						constants.EdgeLBPoolSizeAnnotationKey: "1",
+					}
+					ingress.Spec.Rules = []extsv1beta1.IngressRule{
+						{
+							IngressRuleValue: extsv1beta1.IngressRuleValue{
+								HTTP: &extsv1beta1.HTTPIngressRuleValue{
+									Paths: []extsv1beta1.HTTPIngressPath{
+										{
+											Path: "/foo(/.*)?",
+											Backend: extsv1beta1.IngressBackend{
+												ServiceName: echoSvc1.Name,
+												ServicePort: intstr.FromInt(int(echoSvc1.Spec.Ports[0].Port)),
+											},
+										},
+										{
+											Path: "/bar(/.*)?",
+											Backend: extsv1beta1.IngressBackend{
+												ServiceName: "missing-service",
+												ServicePort: intstr.FromString("http"),
+											},
+										},
+									},
+								},
+							},
+						},
+					}
+				})
+				Expect(err).NotTo(HaveOccurred(), "failed to create ingress")
+
+				// Wait for EdgeLB to acknowledge the pool's creation.
+				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+					ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryInterval/2)
+					defer fn()
+					_, err = f.EdgeLBManager.GetPoolByName(ctx, ingress.Annotations[constants.EdgeLBPoolNameAnnotationKey])
+					return err == nil, nil
+				})
+				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
+
+				// TODO (@bcustodio) Wait for the pool's IP(s) to be reported.
+
+				// Wait for the Ingress to respond with the default backend at "http://<public-ip>/foo".
+				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+					r, err := f.HTTPClient.Get(fmt.Sprintf("http://%s/foo", publicIP))
+					if err != nil {
+						log.Debugf("waiting for the ingress to be reachable at %s", publicIP)
+						return false, nil
+					}
+					log.Debugf("the ingress is reachable at %s", publicIP)
+					return r.StatusCode == 200, nil
+				})
+				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the ingress to be reachable")
+
+				// Make sure that requests are directed towards the expected backend.
+				tests := []struct {
+					description        string
+					path               string
+					expectedStatusCode int
+					expectedBodyRegex  string
+				}{
+					// Test that requests made to "/foo" are directed towards "http-echo-1".
+					{
+						description:        "%s request to path /foo is directed towards http-echo-1",
+						path:               "/foo",
+						expectedStatusCode: 200,
+						expectedBodyRegex:  "http-echo-1",
+					},
+					// Test that requests made to "/" are directed towards "dklb".
+					{
+						description:        "%s request to path / is directed towards \"dklb\"",
+						path:               "/",
+						expectedStatusCode: 503,
+						expectedBodyRegex:  "No backend is available to service this request.",
+					},
+					// Test that requests made to "/bar" are directed towards "dklb".
+					{
+						description:        "%s request to path /bar is directed towards \"dklb\"",
+						path:               "/bar",
+						expectedStatusCode: 503,
+						expectedBodyRegex:  "No backend is available to service this request.",
+					},
+				}
+				for _, test := range tests {
+					for _, method := range []string{"GET", "POST", "PUT", "PATCH", "DELETE"} {
+						log.Debugf("test case: %s", fmt.Sprintf(test.description, method))
+						status, body, err := f.Request(method, publicIP, test.path)
+						Expect(err).NotTo(HaveOccurred(), "failed to perform http request")
+						Expect(status).To(Equal(test.expectedStatusCode), "the response's status code doesn't match the expectation")
+						Expect(body).To(MatchRegexp(test.expectedBodyRegex), "the response's body doesn't match the expectations")
+					}
+				}
+
+				// Manually delete the Ingress resource now in order to prevent the EdgeLB pool from being re-created during namespace deletion.
+				err = f.KubeClient.ExtensionsV1beta1().Ingresses(ingress.Namespace).Delete(ingress.Name, metav1.NewDeleteOptions(0))
+				Expect(err).NotTo(HaveOccurred(), "failed to delete ingress %q", kubernetes.Key(ingress))
+			})
+		})
 	})
 })
