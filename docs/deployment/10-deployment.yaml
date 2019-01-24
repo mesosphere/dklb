@@ -9,9 +9,12 @@ spec:
   selector:
     app: dklb
   ports:
-    - name: admission
-      port: 443
-      targetPort: 8443
+  - name: default-backend
+    port: 80
+    targetPort: 8080
+  - name: admission
+    port: 443
+    targetPort: 8443
   type: ClusterIP
 ---
 apiVersion: apps/v1
@@ -56,6 +59,8 @@ spec:
         - --log-level
         - debug
         ports:
+        - name: default-backend
+          containerPort: 8080
         - name: admission
           containerPort: 8443
         - name: metrics

@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 
 	"github.com/mesosphere/dklb/pkg/admission"
+	"github.com/mesosphere/dklb/pkg/backends"
 	"github.com/mesosphere/dklb/pkg/cache"
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/controllers"
@@ -65,8 +66,8 @@ var (
 	podName string
 	// resyncPeriod is the maximum amount of time that may elapse between two consecutive synchronizations of Ingress/Service resources and the status of EdgeLB pools.
 	resyncPeriod time.Duration
-	// whWaitGroup is a WaitGroup used to wait for the admission webhook server to shutdown.
-	whWaitGroup sync.WaitGroup
+	// srvWaitGroup is a WaitGroup used to wait for the default backend and admission webhook servers to shutdown.
+	srvWaitGroup sync.WaitGroup
 )
 
 func init() {
@@ -154,6 +155,16 @@ func main() {
 		log.Fatalf("failed to build kubernetes client: %v", err)
 	}
 
+	// Launch the default backend.
+	srvWaitGroup.Add(1)
+	go func() {
+		defer srvWaitGroup.Done()
+		// Create and start the default backend.
+		if err := backends.NewDefaultBackend().Run(stopCh); err != nil {
+			log.Fatalf("failed to serve the default backend: %v", err)
+		}
+	}()
+
 	// Launch the admission webhook if the "ServeAdmissionWebhook" feature is enabled.
 	if featureMap.IsEnabled(features.ServeAdmissionWebhook) {
 		if admissionTLSCertFile == "" {
@@ -162,9 +173,9 @@ func main() {
 		if admissionTLSPrivateKeyFile == "" {
 			log.Fatalf("--%s must be set since the %q feature is enabled", admissionTLSPrivateKeyFlagName, features.ServeAdmissionWebhook)
 		}
-		whWaitGroup.Add(1)
+		srvWaitGroup.Add(1)
 		go func() {
-			defer whWaitGroup.Done()
+			defer srvWaitGroup.Done()
 			// Try to load the provided TLS certificate and private key.
 			p, err := tls.LoadX509KeyPair(admissionTLSCertFile, admissionTLSPrivateKeyFile)
 			if err != nil {
@@ -258,8 +269,8 @@ func run(ctx context.Context, kubeClient kubernetes.Interface, edgelbManager man
 
 	// Wait for the controllers to stop.
 	wg.Wait()
-	// Wait for the admission webhook to stop.
-	whWaitGroup.Wait()
+	// Wait for the default backend and admission webhook servers to stop.
+	srvWaitGroup.Wait()
 	// Confirm successful shutdown.
 	log.WithField("version", version.Version).Infof("%s is shutting down", constants.ComponentName)
 	// There is a goroutine in the background trying to renew the leader election lock.
