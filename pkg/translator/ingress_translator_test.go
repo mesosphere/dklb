@@ -190,6 +190,7 @@ func TestIngressTranslator_Translate(t *testing.T) {
 		// Create and customize a mock EdgeLB manager.
 		m := new(edgelbmanagertestutil.MockEdgeLBManager)
 		test.mockCustomizer(m)
+		m.On("PoolGroup").Return(testEdgeLBPoolGroup)
 		// Create a new fake event recorder.
 		recorder := record.NewFakeRecorder(1)
 		// Perform translation of the Ingress resource.

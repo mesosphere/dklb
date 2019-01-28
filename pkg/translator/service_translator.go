@@ -28,6 +28,8 @@ type ServiceTranslator struct {
 	manager manager.EdgeLBManager
 	// logger is the logger to use when performing translation.
 	logger *log.Entry
+	// poolGroup is the DC/OS service group in which to create EdgeLB pools.
+	poolGroup string
 }
 
 // NewServiceTranslator returns a service translator that can be used to translate the specified Service resource into an EdgeLB pool.
@@ -38,6 +40,7 @@ func NewServiceTranslator(clusterName string, service *corev1.Service, options S
 		options:     options,
 		manager:     manager,
 		logger:      log.WithField("service", kubernetesutil.Key(service)),
+		poolGroup:   manager.PoolGroup(),
 	}
 }
 
@@ -157,7 +160,7 @@ func (st *ServiceTranslator) createEdgeLBPoolObject() *models.V2Pool {
 	s := int32(st.options.EdgeLBPoolSize)
 	p := &models.V2Pool{
 		Name:      st.options.EdgeLBPoolName,
-		Namespace: &DefaultEdgeLBPoolNamespace,
+		Namespace: &st.poolGroup,
 		Role:      st.options.EdgeLBPoolRole,
 		Cpus:      float64(st.options.EdgeLBPoolCpus.MilliValue()) / 1000,
 		Mem:       int32(st.options.EdgeLBPoolMem.Value() / (1024 * 1024)),

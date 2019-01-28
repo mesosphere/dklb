@@ -52,6 +52,18 @@ dklb-756c6c7d88-slddz   1/1     Running   0          5m45s
 
 === Advanced
 
+==== Customizing the DC/OS service group for EdgeLB pools
+
+By default, EdgeLB pools are created on the `dcos-edgelb/pools` https://docs.mesosphere.com/1.12/security/ent/restrict-service-access/[service group].
+In some DC/OS clusters, however, it may be required to customize the service group where EdgeLB pools are created.
+This may happen, for example, if EdgeLB itself is installed under a different service group (e.g. `networking/dcos-edgelb`).
+In order to achieve this, the following flag must be provided as an argument to `dklb`:
+
+[source,text]
+----
+--edgelb-pool-group=<edgelb-pool-group>
+----
+
 ==== Disabling automatic registration of the admission webhook
 
 `dklb` includes an https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#admission-webhooks[admission webhook] that validates `Ingress` and `Service` resources annotated for provisioning with EdgeLB.

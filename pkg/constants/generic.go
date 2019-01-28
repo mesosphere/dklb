@@ -15,6 +15,8 @@ const (
 	DefaultEdgeLBHost = "api.edgelb.marathon.l4lb.thisdcos.directory"
 	// DefaultEdgeLBPath is the default path at which the EdgeLB API server can be reached.
 	DefaultEdgeLBPath = "/"
+	// DefaultEdgeLBPoolGroup is the name of the DC/OS service group in which to create EdgeLB pools by default.
+	DefaultEdgeLBPoolGroup = "dcos-edgelb/pools"
 	// DefaultEdgeLBScheme is the default scheme to use when communicating with the EdgeLB API server.
 	DefaultEdgeLBScheme = "http"
 	// DefaultResyncPeriod is the (default) maximum amount of time that may elapse between two consecutive synchronizations of Ingress/Service resources and the status of EdgeLB pools.

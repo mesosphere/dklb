@@ -33,8 +33,3 @@ var (
 	// DefaultEdgeLBPoolMem is the amount of memory to request for an EdgeLB pool when a value is not provided.
 	DefaultEdgeLBPoolMem = resource.MustParse("128Mi")
 )
-
-var (
-	// DefaultEdgeLBPoolNamespace is the name of the namespace where to create EdgeLB pools.
-	DefaultEdgeLBPoolNamespace = "dcos-edgelb/pools"
-)

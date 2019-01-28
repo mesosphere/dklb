@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/mesosphere/dklb/pkg/util/pointers"
+	edgelbmanagertestutil "github.com/mesosphere/dklb/test/util/edgelb/manager"
 	edgelbpooltestutil "github.com/mesosphere/dklb/test/util/edgelb/pool"
 	"github.com/mesosphere/dklb/test/util/kubernetes/service"
 )
@@ -19,6 +20,8 @@ import (
 const (
 	// testClusterName is the value used as the name of the Kubernetes cluster in the current file.
 	testClusterName = "dev/kubernetes01"
+	// testEdgeLBPoolGroup is the value used as the name of the DC/OS service group in which to create EdgeLB pools.
+	testEdgeLBPoolGroup = "foo/bar/dcos-edgelb/pools"
 )
 
 var (
@@ -121,7 +124,11 @@ func TestCreateEdgeLBPoolObject(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Logf("test case: %s", test.description)
-		pool := NewServiceTranslator(testClusterName, test.service, test.options, nil).createEdgeLBPoolObject()
+		// Create and customize a mock EdgeLB manager.
+		manager := new(edgelbmanagertestutil.MockEdgeLBManager)
+		manager.On("PoolGroup").Return(testEdgeLBPoolGroup)
+		pool := NewServiceTranslator(testClusterName, test.service, test.options, manager).createEdgeLBPoolObject()
+		assert.Equal(t, testEdgeLBPoolGroup, *pool.Namespace)
 		assert.Equal(t, test.expectedName, pool.Name)
 		assert.Equal(t, test.expectedRole, pool.Role)
 		assert.Equal(t, test.expectedCpus, pool.Cpus)
@@ -310,8 +317,11 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Logf("test case: %s", test.description)
+		// Create and customize a mock EdgeLB manager.
+		manager := new(edgelbmanagertestutil.MockEdgeLBManager)
+		manager.On("PoolGroup").Return(testEdgeLBPoolGroup)
 		// Update the EdgeLB pool object in-place.
-		mustUpdate, _ := NewServiceTranslator(testClusterName, test.service, test.options, nil).updateEdgeLBPoolObject(test.pool)
+		mustUpdate, _ := NewServiceTranslator(testClusterName, test.service, test.options, manager).updateEdgeLBPoolObject(test.pool)
 		// Check that the need for a pool update was adequately detected.
 		assert.Equal(t, test.expectedWasChanged, mustUpdate)
 		// Check that all expected backends are present.

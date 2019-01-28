@@ -21,6 +21,8 @@ import (
 const (
 	// testClusterName is the value used as the name of the Kubernetes cluster in the current file.
 	testClusterName = "dev/kubernetes01"
+	// testEdgeLBPoolGroup is the value used as the name of the DC/OS service group in which to create EdgeLB pools.
+	testEdgeLBPoolGroup = "foo/bar/dcos-edgelb/pools"
 )
 
 func TestServiceTranslator_Translate(t *testing.T) {
@@ -128,6 +130,7 @@ func TestServiceTranslator_Translate(t *testing.T) {
 		// Create and customize a mock EdgeLB manager.
 		m := new(edgelbmanagertestutil.MockEdgeLBManager)
 		test.mockCustomizer(m)
+		m.On("PoolGroup").Return(testEdgeLBPoolGroup)
 		// Perform translation of the Service resource.
 		err := translator.NewServiceTranslator(testClusterName, test.service, test.options, m).Translate()
 		if test.expectedError != nil {

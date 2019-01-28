@@ -23,6 +23,8 @@ type EdgeLBManagerOptions struct {
 	InsecureSkipTLSVerify bool
 	// Path is the path at which the EdgeLB API server can be reached.
 	Path string
+	// PoolGroup is the DC/OS service group in which to create EdgeLB pools.
+	PoolGroup string
 	// Scheme is the scheme to use when communicating with the EdgeLB API server.
 	Scheme string
 }
@@ -39,6 +41,8 @@ type EdgeLBManager interface {
 	GetPoolByName(context.Context, string) (*edgelbmodels.V2Pool, error)
 	// GetVersion returns the current version of EdgeLB.
 	GetVersion(context.Context) (string, error)
+	// PoolGroup returns the DC/OS service group in which to create EdgeLB pools.
+	PoolGroup() string
 	// UpdatePool updates the specified EdgeLB pool in the EdgeLB API server.
 	UpdatePool(context.Context, *edgelbmodels.V2Pool) (*edgelbmodels.V2Pool, error)
 }
@@ -48,6 +52,8 @@ type EdgeLBManager interface {
 type edgeLBManager struct {
 	// client is a client for the EdgeLB API server.
 	client *edgelbclient.DcosEdgeLb
+	// poolGroup is the DC/OS service group in which to create EdgeLB pools.
+	poolGroup string
 }
 
 // NewEdgeLBManager creates a new instance of EdgeLBManager configured according to the provided options.
@@ -85,7 +91,8 @@ func NewEdgeLBManager(opts EdgeLBManagerOptions) (EdgeLBManager, error) {
 
 	// Return a new instance of "edgeLBManager" that uses the specified transport.
 	return &edgeLBManager{
-		client: edgelbclient.New(t, strfmt.Default),
+		client:    edgelbclient.New(t, strfmt.Default),
+		poolGroup: opts.PoolGroup,
 	}, nil
 }
 
@@ -153,6 +160,11 @@ func (m *edgeLBManager) GetVersion(ctx context.Context) (string, error) {
 		return "", errors.Unknown(err)
 	}
 	return r.Payload, nil
+}
+
+// PoolGroup returns the DC/OS service group in which to create EdgeLB pools.
+func (m *edgeLBManager) PoolGroup() string {
+	return m.poolGroup
 }
 
 // UpdatePool updates the specified EdgeLB pool in the EdgeLB API server.

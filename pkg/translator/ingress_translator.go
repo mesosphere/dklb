@@ -47,6 +47,8 @@ type IngressTranslator struct {
 	logger *log.Entry
 	// recorder is the event recorder used to emit events associated with a given Ingress resource.
 	recorder record.EventRecorder
+	// poolGroup is the DC/OS service group in which to create EdgeLB pools.
+	poolGroup string
 }
 
 // NewIngressTranslator returns an ingress translator that can be used to translate the specified Ingress resource into an EdgeLB pool.
@@ -60,6 +62,7 @@ func NewIngressTranslator(clusterName string, ingress *extsv1beta1.Ingress, opti
 		manager:   manager,
 		logger:    log.WithField("ingress", kubernetesutil.Key(ingress)),
 		recorder:  recorder,
+		poolGroup: manager.PoolGroup(),
 	}
 }
 
@@ -274,7 +277,7 @@ func (it *IngressTranslator) createEdgeLBPoolObject(backendMap IngressBackendNod
 	// Create the base EdgeLB pool object.
 	p := &models.V2Pool{
 		Name:      it.options.EdgeLBPoolName,
-		Namespace: &DefaultEdgeLBPoolNamespace,
+		Namespace: &it.poolGroup,
 		Role:      it.options.EdgeLBPoolRole,
 		Cpus:      float64(it.options.EdgeLBPoolCpus.MilliValue()) / 1000,
 		Mem:       int32(it.options.EdgeLBPoolMem.Value() / (1024 * 1024)),

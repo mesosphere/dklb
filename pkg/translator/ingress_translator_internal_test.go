@@ -17,6 +17,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/util/pointers"
 	cachetestutil "github.com/mesosphere/dklb/test/util/cache"
+	edgelbmanagertestutil "github.com/mesosphere/dklb/test/util/edgelb/manager"
 	edgelbpooltestutil "github.com/mesosphere/dklb/test/util/edgelb/pool"
 	ingresstestutil "github.com/mesosphere/dklb/test/util/kubernetes/ingress"
 	servicetestutil "github.com/mesosphere/dklb/test/util/kubernetes/service"
@@ -277,15 +278,19 @@ func TestCreateEdgeLBPoolObjectForIngress(t *testing.T) {
 		t.Logf("test case: %s", test.description)
 		// Create a mock KubernetesResourceCache.
 		kubeCache := cachetestutil.NewFakeKubernetesResourceCache(test.resources...)
+		// Create and customize a mock EdgeLB manager.
+		manager := new(edgelbmanagertestutil.MockEdgeLBManager)
+		manager.On("PoolGroup").Return(testEdgeLBPoolGroup)
 		// Create a new fake event recorder.
 		recorder := record.NewFakeRecorder(1)
 		// Create a new instance of the Ingress translator.
-		translator := NewIngressTranslator(testClusterName, test.ingress, test.options, kubeCache, nil, recorder)
+		translator := NewIngressTranslator(testClusterName, test.ingress, test.options, kubeCache, manager, recorder)
 		// Compute the mapping between Ingress backends and Service node ports.
 		m := translator.computeIngressBackendNodePortMap(defaultBackendNodePort)
 		// Create the target EdgeLB pool object.
 		pool := translator.createEdgeLBPoolObject(m)
 		// Make sure the resulting EdgeLB pool object meets our expectations.
+		assert.Equal(t, testEdgeLBPoolGroup, *pool.Namespace)
 		assert.Equal(t, test.expectedName, pool.Name)
 		assert.Equal(t, test.expectedRole, pool.Role)
 		assert.Equal(t, test.expectedCpus, pool.Cpus)
@@ -514,10 +519,13 @@ func TestUpdateEdgeLBPoolObjectForIngress(t *testing.T) {
 		t.Logf("test case: %s", test.description)
 		// Create a mock KubernetesResourceCache.
 		kubeCache := cachetestutil.NewFakeKubernetesResourceCache(test.resources...)
+		// Create and customize a mock EdgeLB manager.
+		manager := new(edgelbmanagertestutil.MockEdgeLBManager)
+		manager.On("PoolGroup").Return(testEdgeLBPoolGroup)
 		// Create a new fake event recorder.
 		recorder := record.NewFakeRecorder(1)
 		// Create a new instance of the Ingress translator.
-		translator := NewIngressTranslator(testClusterName, test.ingress, test.options, kubeCache, nil, recorder)
+		translator := NewIngressTranslator(testClusterName, test.ingress, test.options, kubeCache, manager, recorder)
 		// Compute the mapping between Ingress backends and Service node ports.
 		m := translator.computeIngressBackendNodePortMap(defaultBackendNodePort)
 		// Update the EdgeLB pool object in-place.

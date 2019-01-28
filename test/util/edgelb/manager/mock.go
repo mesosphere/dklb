@@ -46,6 +46,12 @@ func (m *MockEdgeLBManager) GetVersion(ctx context.Context) (string, error) {
 	return args.String(0), args.Error(0)
 }
 
+// PoolGroup returns the DC/OS service group in which to create EdgeLB pools.
+func (m *MockEdgeLBManager) PoolGroup() string {
+	args := m.Called()
+	return args.String(0)
+}
+
 // UpdatePool updates the specified EdgeLB pool in the EdgeLB API server.
 func (m *MockEdgeLBManager) UpdatePool(ctx context.Context, pool *edgelbmodels.V2Pool) (*edgelbmodels.V2Pool, error) {
 	args := m.Called(ctx)
