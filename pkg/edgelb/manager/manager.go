@@ -39,6 +39,8 @@ type EdgeLBManager interface {
 	GetPools(ctx context.Context) ([]*edgelbmodels.V2Pool, error)
 	// GetPool returns the EdgeLB pool with the specified name.
 	GetPool(context.Context, string) (*edgelbmodels.V2Pool, error)
+	// GetPoolMetadata returns the metadata associated with the specified EdgeLB pool
+	GetPoolMetadata(context.Context, string) (*edgelbmodels.V2PoolMetadata, error)
 	// GetVersion returns the current version of EdgeLB.
 	GetVersion(context.Context) (string, error)
 	// PoolGroup returns the DC/OS service group in which to create EdgeLB pools.
@@ -148,6 +150,22 @@ func (m *edgeLBManager) GetPool(ctx context.Context, name string) (*edgelbmodels
 		return r.Payload, nil
 	}
 	if err, ok := err.(*edgelboperations.V2GetPoolDefault); ok && err.Code() == 404 {
+		return nil, errors.NotFound(err)
+	}
+	return nil, errors.Unknown(err)
+}
+
+// GetPoolMetadata returns the metadata associated with the specified EdgeLB pool
+func (m *edgeLBManager) GetPoolMetadata(ctx context.Context, name string) (*edgelbmodels.V2PoolMetadata, error) {
+	p := &edgelboperations.V2GetPoolMetadataParams{
+		Context: ctx,
+		Name:    name,
+	}
+	r, err := m.client.Operations.V2GetPoolMetadata(p)
+	if err == nil {
+		return r.Payload, nil
+	}
+	if err, ok := err.(*edgelboperations.V2GetPoolMetadataDefault); ok && err.Code() == 404 {
 		return nil, errors.NotFound(err)
 	}
 	return nil, errors.Unknown(err)

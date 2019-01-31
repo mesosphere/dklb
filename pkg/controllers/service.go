@@ -145,14 +145,16 @@ func (c *ServiceController) processQueueItem(workItem WorkItem) error {
 	prettyprint.LogfSpew(log.Tracef, options, "computed service translation options for %q", workItem.Key)
 
 	// Perform translation of the Service resource into an EdgeLB pool.
-	if err := translator.NewServiceTranslator(c.clusterName, service, *options, c.edgelbManager).Translate(); err != nil {
+	status, err := translator.NewServiceTranslator(c.clusterName, service, *options, c.edgelbManager).Translate()
+	if err != nil {
 		er.Eventf(service, corev1.EventTypeWarning, constants.ReasonTranslationError, "failed to translate service: %v", err)
 		c.logger.Errorf("failed to translate service %q: %v", workItem.Key, err)
 		return err
 	}
 
 	// Update the status of the Service resource if it hasn't been deleted.
-	if service.ObjectMeta.DeletionTimestamp == nil {
+	if service.ObjectMeta.DeletionTimestamp == nil && status != nil {
+		service.Status = corev1.ServiceStatus{LoadBalancer: *status}
 		if _, err := c.kubeClient.CoreV1().Services(service.Namespace).UpdateStatus(service); err != nil {
 			c.logger.Errorf("failed to update status for service %q: %v", workItem.Key, err)
 			return err

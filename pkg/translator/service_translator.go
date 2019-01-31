@@ -45,11 +45,11 @@ func NewServiceTranslator(clusterName string, service *corev1.Service, options S
 }
 
 // Translate performs translation of the associated Service resource into an EdgeLB pool.
-func (st *ServiceTranslator) Translate() error {
+func (st *ServiceTranslator) Translate() (*corev1.LoadBalancerStatus, error) {
 	// Return immediately if pool translation is paused.
 	if st.options.EdgeLBPoolTranslationPaused {
 		st.logger.Warnf("skipping translation of %q as translation is paused for the resource", kubernetesutil.Key(st.service))
-		return nil
+		return nil, nil
 	}
 
 	// Check whether a pool with the requested name already exists in EdgeLB.
@@ -58,7 +58,7 @@ func (st *ServiceTranslator) Translate() error {
 	pool, err := st.manager.GetPool(ctx, st.options.EdgeLBPoolName)
 	if err != nil {
 		if !dklberrors.IsNotFound(err) {
-			return fmt.Errorf("failed to check for the existence of the %q edgelb pool: %v", st.options.EdgeLBPoolName, err)
+			return nil, fmt.Errorf("failed to check for the existence of the %q edgelb pool: %v", st.options.EdgeLBPoolName, err)
 		}
 	}
 	// If the target EdgeLB pool does not exist, we must try to create it,
@@ -72,35 +72,36 @@ func (st *ServiceTranslator) Translate() error {
 // createEdgeLBPool makes a decision on whether an EdgeLB pool should be created for the associated Service resource.
 // This decision is based on the pool creation strategy specified for the Service resource.
 // In case it should be created, it proceeds to actually creating it.
-func (st *ServiceTranslator) createEdgeLBPool() error {
+func (st *ServiceTranslator) createEdgeLBPool() (*corev1.LoadBalancerStatus, error) {
 	// If the pool creation strategy is "Never", the target pool must be provisioned manually.
 	// Hence, we should just exit.
 	if st.options.EdgeLBPoolCreationStrategy == constants.EdgeLBPoolCreationStrategyNever {
-		return fmt.Errorf("edgelb pool %q targeted by service %q does not exist, but the pool creation strategy is %q", st.options.EdgeLBPoolName, kubernetesutil.Key(st.service), st.options.EdgeLBPoolCreationStrategy)
+		return nil, fmt.Errorf("edgelb pool %q targeted by service %q does not exist, but the pool creation strategy is %q", st.options.EdgeLBPoolName, kubernetesutil.Key(st.service), st.options.EdgeLBPoolCreationStrategy)
 	}
 
 	// If the Service resource's ".status" field contains at least one IP/host, that means a pool has once existed, but has been deleted manually.
 	// Hence, and if the pool creation strategy is "Once", we should also just exit.
 	if len(st.service.Status.LoadBalancer.Ingress) > 0 && st.options.EdgeLBPoolCreationStrategy == constants.EdgeLBPoolCreationStrategyOnce {
-		return fmt.Errorf("edgelb pool %q targeted by service %q has probably been manually deleted, and the pool creation strategy is %q", st.options.EdgeLBPoolName, kubernetesutil.Key(st.service), st.options.EdgeLBPoolCreationStrategy)
+		return nil, fmt.Errorf("edgelb pool %q targeted by service %q has probably been manually deleted, and the pool creation strategy is %q", st.options.EdgeLBPoolName, kubernetesutil.Key(st.service), st.options.EdgeLBPoolCreationStrategy)
 	}
 
 	// At this point, we know that we must create the target EdgeLB pool based on the specified options.
-	// TODO (@bcustodio) Wait for the pool to be provisioned and check for its IP(s) so that the service resource's ".status" field can be updated.
 	pool := st.createEdgeLBPoolObject()
-	// Print the compputed EdgeLB pool object in "spew" and JSON formats.
+	// Print the computed EdgeLB pool object in "spew" and JSON formats.
 	prettyprint.LogfSpew(log.Tracef, pool, "computed edgelb pool object for service %q", kubernetesutil.Key(st.service))
 	prettyprint.LogfJSON(log.Debugf, pool, "computed edgelb pool object for service %q", kubernetesutil.Key(st.service))
 	ctx, fn := context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
 	defer fn()
-	_, err := st.manager.CreatePool(ctx, pool)
-	return err
+	if _, err := st.manager.CreatePool(ctx, pool); err != nil {
+		return nil, err
+	}
+	return computeLoadBalancerStatus(st.manager, pool.Name, st.clusterName, st.service)
 }
 
 // updateOrDeleteEdgeLBPool makes a decision on whether the specified EdgeLB pool should be updated/deleted based on the current status of the associated Service resource.
 // In case it should be updated/deleted, it proceeds to actually updating/deleting it.
 // TODO (@bcustodio) Decide whether we should also update the pool's role and its CPU/memory/size requests when updating a pool.
-func (st *ServiceTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool) error {
+func (st *ServiceTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool) (*corev1.LoadBalancerStatus, error) {
 	// Check whether the pool object must be updated.
 	wasChanged, report := st.updateEdgeLBPoolObject(pool)
 	// Report the status of the pool.
@@ -109,15 +110,13 @@ func (st *ServiceTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool) error
 	prettyprint.LogfSpew(log.Tracef, pool, "computed edgelb pool object for service %q", kubernetesutil.Key(st.service))
 	prettyprint.LogfJSON(log.Debugf, pool, "computed edgelb pool object for service %q", kubernetesutil.Key(st.service))
 
-	// If the pool doesn't need to be updated, we just return.
+	// If the pool doesn't need to be updated, we just compute and return an updated "LoadBalancerStatus" object.
 	if !wasChanged {
 		st.logger.Debugf("edgelb pool %q is synced", pool.Name)
-		return nil
+		return computeLoadBalancerStatus(st.manager, pool.Name, st.clusterName, st.service)
 	}
 
 	// At this point we know that the pool must be either updated or deleted.
-	// If the pool is empty (i.e. it has no frontends or backends) we proceed to deleting it.
-	// Otherwise, we proceed to updating it.
 
 	var (
 		err error
@@ -128,17 +127,22 @@ func (st *ServiceTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool) error
 	ctx, fn = context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
 	defer fn()
 
+	// If the pool is empty (i.e. it has no frontends or backends) we proceed to deleting it and reporting an empty status.
 	if len(pool.Haproxy.Frontends) == 0 && len(pool.Haproxy.Backends) == 0 {
-		// The pool is empty, so we delete it.
+		// The pool is empty, so we must delete it.
 		st.logger.Debugf("edgelb pool %q is empty and must be deleted", pool.Name)
-		err = st.manager.DeletePool(ctx, pool.Name)
-	} else {
-		// The pool is not empty, so we update it.
-		st.logger.Debugf("edgelb pool %q must be updated", pool.Name)
-		_, err = st.manager.UpdatePool(ctx, pool)
+		if err := st.manager.DeletePool(ctx, pool.Name); err != nil {
+			return nil, err
+		}
+		return &corev1.LoadBalancerStatus{}, err
 	}
 
-	return err
+	// The pool is not empty, so we proceed to actually updating it and reporting its status.
+	st.logger.Debugf("edgelb pool %q must be updated", pool.Name)
+	if _, err := st.manager.UpdatePool(ctx, pool); err != nil {
+		return nil, err
+	}
+	return computeLoadBalancerStatus(st.manager, pool.Name, st.clusterName, st.service)
 }
 
 // createEdgeLBPoolObject creates an EdgeLB pool object that satisfies the current Service resource.

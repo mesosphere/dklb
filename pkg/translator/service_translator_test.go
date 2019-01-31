@@ -131,13 +131,16 @@ func TestServiceTranslator_Translate(t *testing.T) {
 		m := new(edgelbmanagertestutil.MockEdgeLBManager)
 		test.mockCustomizer(m)
 		m.On("PoolGroup").Return(testEdgeLBPoolGroup)
+		m.On("GetPoolMetadata", mock.Anything, mock.Anything).Return(&models.V2PoolMetadata{}, nil)
 		// Perform translation of the Service resource.
-		err := translator.NewServiceTranslator(testClusterName, test.service, test.options, m).Translate()
+		status, err := translator.NewServiceTranslator(testClusterName, test.service, test.options, m).Translate()
 		if test.expectedError != nil {
 			// Make sure we've got the expected error.
+			assert.Nil(t, status)
 			assert.Equal(t, test.expectedError, err)
 		} else {
 			// Make sure that we haven't got any errors, and that all expected method calls were performed.
+			assert.Equal(t, &v1.LoadBalancerStatus{}, status)
 			assert.NoError(t, err)
 			m.AssertExpectations(t)
 		}

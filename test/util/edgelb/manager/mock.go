@@ -40,6 +40,12 @@ func (m *MockEdgeLBManager) GetPool(ctx context.Context, name string) (*edgelbmo
 	return args.Get(0).(*edgelbmodels.V2Pool), args.Error(1)
 }
 
+// GetPoolMetadata returns the metadata associated with the specified EdgeLB pool
+func (m *MockEdgeLBManager) GetPoolMetadata(ctx context.Context, name string) (*edgelbmodels.V2PoolMetadata, error) {
+	args := m.Called(ctx, name)
+	return args.Get(0).(*edgelbmodels.V2PoolMetadata), args.Error(1)
+}
+
 // GetVersion returns the current version of EdgeLB.
 func (m *MockEdgeLBManager) GetVersion(ctx context.Context) (string, error) {
 	args := m.Called(ctx)

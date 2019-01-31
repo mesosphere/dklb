@@ -191,15 +191,18 @@ func TestIngressTranslator_Translate(t *testing.T) {
 		m := new(edgelbmanagertestutil.MockEdgeLBManager)
 		test.mockCustomizer(m)
 		m.On("PoolGroup").Return(testEdgeLBPoolGroup)
+		m.On("GetPoolMetadata", mock.Anything, mock.Anything).Return(&models.V2PoolMetadata{}, nil)
 		// Create a new fake event recorder.
 		recorder := record.NewFakeRecorder(1)
 		// Perform translation of the Ingress resource.
-		err := translator.NewIngressTranslator(testClusterName, test.ingress, test.options, k, m, recorder).Translate()
+		status, err := translator.NewIngressTranslator(testClusterName, test.ingress, test.options, k, m, recorder).Translate()
 		if test.expectedError != nil {
 			// Make sure we've got the expected error.
+			assert.Nil(t, status)
 			assert.Equal(t, test.expectedError, err)
 		} else {
 			// Make sure that we haven't got any errors, and that all expected method calls were performed.
+			assert.Equal(t, &corev1.LoadBalancerStatus{}, status)
 			assert.NoError(t, err)
 			m.AssertExpectations(t)
 		}

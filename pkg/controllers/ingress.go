@@ -160,14 +160,16 @@ func (c *IngressController) processQueueItem(workItem WorkItem) error {
 	prettyprint.LogfSpew(log.Tracef, options, "computed ingress translation options for %q", workItem.Key)
 
 	// Perform translation of the Ingress resource into an EdgeLB pool.
-	if err := translator.NewIngressTranslator(c.clusterName, ingress, *options, c.kubeCache, c.edgelbManager, er).Translate(); err != nil {
+	status, err := translator.NewIngressTranslator(c.clusterName, ingress, *options, c.kubeCache, c.edgelbManager, er).Translate()
+	if err != nil {
 		er.Eventf(ingress, corev1.EventTypeWarning, constants.ReasonTranslationError, "failed to translate ingress: %v", err)
 		c.logger.Errorf("failed to translate ingress %q: %v", workItem.Key, err)
 		return err
 	}
 
 	// Update the status of the Ingress resource if it hasn't been deleted.
-	if ingress.ObjectMeta.DeletionTimestamp == nil {
+	if ingress.ObjectMeta.DeletionTimestamp == nil && status != nil {
+		ingress.Status = extsv1beta1.IngressStatus{LoadBalancer: *status}
 		if _, err := c.kubeClient.ExtensionsV1beta1().Ingresses(ingress.Namespace).UpdateStatus(ingress); err != nil {
 			c.logger.Errorf("failed to update status for ingress %q: %v", workItem.Key, err)
 			return err

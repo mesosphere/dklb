@@ -67,17 +67,17 @@ func NewIngressTranslator(clusterName string, ingress *extsv1beta1.Ingress, opti
 }
 
 // Translate performs translation of the associated Ingress resource into an EdgeLB pool.
-func (it *IngressTranslator) Translate() error {
+func (it *IngressTranslator) Translate() (*corev1.LoadBalancerStatus, error) {
 	// Attempt to determine the node port at which the default backend is exposed.
 	defaultBackendNodePort, err := it.determineDefaultBackendNodePort()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Return immediately if translation is paused.
 	if it.options.EdgeLBPoolTranslationPaused {
 		it.logger.Warnf("skipping translation of %q as translation is paused for the resource", kubernetesutil.Key(it.ingress))
-		return nil
+		return nil, nil
 	}
 
 	// Compute the mapping between Ingress backends defined on the current Ingress resource and their target node ports.
@@ -89,7 +89,7 @@ func (it *IngressTranslator) Translate() error {
 	pool, err := it.manager.GetPool(ctx, it.options.EdgeLBPoolName)
 	if err != nil {
 		if !dklberrors.IsNotFound(err) {
-			return fmt.Errorf("failed to check for the existence of the %q edgelb pool: %v", it.options.EdgeLBPoolName, err)
+			return nil, fmt.Errorf("failed to check for the existence of the %q edgelb pool: %v", it.options.EdgeLBPoolName, err)
 		}
 	}
 	// If the target EdgeLB pool does not exist, we must try to create it,
@@ -192,35 +192,36 @@ func (it *IngressTranslator) computeNodePortForIngressBackend(backend extsv1beta
 // createEdgeLBPool makes a decision on whether an EdgeLB pool should be created for the associated Ingress resource.
 // This decision is based on the EdgeLB pool creation strategy specified for the Ingress resource.
 // In case it should be created, it proceeds to actually creating it.
-func (it *IngressTranslator) createEdgeLBPool(backendMap IngressBackendNodePortMap) error {
+func (it *IngressTranslator) createEdgeLBPool(backendMap IngressBackendNodePortMap) (*corev1.LoadBalancerStatus, error) {
 	// If the pool creation strategy is "Never", the target EdgeLB pool must be provisioned manually.
 	// Hence, we should just exit.
 	if it.options.EdgeLBPoolCreationStrategy == constants.EdgeLBPoolCreationStrategyNever {
-		return fmt.Errorf("edgelb pool %q targeted by ingress %q does not exist, but the pool creation strategy is %q", it.options.EdgeLBPoolName, kubernetesutil.Key(it.ingress), it.options.EdgeLBPoolCreationStrategy)
+		return nil, fmt.Errorf("edgelb pool %q targeted by ingress %q does not exist, but the pool creation strategy is %q", it.options.EdgeLBPoolName, kubernetesutil.Key(it.ingress), it.options.EdgeLBPoolCreationStrategy)
 	}
 
 	// If the Ingress resource's ".status" field contains at least one IP/host, that means an EdgeLB pool has once existed, but has been deleted manually.
 	// Hence, and if the EdgeLB pool creation strategy is "Once", we should also just exit.
 	if len(it.ingress.Status.LoadBalancer.Ingress) > 0 && it.options.EdgeLBPoolCreationStrategy == constants.EdgeLBPoolCreationStrategyOnce {
-		return fmt.Errorf("edgelb pool %q targeted by ingress %q has probably been manually deleted, and the pool creation strategy is %q", it.options.EdgeLBPoolName, kubernetesutil.Key(it.ingress), it.options.EdgeLBPoolCreationStrategy)
+		return nil, fmt.Errorf("edgelb pool %q targeted by ingress %q has probably been manually deleted, and the pool creation strategy is %q", it.options.EdgeLBPoolName, kubernetesutil.Key(it.ingress), it.options.EdgeLBPoolCreationStrategy)
 	}
 
 	// At this point, we know that we must create the target EdgeLB pool based on the specified options and Ingress backend map.
-	// TODO (@bcustodio) Wait for the EdgeLB pool to be provisioned and check for its IP(s) so that the Ingress resource's ".status" field can be updated.
 	pool := it.createEdgeLBPoolObject(backendMap)
 	// Print the compputed EdgeLB pool object in "spew" and JSON formats.
 	prettyprint.LogfSpew(log.Tracef, pool, "computed edgelb pool object for ingress %q", kubernetesutil.Key(it.ingress))
 	prettyprint.LogfJSON(log.Debugf, pool, "computed edgelb pool object for ingress %q", kubernetesutil.Key(it.ingress))
 	ctx, fn := context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
 	defer fn()
-	_, err := it.manager.CreatePool(ctx, pool)
-	return err
+	if _, err := it.manager.CreatePool(ctx, pool); err != nil {
+		return nil, err
+	}
+	return computeLoadBalancerStatus(it.manager, pool.Name, it.clusterName, it.ingress)
 }
 
 // updateOrDeleteEdgeLBPool makes a decision on whether the specified EdgeLB pool should be updated/deleted based on the current status of the associated Ingress resource.
 // In case it should be updated/deleted, it proceeds to actually updating/deleting it.
 // TODO (@bcustodio) Decide whether we should also update the EdgeLB pool's role and its CPU/memory/size requests.
-func (it *IngressTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool, backendMap IngressBackendNodePortMap) error {
+func (it *IngressTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool, backendMap IngressBackendNodePortMap) (*corev1.LoadBalancerStatus, error) {
 	// Check whether the EdgeLB pool object must be updated.
 	wasChanged, report := it.updateEdgeLBPoolObject(pool, backendMap)
 	// Report the status of the EdgeLB pool.
@@ -229,15 +230,13 @@ func (it *IngressTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool, backe
 	prettyprint.LogfSpew(log.Tracef, pool, "computed edgelb pool object for ingress %q", kubernetesutil.Key(it.ingress))
 	prettyprint.LogfJSON(log.Debugf, pool, "computed edgelb pool object for ingress %q", kubernetesutil.Key(it.ingress))
 
-	// If the EdgeLB pool doesn't need to be updated, we just return.
+	// If the EdgeLB pool doesn't need to be updated, we just compute and return an updated "LoadBalancerStatus" object.
 	if !wasChanged {
 		it.logger.Debugf("edgelb pool %q is synced", pool.Name)
-		return nil
+		return computeLoadBalancerStatus(it.manager, pool.Name, it.clusterName, it.ingress)
 	}
 
 	// At this point we know that the EdgeLB pool must be either updated or deleted.
-	// If the EdgeLB pool is empty (i.e. it has no EdgeLB frontends or EdgeLB backends) we proceed to deleting it.
-	// Otherwise, we proceed to updating it.
 
 	var (
 		err error
@@ -248,17 +247,22 @@ func (it *IngressTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool, backe
 	ctx, fn = context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
 	defer fn()
 
+	// If the EdgeLB pool is empty (i.e. it has no EdgeLB frontends or EdgeLB backends) we proceed to deleting it and reporting an empty status.
 	if len(pool.Haproxy.Frontends) == 0 && len(pool.Haproxy.Backends) == 0 {
 		// The EdgeLB pool is empty, so we delete it.
 		it.logger.Debugf("edgelb pool %q is empty and must be deleted", pool.Name)
-		err = it.manager.DeletePool(ctx, pool.Name)
-	} else {
-		// The EdgeLB pool is not empty, so we update it.
-		it.logger.Debugf("edgelb pool %q must be updated", pool.Name)
-		_, err = it.manager.UpdatePool(ctx, pool)
+		if err := it.manager.DeletePool(ctx, pool.Name); err != nil {
+			return nil, err
+		}
+		return &corev1.LoadBalancerStatus{}, err
 	}
 
-	return err
+	// The pool is not empty, so we proceed to actually updating it and reporting its status.
+	it.logger.Debugf("edgelb pool %q must be updated", pool.Name)
+	if _, err := it.manager.UpdatePool(ctx, pool); err != nil {
+		return nil, err
+	}
+	return computeLoadBalancerStatus(it.manager, pool.Name, it.clusterName, it.ingress)
 }
 
 // createEdgeLBPoolObject creates an EdgeLB pool object that satisfies the current Ingress resource.
