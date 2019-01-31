@@ -215,7 +215,8 @@ func (it *IngressTranslator) createEdgeLBPool(backendMap IngressBackendNodePortM
 	if _, err := it.manager.CreatePool(ctx, pool); err != nil {
 		return nil, err
 	}
-	return computeLoadBalancerStatus(it.manager, pool.Name, it.clusterName, it.ingress)
+	// Compute and return the status of the load-balancer.
+	return computeLoadBalancerStatus(it.manager, pool.Name, it.clusterName, it.ingress), nil
 }
 
 // updateOrDeleteEdgeLBPool makes a decision on whether the specified EdgeLB pool should be updated/deleted based on the current status of the associated Ingress resource.
@@ -233,18 +234,12 @@ func (it *IngressTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool, backe
 	// If the EdgeLB pool doesn't need to be updated, we just compute and return an updated "LoadBalancerStatus" object.
 	if !wasChanged {
 		it.logger.Debugf("edgelb pool %q is synced", pool.Name)
-		return computeLoadBalancerStatus(it.manager, pool.Name, it.clusterName, it.ingress)
+		return computeLoadBalancerStatus(it.manager, pool.Name, it.clusterName, it.ingress), nil
 	}
 
 	// At this point we know that the EdgeLB pool must be either updated or deleted.
 
-	var (
-		err error
-		ctx context.Context
-		fn  func()
-	)
-
-	ctx, fn = context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
+	ctx, fn := context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
 	defer fn()
 
 	// If the EdgeLB pool is empty (i.e. it has no EdgeLB frontends or EdgeLB backends) we proceed to deleting it and reporting an empty status.
@@ -254,7 +249,7 @@ func (it *IngressTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool, backe
 		if err := it.manager.DeletePool(ctx, pool.Name); err != nil {
 			return nil, err
 		}
-		return &corev1.LoadBalancerStatus{}, err
+		return &corev1.LoadBalancerStatus{}, nil
 	}
 
 	// The pool is not empty, so we proceed to actually updating it and reporting its status.
@@ -262,7 +257,7 @@ func (it *IngressTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool, backe
 	if _, err := it.manager.UpdatePool(ctx, pool); err != nil {
 		return nil, err
 	}
-	return computeLoadBalancerStatus(it.manager, pool.Name, it.clusterName, it.ingress)
+	return computeLoadBalancerStatus(it.manager, pool.Name, it.clusterName, it.ingress), nil
 }
 
 // createEdgeLBPoolObject creates an EdgeLB pool object that satisfies the current Ingress resource.

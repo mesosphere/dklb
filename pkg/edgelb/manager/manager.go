@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	httptransport "github.com/go-openapi/runtime/client"
@@ -165,10 +166,17 @@ func (m *edgeLBManager) GetPoolMetadata(ctx context.Context, name string) (*edge
 	if err == nil {
 		return r.Payload, nil
 	}
-	if err, ok := err.(*edgelboperations.V2GetPoolMetadataDefault); ok && err.Code() == 404 {
-		return nil, errors.NotFound(err)
+	switch err.(type) {
+	case *edgelboperations.V2GetPoolMetadataGatewayTimeout:
+		// The EdgeLB pool's metadata isn't available yet.
+		return nil, errors.NotFound(fmt.Errorf("the edgelb pool's metadata isn't available yet"))
+	case *edgelboperations.V2GetPoolMetadataNotFound:
+		// The EdgeLB pool was not found.
+		return nil, errors.NotFound(fmt.Errorf("edgelb pool not found"))
+	default:
+		// We've faced an unknown error (which includes the endpoint not being available in the current version of EdgeLB).
+		return nil, errors.Unknown(fmt.Errorf("failed to read pool metadata: %v", err))
 	}
-	return nil, errors.Unknown(err)
 }
 
 // GetVersion returns the current version of EdgeLB.

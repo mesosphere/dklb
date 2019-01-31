@@ -123,9 +123,8 @@ func TestComputeLoadBalancerStatus(t *testing.T) {
 		manager := new(edgelbmanagertestutil.MockEdgeLBManager)
 		manager.On("GetPoolMetadata", mock.Anything, mock.Anything).Return(test.metadata, test.err)
 		// Call "computeLoadBalancerStatus" and make sure the returned object matches the expectations.
-		status, err := computeLoadBalancerStatus(manager, "foo", testClusterName, service.DummyServiceResource("foo", "bar"))
+		status := computeLoadBalancerStatus(manager, "foo", testClusterName, service.DummyServiceResource("foo", "bar"))
 		manager.AssertExpectations(t)
 		assert.Equal(t, test.expectedLoadBalancerStatus, status)
-		assert.Equal(t, test.expectedErr, err)
 	}
 }

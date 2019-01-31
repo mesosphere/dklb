@@ -2,25 +2,29 @@ package translator
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
+	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
+	"github.com/mesosphere/dklb/pkg/util/kubernetes"
 )
 
-// computeLoadBalancerStatus builds an "LoadBalancerStatus" object representing the status of the EdgeLB pool with the specified name.
-// The returned object contains all reported DNS names, private IPs and public IPs (in this order).
-func computeLoadBalancerStatus(manager manager.EdgeLBManager, poolName, clusterName string, obj runtime.Object) (*corev1.LoadBalancerStatus, error) {
+// computeLoadBalancerStatus builds a "LoadBalancerStatus" object representing the status of the EdgeLB pool with the specified name.
+// If we're successful in reading the EdgeLB pool's metadata, the returned object contains all reported DNS names, private IPs and public IPs (in this order).
+// Otherwise, the returned object is nil.
+func computeLoadBalancerStatus(manager manager.EdgeLBManager, poolName, clusterName string, obj runtime.Object) *corev1.LoadBalancerStatus {
 	// Retrieve the pool's metadata from the EdgeLB API server.
 	ctx, fn := context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
 	defer fn()
 	m, err := manager.GetPoolMetadata(ctx, poolName)
 	if err != nil {
-		return nil, err
+		// If we've got an error while reading the EdgeLB pool's metadata, log it but do not propagate as that would mark translation as failed.
+		log.Warnf("unable to report status for %q: %v", kubernetes.Key(obj), err)
+		return nil
 	}
 	// Compute the set of DNS names, private IPs and public IPs for the pool by iterating over the list of reported frontends.
 	var (
@@ -41,7 +45,7 @@ func computeLoadBalancerStatus(manager manager.EdgeLBManager, poolName, clusterN
 			m, err := computeIngressOwnedEdgeLBObjectMetadata(frontend.Name)
 			isOwnedByObj = err == nil && m.IsOwnedBy(clusterName, t)
 		default:
-			return nil, fmt.Errorf("invalid object: %v", t)
+			return nil
 		}
 		// If the current frontend doesn't belong to the Service/Ingress resource being processed, we skip it.
 		if !isOwnedByObj {
@@ -80,7 +84,7 @@ func computeLoadBalancerStatus(manager manager.EdgeLBManager, poolName, clusterN
 			IP: ip,
 		})
 	}
-	return res, nil
+	return res
 }
 
 // sortedMapKeys returns a slice containing all keys in the specified map, sorted in increasing order.
