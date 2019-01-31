@@ -231,6 +231,7 @@ var _ = Describe("Service", func() {
 					pool     *models.V2Pool
 					redisPod *corev1.Pod
 					redisSvc *corev1.Service
+					publicIP string
 				)
 
 				// Create a pod running Redis.
@@ -302,10 +303,17 @@ var _ = Describe("Service", func() {
 				Expect(pool.Mem).To(Equal(int32(256)))
 				Expect(pool.Count).To(Equal(pointers.NewInt32(1)))
 
-				// TODO (@bcustodio) Wait for the pool's IP(s) to be reported.
-
-				// Connect to the Redis instance using the EdgeLB pool.
+				// Connect to Redis using the EdgeLB pool.
+				log.Debugf("waiting for the public ip for %q to be reported", kubernetes.Key(redisSvc))
 				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+					// Wait for the pool's public IP to be reported.
+					ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryTimeout)
+					defer fn()
+					publicIP, err = f.WaitForPublicIPForService(ctx, redisSvc)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(publicIP).NotTo(BeEmpty())
+					// Attempt to connect to Redis using the reported IP.
+					log.Debugf("attempting to connect to %q at %q", kubernetes.Key(redisSvc), publicIP)
 					redisClient := redis.NewClient(&redis.Options{
 						Addr: fmt.Sprintf("%s:%s", publicIP, redisSvc.Annotations[portmapAnnotationKey]),
 						DB:   0,
@@ -332,6 +340,7 @@ var _ = Describe("Service", func() {
 						redisPod *corev1.Pod
 						redisSvc *corev1.Service
 						pool     *models.V2Pool
+						publicIP string
 					)
 
 					// Create a pod running Mongo.
@@ -382,11 +391,17 @@ var _ = Describe("Service", func() {
 					})
 					Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
 
-					// TODO (@bcustodio) Wait for the pool's IP(s) to be reported.
-
 					// Wait for Mongo to be reachable.
+					log.Debugf("waiting for the public ip for %q to be reported", kubernetes.Key(mongoSvc))
 					err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
-						// Attempt to connect to Mongo.
+						// Wait for the pool's public IP to be reported.
+						ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryTimeout)
+						defer fn()
+						publicIP, err = f.WaitForPublicIPForService(ctx, mongoSvc)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(publicIP).NotTo(BeEmpty())
+						// Attempt to connect to Mongo using the reported IP.
+						log.Debugf("attempting to connect to %q at %q", kubernetes.Key(mongoSvc), publicIP)
 						ctx1, fn1 := context.WithTimeout(context.Background(), framework.DefaultRetryInterval/2)
 						defer fn1()
 						mongoClient, err := mongo.Connect(ctx1, fmt.Sprintf("mongodb://%s:%d", publicIP, mongoSvc.Spec.Ports[0].Port))
@@ -442,10 +457,17 @@ var _ = Describe("Service", func() {
 					})
 					Expect(err).NotTo(HaveOccurred(), "failed to create redis test service")
 
-					// TODO (@bcustodio) Wait for the pool's IP(s) to be reported.
-
 					// Wait for Redis to be reachable.
+					log.Debugf("waiting for the public ip for %q to be reported", kubernetes.Key(redisSvc))
 					err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+						// Wait for the pool's public IP to be reported.
+						ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryTimeout)
+						defer fn()
+						publicIP, err = f.WaitForPublicIPForService(ctx, redisSvc)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(publicIP).NotTo(BeEmpty())
+						log.Debugf("attempting to connect to %q at %q", kubernetes.Key(redisSvc), publicIP)
+						// Attempt to connect to Redis using the reported IP.
 						redisClient := redis.NewClient(&redis.Options{
 							Addr: fmt.Sprintf("%s:%d", publicIP, redisSvc.Spec.Ports[0].Port),
 							DB:   0,
@@ -489,6 +511,7 @@ var _ = Describe("Service", func() {
 					pool     *models.V2Pool
 					redisPod *corev1.Pod
 					redisSvc *corev1.Service
+					publicIP string
 				)
 
 				// Create a pod running Redis.
@@ -554,7 +577,16 @@ var _ = Describe("Service", func() {
 				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
 
 				// Wait for Redis to be reachable.
+				log.Debugf("waiting for the public ip for %q to be reported", kubernetes.Key(redisSvc))
 				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+					// Wait for the pool's public IP to be reported.
+					ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryTimeout)
+					defer fn()
+					publicIP, err = f.WaitForPublicIPForService(ctx, redisSvc)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(publicIP).NotTo(BeEmpty())
+					// Attempt to connect to Redis using the reported IP.
+					log.Debugf("attempting to connect to %q at %q", kubernetes.Key(redisSvc), publicIP)
 					redisClient := redis.NewClient(&redis.Options{
 						Addr: fmt.Sprintf("%s:%s", publicIP, redisSvc.Annotations[portmapAnnotationKey]),
 						DB:   0,
@@ -567,6 +599,10 @@ var _ = Describe("Service", func() {
 				// Pause translation of the Service resource.
 				// This will cause the service controller to stop processing this resource, and will prevent the pool from being re-created too soon.
 				// This is required in order to prevent https://jira.mesosphere.com/browse/DCOS-46508 from happening due to the controller's resync period elapsing in the meantime.
+				// NOTE: redisSvc must be re-read from the Kubernetes API in order to avoid "409 CONFLICT" errors when updating the resource.
+				// These errors would otherwise happen, as the "service controller" has updated the resource's status in the meantime (in order to report the IPs).
+				redisSvc, err = f.KubeClient.CoreV1().Services(redisSvc.Namespace).Get(redisSvc.Name, metav1.GetOptions{})
+				Expect(err).NotTo(HaveOccurred(), "failed to read an updated version of the service resource")
 				redisSvc.Annotations[constants.EdgeLBPoolTranslationPaused] = "1"
 				redisSvc, err = f.KubeClient.CoreV1().Services(redisSvc.Namespace).Update(redisSvc)
 				Expect(err).NotTo(HaveOccurred(), "failed to set the type of %q to %q", kubernetes.Key(redisSvc), corev1.ServiceTypeNodePort)
@@ -596,7 +632,16 @@ var _ = Describe("Service", func() {
 				Expect(err).NotTo(HaveOccurred(), "failed to set the type of %q to %q", kubernetes.Key(redisSvc), corev1.ServiceTypeNodePort)
 
 				// Wait for the pool to be re-provisioned, making Redis reachable again.
+				log.Debugf("waiting for the public ip for %q to be reported", kubernetes.Key(redisSvc))
 				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+					// Wait for the pool's public IP to be reported.
+					ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryTimeout)
+					defer fn()
+					publicIP, err = f.WaitForPublicIPForService(ctx, redisSvc)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(publicIP).NotTo(BeEmpty())
+					// Attempt to connect to Redis using the reported IP.
+					log.Debugf("attempting to connect to %q at %q", kubernetes.Key(redisSvc), publicIP)
 					redisClient := redis.NewClient(&redis.Options{
 						Addr: fmt.Sprintf("%s:%s", publicIP, redisSvc.Annotations[portmapAnnotationKey]),
 						DB:   0,

@@ -215,6 +215,7 @@ var _ = Describe("Ingress", func() {
 					err      error
 					ingress  *extsv1beta1.Ingress
 					pool     *models.V2Pool
+					publicIP string
 				)
 
 				// Create the first "echo" pod.
@@ -326,10 +327,17 @@ var _ = Describe("Ingress", func() {
 				Expect(pool.Mem).To(Equal(int32(256)))
 				Expect(pool.Count).To(Equal(pointers.NewInt32(1)))
 
-				// TODO (@bcustodio) Wait for the pool's IP(s) to be reported.
-
-				// Wait for the Ingress to be reachable at "<public-ip>".
+				// Wait for the Ingress to be reachable.
+				log.Debugf("waiting for the public ip for %q to be reported", kubernetes.Key(ingress))
 				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+					// Wait for the pool's public IP to be reported.
+					ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryTimeout)
+					defer fn()
+					publicIP, err = f.WaitForPublicIPForIngress(ctx, ingress)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(publicIP).NotTo(BeEmpty())
+					// Attempt to connect to the ingress using the reported IP.
+					log.Debugf("attempting to connect to %q at %q", kubernetes.Key(ingress), publicIP)
 					r, err := f.HTTPClient.Get(fmt.Sprintf("http://%s/", publicIP))
 					if err != nil {
 						log.Debugf("waiting for the ingress to be reachable at %s", publicIP)
@@ -409,7 +417,6 @@ var _ = Describe("Ingress", func() {
 			// Create two temporary namespaces for the test.
 			f.WithTemporaryNamespace(func(namespace1 *corev1.Namespace) {
 				f.WithTemporaryNamespace(func(namespace2 *corev1.Namespace) {
-
 					var (
 						echoPod1 *corev1.Pod
 						echoPod2 *corev1.Pod
@@ -419,6 +426,7 @@ var _ = Describe("Ingress", func() {
 						ingress1 *extsv1beta1.Ingress
 						ingress2 *extsv1beta1.Ingress
 						pool     *models.V2Pool
+						publicIP string
 					)
 
 					// Create the first "echo" pod.
@@ -468,10 +476,17 @@ var _ = Describe("Ingress", func() {
 					})
 					Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
 
-					// TODO (@bcustodio) Wait for the pool's IP(s) to be reported.
-
-					// Wait for the Ingress to be reachable at "http://<public-ip>:18080/foo".
+					// Wait for the Ingress to be reachable.
+					log.Debugf("waiting for the public ip for %q to be reported", kubernetes.Key(ingress1))
 					err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+						// Wait for the pool's public IP to be reported.
+						ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryTimeout)
+						defer fn()
+						publicIP, err = f.WaitForPublicIPForIngress(ctx, ingress1)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(publicIP).NotTo(BeEmpty())
+						// Attempt to connect to the ingress using the reported IP.
+						log.Debugf("attempting to connect to %q at %q", kubernetes.Key(ingress1), publicIP)
 						url := fmt.Sprintf("http://%s:%s/foo", publicIP, ingress1.Annotations[constants.EdgeLBPoolPortAnnotationKey])
 						r, err := f.HTTPClient.Get(url)
 						if err != nil {
@@ -521,8 +536,17 @@ var _ = Describe("Ingress", func() {
 					})
 					Expect(err).NotTo(HaveOccurred(), "failed to create ingress")
 
-					// Wait for the Ingress to be reachable at "http://<public-ip>:28080/foo".
+					// Wait for the Ingress to be reachable.
+					log.Debugf("waiting for the public ip for %q to be reported", kubernetes.Key(ingress2))
 					err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+						// Wait for the pool's public IP to be reported.
+						ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryTimeout)
+						defer fn()
+						publicIP, err = f.WaitForPublicIPForIngress(ctx, ingress2)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(publicIP).NotTo(BeEmpty())
+						// Attempt to connect to the ingress using the reported IP.
+						log.Debugf("attempting to connect to %q at %q", kubernetes.Key(ingress2), publicIP)
 						url := fmt.Sprintf("http://%s:%s/foo", publicIP, ingress2.Annotations[constants.EdgeLBPoolPortAnnotationKey])
 						r, err := f.HTTPClient.Get(url)
 						if err != nil {
@@ -588,6 +612,7 @@ var _ = Describe("Ingress", func() {
 					echoSvc1 *corev1.Service
 					err      error
 					ingress  *extsv1beta1.Ingress
+					publicIP string
 				)
 
 				// Create the first "echo" pod.
@@ -647,10 +672,17 @@ var _ = Describe("Ingress", func() {
 				})
 				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
 
-				// TODO (@bcustodio) Wait for the pool's IP(s) to be reported.
-
-				// Wait for the Ingress to respond with the default backend at "http://<public-ip>/foo".
+				// Wait for the Ingress to respond with the default backend.
+				log.Debugf("waiting for the public ip for %q to be reported", kubernetes.Key(ingress))
 				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+					// Wait for the pool's public IP to be reported.
+					ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryTimeout)
+					defer fn()
+					publicIP, err = f.WaitForPublicIPForIngress(ctx, ingress)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(publicIP).NotTo(BeEmpty())
+					// Attempt to connect to the ingress using the reported IP.
+					log.Debugf("attempting to connect to %q at %q", kubernetes.Key(ingress), publicIP)
 					r, err := f.HTTPClient.Get(fmt.Sprintf("http://%s/foo", publicIP))
 					if err != nil {
 						log.Debugf("waiting for the ingress to be reachable at %s", publicIP)

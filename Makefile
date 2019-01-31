@@ -39,22 +39,16 @@ skaffold:
 
 # test.e2e runs the end-to-end test suite.
 .PHONY: test.e2e
-test.e2e: DCOS_PUBLIC_AGENT_IP :=
 test.e2e: FOCUS ?= .*
 test.e2e: KUBECONFIG ?= $(HOME)/.kube/config
 test.e2e: LOG_LEVEL := info
 test.e2e: TIMEOUT := 1200s
 test.e2e:
-	@if [[ "$(DCOS_PUBLIC_AGENT_IP)" == "" ]]; then \
-		echo "error: DCOS_PUBLIC_AGENT_IP must be set"; \
-		exit 1; \
-	fi
 	@go test -tags e2e $(ROOT_DIR)/test/e2e \
 		-ginkgo.focus="$(FOCUS)" \
 		-ginkgo.v \
 		-test.timeout="$(TIMEOUT)" \
 		-test.v \
-		-dcos-public-agent-ip="$(DCOS_PUBLIC_AGENT_IP)" \
 		-edgelb-bearer-token="$$(dcos config show core.dcos_acs_token)" \
 		-edgelb-host="$$(dcos config show core.dcos_url)" \
 		-edgelb-insecure-skip-tls-verify \

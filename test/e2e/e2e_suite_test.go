@@ -16,9 +16,6 @@ import (
 )
 
 var (
-	// publicIP is the public (external) IP of the DC/OS agent where to deploy EdgeLB pools.
-	// TODO (@bcustodio) Remove once EdgeLB is able to report the private/public IP(s) at which a pool can be reached.
-	publicIP string
 	// edgelbOptions is the set of options used to configure the EdgeLB Manager.
 	edgelbOptions manager.EdgeLBManagerOptions
 	// kubeconfig is the path to the kubeconfig file to use when running outside a Kubernetes cluster.
@@ -33,7 +30,6 @@ var (
 )
 
 func init() {
-	flag.StringVar(&publicIP, "dcos-public-agent-ip", "", "the public (external) ip of the dc/os agent where to deploy edgelb pools")
 	flag.StringVar(&edgelbOptions.BearerToken, "edgelb-bearer-token", "", "the (optional) bearer token to use when communicating with the edgelb api server")
 	flag.StringVar(&edgelbOptions.Host, "edgelb-host", constants.DefaultEdgeLBHost, "the host at which the edgelb api server can be reached")
 	flag.BoolVar(&edgelbOptions.InsecureSkipTLSVerify, "edgelb-insecure-skip-tls-verify", false, "whether to skip verification of the tls certificate presented by the edgelb api server")

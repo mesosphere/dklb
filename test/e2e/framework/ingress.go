@@ -1,9 +1,19 @@
 package framework
 
 import (
-	"github.com/mesosphere/dklb/pkg/constants"
+	"context"
+	"fmt"
+
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime"
+	watchapi "k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/watch"
+
+	"github.com/mesosphere/dklb/pkg/constants"
+	"github.com/mesosphere/dklb/pkg/util/kubernetes"
 )
 
 // IngressCustomizer represents a function that can be used to customize an Ingress resource.
@@ -31,4 +41,58 @@ func (f *Framework) CreateEdgeLBIngress(namespace, name string, fn IngressCustom
 		fn(ingress)
 		ingress.Annotations[constants.EdgeLBIngressClassAnnotationKey] = constants.EdgeLBIngressClassAnnotationValue
 	})
+}
+
+// WaitUntilIngressCondition blocks until the specified condition function is verified, or until the provided context times out.
+func (f *Framework) WaitUntilIngressCondition(ctx context.Context, ingress *extsv1beta1.Ingress, fn watch.ConditionFunc) error {
+	// Create a selector that targets the specified Ingress resource.
+	fs := fields.ParseSelectorOrDie(fmt.Sprintf("metadata.namespace==%s,metadata.name==%s", ingress.Namespace, ingress.Name))
+	// Grab a ListerWatcher with which we can watch the Ingress resource.
+	lw := &cache.ListWatch{
+		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+			options.FieldSelector = fs.String()
+			return f.KubeClient.ExtensionsV1beta1().Ingresses(ingress.Namespace).List(options)
+		},
+		WatchFunc: func(options metav1.ListOptions) (watchapi.Interface, error) {
+			options.FieldSelector = fs.String()
+			return f.KubeClient.ExtensionsV1beta1().Ingresses(ingress.Namespace).Watch(options)
+		},
+	}
+	// Watch for updates to the specified Ingress resource until fn is satisfied.
+	last, err := watch.UntilWithSync(ctx, lw, &extsv1beta1.Ingress{}, nil, fn)
+	if err != nil {
+		return err
+	}
+	if last == nil {
+		return fmt.Errorf("no events received for ingress %q", kubernetes.Key(ingress))
+	}
+	return nil
+}
+
+// WaitForPublicIPForIngress blocks until a public IP is reported for the specified Service resource, or until the provided context times out.
+func (f *Framework) WaitForPublicIPForIngress(ctx context.Context, ingress *extsv1beta1.Ingress) (string, error) {
+	var (
+		result string
+		err    error
+	)
+	// Wait until the Ingress resource reports a non-empty status.
+	err = f.WaitUntilIngressCondition(ctx, ingress, func(event watchapi.Event) (b bool, e error) {
+		switch event.Type {
+		case watchapi.Added:
+			fallthrough
+		case watchapi.Modified:
+			// Iterate over the entries in ".status.loadBalancer.ingress", storing each IP in "result".
+			// This will cause "result" to hold the last reported IP when this function exits.
+			// Due to the way the ".status" object is computed, this is reasonably guaranteed to be a public IP where the ingress can be reached.
+			for _, e := range event.Object.(*extsv1beta1.Ingress).Status.LoadBalancer.Ingress {
+				if e.IP != "" {
+					result = e.IP
+				}
+			}
+			return result != "", nil
+		default:
+			return false, fmt.Errorf("got event of unexpected type %q", event.Type)
+		}
+	})
+	return result, err
 }
