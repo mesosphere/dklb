@@ -31,6 +31,10 @@ In particular, exposing UDP or SCTP services is **NOT** supported.
 To expose a TCP application running on MKE to either inside or outside the DC/OS cluster, a Kubernetes https://kubernetes.io/docs/concepts/services-networking/service/[`Service`] resource of type https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer[`LoadBalancer`] must be created.
 `dklb` will react to this event by provisioning an EdgeLB pool (henceforth referred to as the _target EdgeLB pool_) for the `Service` resource based on its specification.
 
+After provisioning said EdgeLB pool, `dklb` will periodically query EdgeLB in order to obtain the list of hostnames and IPs at which the service can be reached.
+These will eventually be reported on the `.status` field of the `Service` resource.
+It should be noted that, due to the way EdgeLB pool scheduling and metadata reporting works, it may take from a few seconds to several minutes for these hostnames and IPs to be reported.
+
 === Customizing the name of the EdgeLB pool
 
 By default, `dklb` uses the MKE cluster's name and the `Service` resource's namespace and name to compute the name of the target EdgeLB pool.
@@ -208,9 +212,18 @@ This means that `dklb` has successfully created and provisioned the target EdgeL
 
 === Connecting to the Redis instance
 
-As of this writing, `dklb` is still unable to report the IP(s)/name(s) at which the service is exposed.
-Hence, at this point and in order to test connectivity, it is necessary to manually check which public DC/OS agent the target EdgeLB pool was scheduled onto.
-Assuming this IP is `<public-dcos-agent-ip>`, `telnet` may be used to confirm that the Redis instance is correctly exposed to outside the DC/OS cluster:
+To test connectivity, it is necessary to determine the public IP at which the target EdgeLB pool can be reached.
+This IP will eventually be reported in the `.status` field of the `Service` resource:
+
+[source,console]
+----
+$ kubectl get svc --selector "app=redis"
+
+NAME    TYPE           CLUSTER-IP     EXTERNAL-IP              PORT(S)          AGE
+redis   LoadBalancer   10.100.80.96   <public-dcos-agent-ip>   6379:32213/TCP   2m42s
+----
+
+`telnet` may then be used to confirm that the Redis instance is correctly exposed to outside the DC/OS cluster:
 
 [source,console]
 ----

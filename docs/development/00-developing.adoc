@@ -34,7 +34,7 @@ To run `dklb`, the following additional software is required:
 * https://github.com/GoogleContainerTools/skaffold[`skaffold`]
 * A https://dcos.io/[DC/OS] cluster having https://docs.mesosphere.com/services/edge-lb/[EdgeLB] installed.
 ** DC/OS must be v1.12.0 or later.
-** EdgeLB must be https://github.com/mesosphere/dcos-edge-lb/commit/a35988a489ab4d515cd4d023ec0742466a3c272b[`v1.2.3-22-ga35988a`] or later.
+** EdgeLB must be built and installed from the https://github.com/mesosphere/dcos-edge-lb/tree/aws-automation[`aws-automation`] branch.
 ** The DC/OS CLI must be configured to access the DC/OS cluster.
 * An https://mesosphere.com/product/kubernetes-engine/[MKE] cluster.
 ** `kubernetes-cluster` must be https://github.com/mesosphere/dcos-kubernetes-cluster/commit/d74b25e8d7e4e283ba4a66fc0f027669aa4c9fc2[`d74b25e`] or later.
@@ -144,14 +144,12 @@ $ make test.unit
 
 As of this writing, `dklb`'s end-to-end test suite has the following additional requirements:
 
-* The target DC/OS cluster must have a _single_ DC/OS agent with the `slave_public` role;
-** It is assumed that the external IP for said DC/OS agent is `<dcos-public-agent-ip>`.
 * The end-to-end test suite must run from _outside_ the target DC/OS cluster.
 
 To run the end-to-end test suite against the MKE cluster targeted by `$HOME/.kube/config`, the following command may be run:
 
 ```console
-$ make test.e2e DCOS_PUBLIC_AGENT_IP="<dcos-public-agent-ip>"
+$ make test.e2e
 ```
 
 The output of a successful run of the end-to-end test suite will be similar to the following:
@@ -159,9 +157,9 @@ The output of a successful run of the end-to-end test suite will be similar to t
 [source,text]
 ----
 (...)
-Ran 3 of 3 Specs in 328.864 seconds
-SUCCESS! -- 3 Passed | 0 Failed | 0 Pending | 0 Skipped
---- PASS: TestEndToEnd (328.86s)
+Ran 12 of 12 Specs in 987.146 seconds
+SUCCESS! -- 12 Passed | 0 Failed | 0 Pending | 0 Skipped
+--- PASS: TestEndToEnd (987.15s)
 PASS
-ok  	github.com/mesosphere/dklb/test/e2e	328.910s
+ok  	github.com/mesosphere/dklb/test/e2e	987.196s
 ----

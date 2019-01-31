@@ -33,6 +33,10 @@ kubernetes.io/ingress.class: edgelb
 
 `dklb` will react to the creation of such an `Ingress` resource by provisioning an EdgeLB pool (henceforth referred to as the _target EdgeLB pool_) for the `Ingress` resource based on its specification.
 
+After provisioning said EdgeLB pool, `dklb` will periodically query EdgeLB in order to obtain the list of hostnames and IPs at which the ingress can be reached.
+These will eventually be reported on the `.status` field of the `Ingress` resource.
+It should be noted that, due to the way EdgeLB pool scheduling and metadata reporting works, it may take from a few seconds to several minutes for these hostnames and IPs to be reported.
+
 ==== Supported service types
 
 All Kubernetes services used as backends in an `Ingress` resource annotated for provisioning with EdgeLB **MUST** be of type `NodePort` or `LoadBalancer`.
@@ -231,9 +235,17 @@ Host-based routing depends on the establishment of adequate DNS records for each
 Hence, and since DNS configuration is out-of-scope, `curl` will be used to set the required `Host` headers for each request.
 ====
 
-As of this writing, `dklb` is still unable to report the IP(s)/name(s) at which the ingress is exposed.
-Hence, at this point and in order to test connectivity, it is necessary to manually check which public DC/OS agent the target EdgeLB pool was scheduled onto.
-Assuming this IP is `<public-dcos-agent-ip>`, `curl` may be used to confirm that the ingress is correctly exposed to outside the DC/OS cluster:
+To test connectivity, it is necessary to determine the public IP at which the target EdgeLB pool can be reached.
+This IP will eventually be reported in the `.status` field of the `Ingress` resource:
+
+[source,console]
+----
+$ kubectl get ingress --selector "owner=dklb"
+NAME        HOSTS                             ADDRESS                  PORTS   AGE
+dklb-echo   http-echo-1.com,http-echo-2.com   <public-dcos-agent-ip>   80      3s
+----
+
+`curl` may then be used to confirm that the ingress is correctly exposed to outside the DC/OS cluster:
 
 [source,console]
 ----
