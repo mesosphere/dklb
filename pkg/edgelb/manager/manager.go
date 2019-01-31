@@ -37,8 +37,8 @@ type EdgeLBManager interface {
 	DeletePool(context.Context, string) error
 	// GetPools returns the list of EdgeLB pools known to the EdgeLB API server.
 	GetPools(ctx context.Context) ([]*edgelbmodels.V2Pool, error)
-	// GetPoolByName returns the EdgeLB pool with the specified name.
-	GetPoolByName(context.Context, string) (*edgelbmodels.V2Pool, error)
+	// GetPool returns the EdgeLB pool with the specified name.
+	GetPool(context.Context, string) (*edgelbmodels.V2Pool, error)
 	// GetVersion returns the current version of EdgeLB.
 	GetVersion(context.Context) (string, error)
 	// PoolGroup returns the DC/OS service group in which to create EdgeLB pools.
@@ -137,8 +137,8 @@ func (m *edgeLBManager) GetPools(ctx context.Context) ([]*edgelbmodels.V2Pool, e
 	return r.Payload, nil
 }
 
-// GetPoolByName returns the EdgeLB pool with the specified name.
-func (m *edgeLBManager) GetPoolByName(ctx context.Context, name string) (*edgelbmodels.V2Pool, error) {
+// GetPool returns the EdgeLB pool with the specified name.
+func (m *edgeLBManager) GetPool(ctx context.Context, name string) (*edgelbmodels.V2Pool, error) {
 	p := &edgelboperations.V2GetPoolParams{
 		Context: ctx,
 		Name:    name,

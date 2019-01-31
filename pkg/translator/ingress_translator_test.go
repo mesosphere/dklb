@@ -72,7 +72,7 @@ func TestIngressTranslator_Translate(t *testing.T) {
 			}),
 			poolName: "foo-bar",
 			mockCustomizer: func(manager *edgelbmanagertestutil.MockEdgeLBManager) {
-				manager.On("GetPoolByName", mock.Anything, "foo-bar").Return(nil, dklberrors.NotFound(errors.New("not found")))
+				manager.On("GetPool", mock.Anything, "foo-bar").Return(nil, dklberrors.NotFound(errors.New("not found")))
 				manager.On("CreatePool", mock.Anything, mock.Anything).Return(&models.V2Pool{}, nil)
 			},
 			options: translator.IngressTranslationOptions{
@@ -97,7 +97,7 @@ func TestIngressTranslator_Translate(t *testing.T) {
 			}),
 			poolName: "foo-bar",
 			mockCustomizer: func(manager *edgelbmanagertestutil.MockEdgeLBManager) {
-				manager.On("GetPoolByName", mock.Anything, "foo-bar").Return(nil, dklberrors.NotFound(errors.New("not found")))
+				manager.On("GetPool", mock.Anything, "foo-bar").Return(nil, dklberrors.NotFound(errors.New("not found")))
 			},
 			options: translator.IngressTranslationOptions{
 				BaseTranslationOptions: translator.BaseTranslationOptions{
@@ -126,7 +126,7 @@ func TestIngressTranslator_Translate(t *testing.T) {
 			}),
 			poolName: "foo-bar",
 			mockCustomizer: func(manager *edgelbmanagertestutil.MockEdgeLBManager) {
-				manager.On("GetPoolByName", mock.Anything, "foo-bar").Return(nil, dklberrors.NotFound(errors.New("not found")))
+				manager.On("GetPool", mock.Anything, "foo-bar").Return(nil, dklberrors.NotFound(errors.New("not found")))
 			},
 			options: translator.IngressTranslationOptions{
 				BaseTranslationOptions: translator.BaseTranslationOptions{
@@ -169,7 +169,7 @@ func TestIngressTranslator_Translate(t *testing.T) {
 			}),
 			poolName: "foo-bar",
 			mockCustomizer: func(manager *edgelbmanagertestutil.MockEdgeLBManager) {
-				manager.On("GetPoolByName", mock.Anything, "foo-bar").Return(&models.V2Pool{
+				manager.On("GetPool", mock.Anything, "foo-bar").Return(&models.V2Pool{
 					Name:    "foo-bar",
 					Haproxy: &models.V2Haproxy{},
 				}, nil)

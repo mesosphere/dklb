@@ -31,8 +31,8 @@ func (m *MockEdgeLBManager) GetPools(ctx context.Context) ([]*edgelbmodels.V2Poo
 	return args.Get(0).([]*edgelbmodels.V2Pool), args.Error(1)
 }
 
-// GetPoolByName returns the EdgeLB pool with the specified name.
-func (m *MockEdgeLBManager) GetPoolByName(ctx context.Context, name string) (*edgelbmodels.V2Pool, error) {
+// GetPool returns the EdgeLB pool with the specified name.
+func (m *MockEdgeLBManager) GetPool(ctx context.Context, name string) (*edgelbmodels.V2Pool, error) {
 	args := m.Called(ctx, name)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)

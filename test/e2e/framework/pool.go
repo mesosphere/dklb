@@ -21,7 +21,7 @@ func (f *Framework) DeleteEdgeLBPool(pool *models.V2Pool) {
 	err = retry.WithTimeout(DefaultRetryTimeout, DefaultRetryInterval, func() (b bool, e error) {
 		ctx, fn := context.WithTimeout(context.Background(), DefaultEdgeLBOperationTimeout)
 		defer fn()
-		_, err := f.EdgeLBManager.GetPoolByName(ctx, pool.Name)
+		_, err := f.EdgeLBManager.GetPool(ctx, pool.Name)
 		return dklberrors.IsNotFound(err), nil
 	})
 	Expect(err).NotTo(HaveOccurred(), "failed to wait for edgelb pool %q to be deleted", pool.Name)

@@ -55,7 +55,7 @@ func (st *ServiceTranslator) Translate() error {
 	// Check whether a pool with the requested name already exists in EdgeLB.
 	ctx, fn := context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
 	defer fn()
-	pool, err := st.manager.GetPoolByName(ctx, st.options.EdgeLBPoolName)
+	pool, err := st.manager.GetPool(ctx, st.options.EdgeLBPoolName)
 	if err != nil {
 		if !dklberrors.IsNotFound(err) {
 			return fmt.Errorf("failed to check for the existence of the %q edgelb pool: %v", st.options.EdgeLBPoolName, err)

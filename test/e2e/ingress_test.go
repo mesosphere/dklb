@@ -314,7 +314,7 @@ var _ = Describe("Ingress", func() {
 				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
 					ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryInterval/2)
 					defer fn()
-					pool, err = f.EdgeLBManager.GetPoolByName(ctx, ingress.Annotations[constants.EdgeLBPoolNameAnnotationKey])
+					pool, err = f.EdgeLBManager.GetPool(ctx, ingress.Annotations[constants.EdgeLBPoolNameAnnotationKey])
 					return err == nil, nil
 				})
 				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
@@ -463,7 +463,7 @@ var _ = Describe("Ingress", func() {
 					err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
 						ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryInterval/2)
 						defer fn()
-						pool, err = f.EdgeLBManager.GetPoolByName(ctx, ingress1.Annotations[constants.EdgeLBPoolNameAnnotationKey])
+						pool, err = f.EdgeLBManager.GetPool(ctx, ingress1.Annotations[constants.EdgeLBPoolNameAnnotationKey])
 						return err == nil, nil
 					})
 					Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
@@ -642,7 +642,7 @@ var _ = Describe("Ingress", func() {
 				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
 					ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryInterval/2)
 					defer fn()
-					_, err = f.EdgeLBManager.GetPoolByName(ctx, ingress.Annotations[constants.EdgeLBPoolNameAnnotationKey])
+					_, err = f.EdgeLBManager.GetPool(ctx, ingress.Annotations[constants.EdgeLBPoolNameAnnotationKey])
 					return err == nil, nil
 				})
 				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")

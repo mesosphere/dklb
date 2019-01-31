@@ -290,7 +290,7 @@ var _ = Describe("Service", func() {
 				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
 					ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryInterval/2)
 					defer fn()
-					pool, err = f.EdgeLBManager.GetPoolByName(ctx, expectedPoolName)
+					pool, err = f.EdgeLBManager.GetPool(ctx, expectedPoolName)
 					return err == nil, nil
 				})
 				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
@@ -377,7 +377,7 @@ var _ = Describe("Service", func() {
 					err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
 						ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryInterval/2)
 						defer fn()
-						pool, err = f.EdgeLBManager.GetPoolByName(ctx, mongoSvc.Annotations[constants.EdgeLBPoolNameAnnotationKey])
+						pool, err = f.EdgeLBManager.GetPool(ctx, mongoSvc.Annotations[constants.EdgeLBPoolNameAnnotationKey])
 						return err == nil, nil
 					})
 					Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
@@ -548,7 +548,7 @@ var _ = Describe("Service", func() {
 				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
 					ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryInterval/2)
 					defer fn()
-					pool, err = f.EdgeLBManager.GetPoolByName(ctx, expectedPoolName)
+					pool, err = f.EdgeLBManager.GetPool(ctx, expectedPoolName)
 					return err == nil, nil
 				})
 				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
