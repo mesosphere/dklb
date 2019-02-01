@@ -9,6 +9,7 @@ import (
 
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/translator"
+	"github.com/mesosphere/dklb/pkg/util/pointers"
 	servicetestutil "github.com/mesosphere/dklb/test/util/kubernetes/service"
 )
 
@@ -24,7 +25,7 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 		// Test computing options for a Service resource without any annotations.
 		// Make sure the name of the EdgeLB pool is computed as expected, and that the default values are used everywhere else.
 		{
-			description: "compute options for a Service resource without the required annotations",
+			description: "compute options for a Service resource without any annotations",
 			annotations: map[string]string{},
 			ports: []corev1.ServicePort{
 				{
@@ -33,13 +34,14 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 			},
 			options: &translator.ServiceTranslationOptions{
 				BaseTranslationOptions: translator.BaseTranslationOptions{
-					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
-					EdgeLBPoolRole:             translator.DefaultEdgeLBPoolRole,
-					EdgeLBPoolNetwork:          "",
-					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
-					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
-					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
-					EdgeLBPoolCreationStrategy: translator.DefaultEdgeLBPoolCreationStrategy,
+					CloudLoadBalancerConfigMapName: nil,
+					EdgeLBPoolName:                 "dev--kubernetes01--foo--bar",
+					EdgeLBPoolRole:                 translator.DefaultEdgeLBPoolRole,
+					EdgeLBPoolNetwork:              constants.EdgeLBHostNetwork,
+					EdgeLBPoolCpus:                 translator.DefaultEdgeLBPoolCpus,
+					EdgeLBPoolMem:                  translator.DefaultEdgeLBPoolMem,
+					EdgeLBPoolSize:                 translator.DefaultEdgeLBPoolSize,
+					EdgeLBPoolCreationStrategy:     translator.DefaultEdgeLBPoolCreationStrategy,
 				},
 				EdgeLBPoolPortMap: map[int32]int32{
 					80: 80,
@@ -61,13 +63,14 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 			},
 			options: &translator.ServiceTranslationOptions{
 				BaseTranslationOptions: translator.BaseTranslationOptions{
-					EdgeLBPoolName:             "foo",
-					EdgeLBPoolRole:             translator.DefaultEdgeLBPoolRole,
-					EdgeLBPoolNetwork:          "",
-					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
-					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
-					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
-					EdgeLBPoolCreationStrategy: translator.DefaultEdgeLBPoolCreationStrategy,
+					CloudLoadBalancerConfigMapName: nil,
+					EdgeLBPoolName:                 "foo",
+					EdgeLBPoolRole:                 translator.DefaultEdgeLBPoolRole,
+					EdgeLBPoolNetwork:              constants.EdgeLBHostNetwork,
+					EdgeLBPoolCpus:                 translator.DefaultEdgeLBPoolCpus,
+					EdgeLBPoolMem:                  translator.DefaultEdgeLBPoolMem,
+					EdgeLBPoolSize:                 translator.DefaultEdgeLBPoolSize,
+					EdgeLBPoolCreationStrategy:     translator.DefaultEdgeLBPoolCreationStrategy,
 				},
 				EdgeLBPoolPortMap: map[int32]int32{
 					80: 80,
@@ -92,13 +95,14 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 			},
 			options: &translator.ServiceTranslationOptions{
 				BaseTranslationOptions: translator.BaseTranslationOptions{
-					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
-					EdgeLBPoolRole:             translator.DefaultEdgeLBPoolRole,
-					EdgeLBPoolNetwork:          "",
-					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
-					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
-					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
-					EdgeLBPoolCreationStrategy: translator.DefaultEdgeLBPoolCreationStrategy,
+					CloudLoadBalancerConfigMapName: nil,
+					EdgeLBPoolName:                 "dev--kubernetes01--foo--bar",
+					EdgeLBPoolRole:                 translator.DefaultEdgeLBPoolRole,
+					EdgeLBPoolNetwork:              constants.EdgeLBHostNetwork,
+					EdgeLBPoolCpus:                 translator.DefaultEdgeLBPoolCpus,
+					EdgeLBPoolMem:                  translator.DefaultEdgeLBPoolMem,
+					EdgeLBPoolSize:                 translator.DefaultEdgeLBPoolSize,
+					EdgeLBPoolCreationStrategy:     translator.DefaultEdgeLBPoolCreationStrategy,
 				},
 				EdgeLBPoolPortMap: map[int32]int32{
 					80:  8080,
@@ -245,7 +249,7 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 			description: "compute options for a Service resource requested for public exposure in a empty DC/OS virtual network",
 			annotations: map[string]string{
 				constants.EdgeLBPoolRoleAnnotationKey:    constants.EdgeLBRolePublic,
-				constants.EdgeLBPoolNetworkAnnotationKey: "",
+				constants.EdgeLBPoolNetworkAnnotationKey: constants.EdgeLBHostNetwork,
 			},
 			ports: []corev1.ServicePort{
 				{
@@ -254,13 +258,14 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 			},
 			options: &translator.ServiceTranslationOptions{
 				BaseTranslationOptions: translator.BaseTranslationOptions{
-					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
-					EdgeLBPoolRole:             constants.EdgeLBRolePublic,
-					EdgeLBPoolNetwork:          "",
-					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
-					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
-					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
-					EdgeLBPoolCreationStrategy: translator.DefaultEdgeLBPoolCreationStrategy,
+					CloudLoadBalancerConfigMapName: nil,
+					EdgeLBPoolName:                 "dev--kubernetes01--foo--bar",
+					EdgeLBPoolRole:                 constants.EdgeLBRolePublic,
+					EdgeLBPoolNetwork:              constants.EdgeLBHostNetwork,
+					EdgeLBPoolCpus:                 translator.DefaultEdgeLBPoolCpus,
+					EdgeLBPoolMem:                  translator.DefaultEdgeLBPoolMem,
+					EdgeLBPoolSize:                 translator.DefaultEdgeLBPoolSize,
+					EdgeLBPoolCreationStrategy:     translator.DefaultEdgeLBPoolCreationStrategy,
 				},
 				EdgeLBPoolPortMap: map[int32]int32{
 					80: 80,
@@ -290,7 +295,7 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 			description: "compute options for a Service resource requested for \"private\" exposure in an empty DC/OS virtual network",
 			annotations: map[string]string{
 				constants.EdgeLBPoolRoleAnnotationKey:    "foo",
-				constants.EdgeLBPoolNetworkAnnotationKey: "",
+				constants.EdgeLBPoolNetworkAnnotationKey: constants.EdgeLBHostNetwork,
 			},
 			ports: []corev1.ServicePort{
 				{
@@ -299,13 +304,14 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 			},
 			options: &translator.ServiceTranslationOptions{
 				BaseTranslationOptions: translator.BaseTranslationOptions{
-					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
-					EdgeLBPoolRole:             "foo",
-					EdgeLBPoolNetwork:          constants.DefaultDCOSVirtualNetworkName,
-					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
-					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
-					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
-					EdgeLBPoolCreationStrategy: translator.DefaultEdgeLBPoolCreationStrategy,
+					CloudLoadBalancerConfigMapName: nil,
+					EdgeLBPoolName:                 "dev--kubernetes01--foo--bar",
+					EdgeLBPoolRole:                 "foo",
+					EdgeLBPoolNetwork:              constants.DefaultDCOSVirtualNetworkName,
+					EdgeLBPoolCpus:                 translator.DefaultEdgeLBPoolCpus,
+					EdgeLBPoolMem:                  translator.DefaultEdgeLBPoolMem,
+					EdgeLBPoolSize:                 translator.DefaultEdgeLBPoolSize,
+					EdgeLBPoolCreationStrategy:     translator.DefaultEdgeLBPoolCreationStrategy,
 				},
 				EdgeLBPoolPortMap: map[int32]int32{
 					80: 80,
@@ -327,16 +333,45 @@ func TestComputeServiceTranslationOptions(t *testing.T) {
 			},
 			options: &translator.ServiceTranslationOptions{
 				BaseTranslationOptions: translator.BaseTranslationOptions{
-					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
-					EdgeLBPoolRole:             "foo",
-					EdgeLBPoolNetwork:          "bar",
-					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
-					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
-					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
-					EdgeLBPoolCreationStrategy: translator.DefaultEdgeLBPoolCreationStrategy,
+					CloudLoadBalancerConfigMapName: nil,
+					EdgeLBPoolName:                 "dev--kubernetes01--foo--bar",
+					EdgeLBPoolRole:                 "foo",
+					EdgeLBPoolNetwork:              "bar",
+					EdgeLBPoolCpus:                 translator.DefaultEdgeLBPoolCpus,
+					EdgeLBPoolMem:                  translator.DefaultEdgeLBPoolMem,
+					EdgeLBPoolSize:                 translator.DefaultEdgeLBPoolSize,
+					EdgeLBPoolCreationStrategy:     translator.DefaultEdgeLBPoolCreationStrategy,
 				},
 				EdgeLBPoolPortMap: map[int32]int32{
 					80: 80,
+				},
+			},
+		},
+		// Test computing options for a Service resource specifying the name of a configmap used to configure a cloud load-balancer.
+		// Make sure that the name of the configmap is captured adequately.
+		{
+			description: "compute options for a Service resource specifying the name of a configmap used to configure a cloud load-balancer",
+			annotations: map[string]string{
+				constants.CloudLoadBalancerConfigMapNameAnnotationKey: "foo-bar",
+			},
+			ports: []corev1.ServicePort{
+				{
+					Port: 80,
+				},
+			},
+			options: &translator.ServiceTranslationOptions{
+				BaseTranslationOptions: translator.BaseTranslationOptions{
+					CloudLoadBalancerConfigMapName: pointers.NewString("foo-bar"),
+					EdgeLBPoolName:                 translator.ComputeEdgeLBPoolName(constants.EdgeLBCloudLoadBalancerPoolNamePrefix, testClusterName, "foo", "bar"),
+					EdgeLBPoolRole:                 constants.EdgeLBRolePrivate,
+					EdgeLBPoolNetwork:              constants.EdgeLBHostNetwork,
+					EdgeLBPoolCpus:                 translator.DefaultEdgeLBPoolCpus,
+					EdgeLBPoolMem:                  translator.DefaultEdgeLBPoolMem,
+					EdgeLBPoolSize:                 translator.DefaultEdgeLBPoolSize,
+					EdgeLBPoolCreationStrategy:     translator.DefaultEdgeLBPoolCreationStrategy,
+				},
+				EdgeLBPoolPortMap: map[int32]int32{
+					80: 0,
 				},
 			},
 		},

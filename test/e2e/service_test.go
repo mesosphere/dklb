@@ -167,7 +167,7 @@ var _ = Describe("Service", func() {
 						// Request for the pool to be called "<namespace>".
 						constants.EdgeLBPoolNameAnnotationKey: namespace.Name,
 						// Request for the pool to be deployed to a private DC/OS agent.
-						constants.EdgeLBPoolRoleAnnotationKey: "*",
+						constants.EdgeLBPoolRoleAnnotationKey: constants.EdgeLBRolePrivate,
 						// Request for translation to be paused so that no EdgeLB pool is actually created.
 						constants.EdgeLBPoolTranslationPaused: "true",
 					}

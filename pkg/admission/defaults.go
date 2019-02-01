@@ -24,6 +24,11 @@ func setBaseDefaults(object metav1.Object, options *translator.BaseTranslationOp
 	annotations[constants.EdgeLBPoolCpusAnnotationKey] = options.EdgeLBPoolCpus.String()
 	annotations[constants.EdgeLBPoolMemAnnotationKey] = options.EdgeLBPoolMem.String()
 	annotations[constants.EdgeLBPoolSizeAnnotationKey] = strconv.Itoa(options.EdgeLBPoolSize)
+	if options.CloudLoadBalancerConfigMapName == nil {
+		annotations[constants.CloudLoadBalancerConfigMapNameAnnotationKey] = ""
+	} else {
+		annotations[constants.CloudLoadBalancerConfigMapNameAnnotationKey] = *options.CloudLoadBalancerConfigMapName
+	}
 	object.SetAnnotations(annotations)
 }
 

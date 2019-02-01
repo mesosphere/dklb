@@ -27,13 +27,14 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 			annotations: map[string]string{},
 			options: &translator.IngressTranslationOptions{
 				BaseTranslationOptions: translator.BaseTranslationOptions{
-					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
-					EdgeLBPoolRole:             translator.DefaultEdgeLBPoolRole,
-					EdgeLBPoolNetwork:          "",
-					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
-					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
-					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
-					EdgeLBPoolCreationStrategy: translator.DefaultEdgeLBPoolCreationStrategy,
+					CloudLoadBalancerConfigMapName: nil,
+					EdgeLBPoolName:                 "dev--kubernetes01--foo--bar",
+					EdgeLBPoolRole:                 translator.DefaultEdgeLBPoolRole,
+					EdgeLBPoolNetwork:              constants.EdgeLBHostNetwork,
+					EdgeLBPoolCpus:                 translator.DefaultEdgeLBPoolCpus,
+					EdgeLBPoolMem:                  translator.DefaultEdgeLBPoolMem,
+					EdgeLBPoolSize:                 translator.DefaultEdgeLBPoolSize,
+					EdgeLBPoolCreationStrategy:     translator.DefaultEdgeLBPoolCreationStrategy,
 				},
 				EdgeLBPoolPort: translator.DefaultEdgeLBPoolPort,
 			},
@@ -48,13 +49,14 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 			},
 			options: &translator.IngressTranslationOptions{
 				BaseTranslationOptions: translator.BaseTranslationOptions{
-					EdgeLBPoolName:             "foo",
-					EdgeLBPoolRole:             translator.DefaultEdgeLBPoolRole,
-					EdgeLBPoolNetwork:          "",
-					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
-					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
-					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
-					EdgeLBPoolCreationStrategy: translator.DefaultEdgeLBPoolCreationStrategy,
+					CloudLoadBalancerConfigMapName: nil,
+					EdgeLBPoolName:                 "foo",
+					EdgeLBPoolRole:                 translator.DefaultEdgeLBPoolRole,
+					EdgeLBPoolNetwork:              constants.EdgeLBHostNetwork,
+					EdgeLBPoolCpus:                 translator.DefaultEdgeLBPoolCpus,
+					EdgeLBPoolMem:                  translator.DefaultEdgeLBPoolMem,
+					EdgeLBPoolSize:                 translator.DefaultEdgeLBPoolSize,
+					EdgeLBPoolCreationStrategy:     translator.DefaultEdgeLBPoolCreationStrategy,
 				},
 				EdgeLBPoolPort: translator.DefaultEdgeLBPoolPort,
 			},
@@ -69,13 +71,14 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 			},
 			options: &translator.IngressTranslationOptions{
 				BaseTranslationOptions: translator.BaseTranslationOptions{
-					EdgeLBPoolName:             "dev--kubernetes01--foo--bar",
-					EdgeLBPoolRole:             translator.DefaultEdgeLBPoolRole,
-					EdgeLBPoolNetwork:          "",
-					EdgeLBPoolCpus:             translator.DefaultEdgeLBPoolCpus,
-					EdgeLBPoolMem:              translator.DefaultEdgeLBPoolMem,
-					EdgeLBPoolSize:             translator.DefaultEdgeLBPoolSize,
-					EdgeLBPoolCreationStrategy: translator.DefaultEdgeLBPoolCreationStrategy,
+					CloudLoadBalancerConfigMapName: nil,
+					EdgeLBPoolName:                 "dev--kubernetes01--foo--bar",
+					EdgeLBPoolRole:                 translator.DefaultEdgeLBPoolRole,
+					EdgeLBPoolNetwork:              constants.EdgeLBHostNetwork,
+					EdgeLBPoolCpus:                 translator.DefaultEdgeLBPoolCpus,
+					EdgeLBPoolMem:                  translator.DefaultEdgeLBPoolMem,
+					EdgeLBPoolSize:                 translator.DefaultEdgeLBPoolSize,
+					EdgeLBPoolCreationStrategy:     translator.DefaultEdgeLBPoolCreationStrategy,
 				},
 				EdgeLBPoolPort: 14708,
 			},
@@ -91,10 +94,10 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 			options: nil,
 			error:   fmt.Errorf("%d is not a valid port number", 74511),
 		},
-		// Test computing options for an Ingress resource defining custom values for all the options.
+		// Test computing options for an Ingress resource defining custom values for all the options (except cloud load-balancer configuration).
 		// Make sure that all values are adequately captured.
 		{
-			description: "compute options for an Ingress resource defining custom values for all the options",
+			description: "compute options for an Ingress resource defining custom values for all the options (except cloud load-balancer configuration)",
 			annotations: map[string]string{
 				constants.EdgeLBPoolNameAnnotationKey:             "foo",
 				constants.EdgeLBPoolRoleAnnotationKey:             "custom_role",
@@ -108,14 +111,15 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 			},
 			options: &translator.IngressTranslationOptions{
 				BaseTranslationOptions: translator.BaseTranslationOptions{
-					EdgeLBPoolName:              "foo",
-					EdgeLBPoolRole:              "custom_role",
-					EdgeLBPoolNetwork:           "foo_network",
-					EdgeLBPoolCpus:              resource.MustParse("250m"),
-					EdgeLBPoolMem:               resource.MustParse("2Gi"),
-					EdgeLBPoolSize:              3,
-					EdgeLBPoolCreationStrategy:  constants.EdgeLBPoolCreationStrategyOnce,
-					EdgeLBPoolTranslationPaused: true,
+					CloudLoadBalancerConfigMapName: nil,
+					EdgeLBPoolName:                 "foo",
+					EdgeLBPoolRole:                 "custom_role",
+					EdgeLBPoolNetwork:              "foo_network",
+					EdgeLBPoolCpus:                 resource.MustParse("250m"),
+					EdgeLBPoolMem:                  resource.MustParse("2Gi"),
+					EdgeLBPoolSize:                 3,
+					EdgeLBPoolCreationStrategy:     constants.EdgeLBPoolCreationStrategyOnce,
+					EdgeLBPoolTranslationPaused:    true,
 				},
 				EdgeLBPoolPort: 14708,
 			},
@@ -151,7 +155,7 @@ func TestComputeIngressTranslationOptions(t *testing.T) {
 		o, err := translator.ComputeIngressTranslationOptions(testClusterName, r)
 		if err != nil {
 			// Make sure the error matches the expected one.
-			assert.EqualError(t, err, test.error.Error())
+			assert.Equal(t, test.error, err)
 		} else {
 			// Make sure the translation options match the expected ones.
 			assert.Equal(t, test.options, o)

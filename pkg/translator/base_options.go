@@ -13,6 +13,9 @@ import (
 
 // BaseTranslationOptions groups together options used to "translate" an Ingress/Service resource into an EdgeLB pool.
 type BaseTranslationOptions struct {
+	// CloudLoadBalancerConfigMapName is the name of the configmap specifying cloud load-balancer configuration.
+	CloudLoadBalancerConfigMapName *string
+
 	// EdgeLBPoolName is the name of the EdgeLB pool to use for provisioning the Ingress/Service resource.
 	EdgeLBPoolName string
 	// EdgeLBPoolRole is the role to use for the target EdgeLB pool.
@@ -35,6 +38,15 @@ type BaseTranslationOptions struct {
 
 // ValidateBaseTranslationOptionsUpdate validates the transition between "previousOptions" and "currentOptions".
 func ValidateBaseTranslationOptionsUpdate(previousOptions, currentOptions *BaseTranslationOptions) error {
+	// If we've been requested to configure a cloud load-balancer for an existing resource, assume the transition to be valid since we override the translation options ourselves.
+	if currentOptions.CloudLoadBalancerConfigMapName != nil && previousOptions.CloudLoadBalancerConfigMapName == nil {
+		return nil
+	}
+	// Prevent the annotation specifying the name of the configmap used for configuring the cloud load-balancer from being removed after having been set.
+	if currentOptions.CloudLoadBalancerConfigMapName == nil && previousOptions.CloudLoadBalancerConfigMapName != nil {
+		return errors.New("the name of the configmap used for configuring the cloud load-balancer cannot be removed")
+	}
+
 	// Prevent the name of the EdgeLB pool from changing.
 	if currentOptions.EdgeLBPoolName != previousOptions.EdgeLBPoolName {
 		return errors.New("the name of the target edgelb pool cannot be changed")
@@ -65,13 +77,32 @@ func ValidateBaseTranslationOptionsUpdate(previousOptions, currentOptions *BaseT
 // parseBaseTranslationOptions attempts to compute base, common translation options from the specified set of annotations.
 // In case options cannot be computed or are invalid, the error message MUST be suitable to be used as the message for a Kubernetes event associated with the resource.
 func parseBaseTranslationOptions(clusterName, namespace, name string, annotations map[string]string) (*BaseTranslationOptions, error) {
+	// Check whether we've been asked to configure a cloud load-balancer for the current resource.
+	// In such a scenario, we override the values of the remaining options with our own defaults in order to ensure the requirements of the cloud load-balancer.
+	if v, exists := annotations[constants.CloudLoadBalancerConfigMapNameAnnotationKey]; exists && v != "" {
+		return &BaseTranslationOptions{
+			CloudLoadBalancerConfigMapName: &v,
+			EdgeLBPoolName:                 ComputeEdgeLBPoolName(constants.EdgeLBCloudLoadBalancerPoolNamePrefix, clusterName, namespace, name),
+			EdgeLBPoolCpus:                 DefaultEdgeLBPoolCpus,
+			EdgeLBPoolMem:                  DefaultEdgeLBPoolMem,
+			EdgeLBPoolNetwork:              constants.EdgeLBHostNetwork,
+			EdgeLBPoolSize:                 DefaultEdgeLBPoolSize,
+			EdgeLBPoolRole:                 constants.EdgeLBRolePrivate,
+			EdgeLBPoolCreationStrategy:     constants.EdgeLBPoolCreationStrategyIfNotPresent,
+		}, nil
+	}
+
+	// At this point we know we haven't been asked to configure a cloud load-balancer.
+
 	// Create a "BaseTranslationOptions" struct to hold the computed options.
-	res := &BaseTranslationOptions{}
+	res := &BaseTranslationOptions{
+		CloudLoadBalancerConfigMapName: nil,
+	}
 
 	// Parse or compute the name of the target EdgeLB pool.
 	poolName := annotations[constants.EdgeLBPoolNameAnnotationKey]
 	if poolName == "" {
-		poolName = ComputeEdgeLBPoolName(clusterName, namespace, name)
+		poolName = ComputeEdgeLBPoolName("", clusterName, namespace, name)
 	}
 	if !regexp.MustCompile(constants.EdgeLBPoolNameRegex).MatchString(poolName) {
 		return nil, fmt.Errorf("%q is not valid as an edgelb pool name", poolName)
@@ -88,11 +119,11 @@ func parseBaseTranslationOptions(clusterName, namespace, name string, annotation
 	// Grab the name of the DC/OS virtual network to use when creating the target EdgeLB pool.
 	networkName := annotations[constants.EdgeLBPoolNetworkAnnotationKey]
 	// If the target EdgeLB pool's role is "slave_public" and a non-empty name for the DC/OS virtual network has been specified, we should fail and warn the user.
-	if res.EdgeLBPoolRole == constants.EdgeLBRolePublic && networkName != "" {
+	if res.EdgeLBPoolRole == constants.EdgeLBRolePublic && networkName != constants.EdgeLBHostNetwork {
 		return nil, fmt.Errorf("cannot join a dcos virtual network when the pool's role is %q", res.EdgeLBPoolRole)
 	}
 	// If the target EdgeLB pool's role is NOT "slave_public" and no custom name for the DC/OS virtual network has been specified, we should use the default name.
-	if res.EdgeLBPoolRole != constants.EdgeLBRolePublic && networkName == "" {
+	if res.EdgeLBPoolRole != constants.EdgeLBRolePublic && networkName == constants.EdgeLBHostNetwork {
 		networkName = DefaultEdgeLBPoolNetwork
 	}
 	res.EdgeLBPoolNetwork = networkName

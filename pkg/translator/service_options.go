@@ -40,6 +40,7 @@ func ComputeServiceTranslationOptions(clusterName string, obj *corev1.Service) (
 		return nil, err
 	}
 	res.BaseTranslationOptions = *b
+
 	// Parse any port mappings that may have been provided.
 	// If no mapping for a port has been specified, the original service port is used.
 	// If a duplicate mapping is detected, an error is returned.
@@ -52,6 +53,13 @@ func ComputeServiceTranslationOptions(clusterName string, obj *corev1.Service) (
 		}
 		// Compute the key of the annotation that must be checked based on the current port.
 		key := fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, port.Port)
+
+		// If we've been asked to configure a cloud load-balancer, we override any specified port mappings in order to request dynamic ports.
+		// Otherwise, we attempt to parse and use the specified port, falling back to the service port.
+		if res.CloudLoadBalancerConfigMapName != nil {
+			res.EdgeLBPoolPortMap[port.Port] = int32(0)
+			continue
+		}
 		if v, exists := obj.Annotations[key]; !exists || v == "" {
 			res.EdgeLBPoolPortMap[port.Port] = port.Port
 		} else {
@@ -61,11 +69,13 @@ func ComputeServiceTranslationOptions(clusterName string, obj *corev1.Service) (
 				return nil, fmt.Errorf("failed to parse %q as a frontend bind port: %v", v, err)
 			}
 			// Check whether the resulting integer is a valid port number.
-			if validation.IsValidPortNum(r) != nil {
+			// 0 is considered a valid port number since it is used by EdgeLB to request a dynamic frontend bind port.
+			if r != 0 && validation.IsValidPortNum(r) != nil {
 				return nil, fmt.Errorf("%d is not a valid port number", r)
 			}
 			// Check whether the port is already being used in the current Service resource.
-			if portName, exists := bindPorts[r]; exists {
+			// 0 is allowed to be mapped to several service ports since it is used by EdgeLB to request a dynamic frontend bind port.
+			if portName, exists := bindPorts[r]; r != 0 && exists {
 				return nil, fmt.Errorf("port %d is mapped to both %q and %q service ports", r, portName, port.Name)
 			}
 			// Mark the current port as being used, and add it to the set of port mappings.

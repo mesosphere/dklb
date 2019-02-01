@@ -25,6 +25,8 @@ const (
 	// Only Ingres resources having this as the value of the aforementioned annotation will be provisioned using EdgeLB.
 	EdgeLBIngressClassAnnotationValue = "edgelb"
 
+	// CloudLoadBalancerConfigMapNameAnnotationKey is the key of the annotation that holds the name of the configmap to be used for configuring a cloud load-balancer on the target EdgeLB pool.
+	CloudLoadBalancerConfigMapNameAnnotationKey = annotationKeyPrefix + "cloud-loadbalancer-configmap"
 	// EdgeLBPoolCreationStrategyAnnotationKey is the key of the annotation that holds the strategy to use for provisioning the target EdgeLB pool.
 	EdgeLBPoolCreationStrategyAnnotationKey = annotationKeyPrefix + "edgelb-pool-creation-strategy"
 	// EdgeLBPoolCpusAnnotationKey is the key of the annotation that holds the CPU request for the target EdgeLB pool.

@@ -7,6 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
 	kubeerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -17,6 +18,16 @@ import (
 )
 
 var (
+	// dummyConfigMap1 represents a dummy ConfigMap resource.
+	dummyConfigMap1 = &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "namespace-1",
+			Name:      "name-1",
+		},
+		Data: map[string]string{
+			"foo": "bar",
+		},
+	}
 	// dummyIngress1 represents a dummy Ingress resource.
 	dummyIngress1 = ingresstestutil.DummyIngressResource("namespace-1", "name-1", func(ingress *extsv1beta1.Ingress) {
 		ingress.Spec.Backend = &extsv1beta1.IngressBackend{
@@ -36,9 +47,45 @@ var (
 
 // TestHasSynced tests the "HasSynced" function.
 func TestHasSynced(t *testing.T) {
-	cache := dklbcache.NewKubernetesResourceCache(cachetestutil.NewFakeSharedInformerFactory(dummyIngress1, dummyService1))
+	cache := dklbcache.NewKubernetesResourceCache(cachetestutil.NewFakeSharedInformerFactory(dummyConfigMap1, dummyIngress1, dummyService1))
 	// "fakeSharedInformerFactory" already waits for caches to be synced, so this should be trivially true.
 	assert.True(t, cache.HasSynced())
+}
+
+// TestGetConfigMap tests the "GetConfigMap" function.
+func TestGetConfigMap(t *testing.T) {
+	cache := dklbcache.NewKubernetesResourceCache(cachetestutil.NewFakeSharedInformerFactory(dummyConfigMap1))
+	tests := []struct {
+		description    string
+		namespace      string
+		name           string
+		expectedResult *corev1.ConfigMap
+		expectedError  error
+	}{
+		{
+			description:    "get an existing configmap resource",
+			namespace:      dummyConfigMap1.Namespace,
+			name:           dummyConfigMap1.Name,
+			expectedResult: dummyConfigMap1,
+			expectedError:  nil,
+		},
+		{
+			description:    "get an inexistent configmap resource",
+			namespace:      "foo",
+			name:           "bar",
+			expectedResult: nil,
+			expectedError:  kubeerrors.NewNotFound(schema.GroupResource{Group: "", Resource: "configmap"}, "bar"),
+		},
+	}
+	for _, test := range tests {
+		t.Logf("test case: %s", test.description)
+		res, err := cache.GetConfigMap(test.namespace, test.name)
+		if test.expectedError != nil {
+			assert.Equal(t, test.expectedError, err)
+		} else {
+			assert.Equal(t, test.expectedResult, res)
+		}
+	}
 }
 
 // TestGetIngress tests the "GetIngress" function.
@@ -70,9 +117,9 @@ func TestGetIngress(t *testing.T) {
 		t.Logf("test case: %s", test.description)
 		res, err := cache.GetIngress(test.namespace, test.name)
 		if test.expectedError != nil {
-			assert.Equal(t, err, test.expectedError)
+			assert.Equal(t, test.expectedError, err)
 		} else {
-			assert.Equal(t, res, test.expectedResult)
+			assert.Equal(t, test.expectedResult, res)
 		}
 	}
 }
@@ -106,9 +153,9 @@ func TestGetService(t *testing.T) {
 		t.Logf("test case: %s", test.description)
 		res, err := cache.GetService(test.namespace, test.name)
 		if test.expectedError != nil {
-			assert.Equal(t, err, test.expectedError)
+			assert.Equal(t, test.expectedError, err)
 		} else {
-			assert.Equal(t, res, test.expectedResult)
+			assert.Equal(t, test.expectedResult, res)
 		}
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/constants"
 	dklberrors "github.com/mesosphere/dklb/pkg/errors"
 	"github.com/mesosphere/dklb/pkg/translator"
+	cachetestutil "github.com/mesosphere/dklb/test/util/cache"
 	edgelbmanagertestutil "github.com/mesosphere/dklb/test/util/edgelb/manager"
 	servicetestutil "github.com/mesosphere/dklb/test/util/kubernetes/service"
 )
@@ -127,13 +128,15 @@ func TestServiceTranslator_Translate(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Logf("test case: %s", test.description)
+		// Create a mock KubernetesResourceCache.
+		kubeCache := cachetestutil.NewFakeKubernetesResourceCache()
 		// Create and customize a mock EdgeLB manager.
 		m := new(edgelbmanagertestutil.MockEdgeLBManager)
 		test.mockCustomizer(m)
 		m.On("PoolGroup").Return(testEdgeLBPoolGroup)
 		m.On("GetPoolMetadata", mock.Anything, mock.Anything).Return(&models.V2PoolMetadata{}, nil)
 		// Perform translation of the Service resource.
-		status, err := translator.NewServiceTranslator(testClusterName, test.service, test.options, m).Translate()
+		status, err := translator.NewServiceTranslator(testClusterName, test.service, test.options, kubeCache, m).Translate()
 		if test.expectedError != nil {
 			// Make sure we've got the expected error.
 			assert.Nil(t, status)

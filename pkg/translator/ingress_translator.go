@@ -287,7 +287,7 @@ func (it *IngressTranslator) createEdgeLBPoolObject(backendMap IngressBackendNod
 		},
 	}
 	// Request for the EdgeLB pool to join the requested DC/OS virtual network if applicable.
-	if it.options.EdgeLBPoolNetwork != "" {
+	if it.options.EdgeLBPoolNetwork != constants.EdgeLBHostNetwork {
 		p.VirtualNetworks = []*models.V2PoolVirtualNetworksItems0{
 			{
 				Name: it.options.EdgeLBPoolNetwork,

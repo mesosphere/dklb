@@ -42,7 +42,7 @@ type ServiceController struct {
 }
 
 // NewServiceController creates a new instance of the EdgeLB service controller.
-func NewServiceController(clusterName string, kubeClient kubernetes.Interface, serviceInformer corev1informers.ServiceInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *ServiceController {
+func NewServiceController(clusterName string, kubeClient kubernetes.Interface, serviceInformer corev1informers.ServiceInformer, configMapInformer corev1informers.ConfigMapInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *ServiceController {
 	// Create a new instance of the service controller with the specified name and threadiness.
 	c := &ServiceController{
 		genericController: newGenericController(clusterName, serviceControllerName, serviceControllerThreadiness),
@@ -52,6 +52,7 @@ func NewServiceController(clusterName string, kubeClient kubernetes.Interface, s
 	}
 	// Make the controller wait for the caches to sync.
 	c.hasSyncedFuncs = []cache.InformerSynced{
+		configMapInformer.Informer().HasSynced,
 		serviceInformer.Informer().HasSynced,
 		kubeCache.HasSynced,
 	}
@@ -86,6 +87,19 @@ func NewServiceController(clusterName string, kubeClient kubernetes.Interface, s
 				return
 			}
 			c.enqueueTombstone(svc)
+		},
+	})
+	// Setup an event handler to inform us when ConfigMap resources change.
+	// This allows us to enqueue all Service resources that reference a given ConfigMap resource whenever it changes.
+	configMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			c.enqueueReferencingServices(obj.(*corev1.ConfigMap))
+		},
+		UpdateFunc: func(_, obj interface{}) {
+			c.enqueueReferencingServices(obj.(*corev1.ConfigMap))
+		},
+		DeleteFunc: func(obj interface{}) {
+			c.enqueueReferencingServices(obj.(*corev1.ConfigMap))
 		},
 	})
 
@@ -145,7 +159,7 @@ func (c *ServiceController) processQueueItem(workItem WorkItem) error {
 	prettyprint.LogfSpew(log.Tracef, options, "computed service translation options for %q", workItem.Key)
 
 	// Perform translation of the Service resource into an EdgeLB pool.
-	status, err := translator.NewServiceTranslator(c.clusterName, service, *options, c.edgelbManager).Translate()
+	status, err := translator.NewServiceTranslator(c.clusterName, service, *options, c.kubeCache, c.edgelbManager).Translate()
 	if err != nil {
 		er.Eventf(service, corev1.EventTypeWarning, constants.ReasonTranslationError, "failed to translate service: %v", err)
 		c.logger.Errorf("failed to translate service %q: %v", workItem.Key, err)
@@ -161,4 +175,23 @@ func (c *ServiceController) processQueueItem(workItem WorkItem) error {
 		}
 	}
 	return nil
+}
+
+// enqueueReferencingServices enqueues Service resources that reference the provided ConfigMap resource.
+func (c *ServiceController) enqueueReferencingServices(configMap *corev1.ConfigMap) {
+	// Grab a list of all Service resources in the same namespace as the ConfigMap resource.
+	services, err := c.kubeCache.GetServices(configMap.Namespace)
+	if err != nil {
+		c.logger.Errorf("failed to list all services in namespace %q: %v", configMap.Name, err)
+		return
+	}
+	// Iterate over all listed Service resources, checking whether each one references this ConfigMap resource and enqueueing it if it does.
+	for _, service := range services {
+		obj := service
+		if obj.GetAnnotations() != nil {
+			if obj.GetAnnotations()[constants.CloudLoadBalancerConfigMapNameAnnotationKey] == configMap.Name {
+				c.enqueue(obj)
+			}
+		}
+	}
 }

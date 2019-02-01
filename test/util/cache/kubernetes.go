@@ -24,12 +24,14 @@ func NewFakeSharedInformerFactory(res ...runtime.Object) kubeinformers.SharedInf
 	// Create a shared informer factory that uses the fake Kubernetes clientset.
 	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(fakeClient, 30*time.Second)
 	// Start all the required informers.
+	configMapInformer := kubeInformerFactory.Core().V1().ConfigMaps()
 	ingressInformer := kubeInformerFactory.Extensions().V1beta1().Ingresses()
 	serviceInformer := kubeInformerFactory.Core().V1().Services()
+	go configMapInformer.Informer().Run(wait.NeverStop)
 	go ingressInformer.Informer().Run(wait.NeverStop)
 	go serviceInformer.Informer().Run(wait.NeverStop)
 	// Wait for the caches to be synced.
-	if !kubecache.WaitForCacheSync(wait.NeverStop, ingressInformer.Informer().HasSynced, serviceInformer.Informer().HasSynced) {
+	if !kubecache.WaitForCacheSync(wait.NeverStop, configMapInformer.Informer().HasSynced, ingressInformer.Informer().HasSynced, serviceInformer.Informer().HasSynced) {
 		panic("failed to wait for caches to be synced")
 	}
 	// Return the shared informer factory.

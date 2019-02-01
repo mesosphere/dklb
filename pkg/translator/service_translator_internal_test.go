@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/mesosphere/dklb/pkg/util/pointers"
+	cachetestutil "github.com/mesosphere/dklb/test/util/cache"
 	edgelbmanagertestutil "github.com/mesosphere/dklb/test/util/edgelb/manager"
 	edgelbpooltestutil "github.com/mesosphere/dklb/test/util/edgelb/pool"
 	"github.com/mesosphere/dklb/test/util/kubernetes/service"
@@ -104,6 +105,7 @@ func TestCreateEdgeLBPoolObject(t *testing.T) {
 		expectedSize      int
 		expectedBackends  []*models.V2Backend
 		expectedFrontends []*models.V2Frontend
+		expectedError     error
 	}{
 		{
 			description:  "create an edgelb pool based on valid translattion options",
@@ -120,14 +122,18 @@ func TestCreateEdgeLBPoolObject(t *testing.T) {
 			expectedFrontends: []*models.V2Frontend{
 				frontendForServiceExposingPort80,
 			},
+			expectedError: nil,
 		},
 	}
 	for _, test := range tests {
 		t.Logf("test case: %s", test.description)
+		// Create a mock KubernetesResourceCache.
+		kubeCache := cachetestutil.NewFakeKubernetesResourceCache()
 		// Create and customize a mock EdgeLB manager.
 		manager := new(edgelbmanagertestutil.MockEdgeLBManager)
 		manager.On("PoolGroup").Return(testEdgeLBPoolGroup)
-		pool := NewServiceTranslator(testClusterName, test.service, test.options, manager).createEdgeLBPoolObject()
+		pool, err := NewServiceTranslator(testClusterName, test.service, test.options, kubeCache, manager).createEdgeLBPoolObject()
+		assert.Equal(t, err, test.expectedError)
 		assert.Equal(t, testEdgeLBPoolGroup, *pool.Namespace)
 		assert.Equal(t, test.expectedName, pool.Name)
 		assert.Equal(t, test.expectedRole, pool.Role)
@@ -149,6 +155,7 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 		expectedWasChanged bool
 		expectedBackends   []*models.V2Backend
 		expectedFrontends  []*models.V2Frontend
+		expectedError      error
 	}{
 		{
 			// Test that a pool that is in "in sync" with the Service resource's spec is detected as not requiring an update.
@@ -170,6 +177,7 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 			expectedFrontends: []*models.V2Frontend{
 				frontendForServiceExposingPort80,
 			},
+			expectedError: nil,
 		},
 		{
 			// Test that a pool that was "in sync" with a deleted Service resource is detected as requiring an update.
@@ -187,6 +195,7 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 			expectedWasChanged: true,
 			expectedBackends:   []*models.V2Backend{},
 			expectedFrontends:  []*models.V2Frontend{},
+			expectedError:      nil,
 		},
 		{
 			// Test that a pool for which a backend was manually changed is detected as requiring an update.
@@ -212,6 +221,7 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 			expectedFrontends: []*models.V2Frontend{
 				frontendForServiceExposingPort80,
 			},
+			expectedError: nil,
 		},
 		{
 			// Test that a pool for which a frontend was manually changed is detected as requiring an update.
@@ -237,6 +247,7 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 			expectedFrontends: []*models.V2Frontend{
 				frontendForServiceExposingPort80,
 			},
+			expectedError: nil,
 		},
 		{
 			// Test that a pool with existing backends/frontends but no backends/frontends for the current Service resource is detected as requiring an update, and has all expected backends and frontends after being updated in-place.
@@ -268,6 +279,7 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 				preExistingFrontend2,
 				frontendForServiceExposingPort80,
 			},
+			expectedError: nil,
 		},
 		{
 			// Test that a pool with existing backends/frontends is detected as requiring an update after a port is removed from the Service resource.
@@ -313,15 +325,20 @@ func TestUpdateEdgeLBPoolObject(t *testing.T) {
 				preExistingFrontend2,
 				frontendForServiceExposingPort80,
 			},
+			expectedError: nil,
 		},
 	}
 	for _, test := range tests {
 		t.Logf("test case: %s", test.description)
+		// Create a mock KubernetesResourceCache.
+		kubeCache := cachetestutil.NewFakeKubernetesResourceCache()
 		// Create and customize a mock EdgeLB manager.
 		manager := new(edgelbmanagertestutil.MockEdgeLBManager)
 		manager.On("PoolGroup").Return(testEdgeLBPoolGroup)
 		// Update the EdgeLB pool object in-place.
-		mustUpdate, _ := NewServiceTranslator(testClusterName, test.service, test.options, manager).updateEdgeLBPoolObject(test.pool)
+		mustUpdate, _, err := NewServiceTranslator(testClusterName, test.service, test.options, kubeCache, manager).updateEdgeLBPoolObject(test.pool)
+		// Check that expected errors have been propagated (if any).
+		assert.Equal(t, test.expectedError, err)
 		// Check that the need for a pool update was adequately detected.
 		assert.Equal(t, test.expectedWasChanged, mustUpdate)
 		// Check that all expected backends are present.
