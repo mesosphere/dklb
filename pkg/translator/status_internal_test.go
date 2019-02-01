@@ -2,6 +2,7 @@ package translator
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/mesosphere/dcos-edge-lb/models"
@@ -10,8 +11,14 @@ import (
 	"k8s.io/api/core/v1"
 
 	"github.com/mesosphere/dklb/pkg/errors"
+	"github.com/mesosphere/dklb/pkg/util/pointers"
 	edgelbmanagertestutil "github.com/mesosphere/dklb/test/util/edgelb/manager"
 	"github.com/mesosphere/dklb/test/util/kubernetes/service"
+)
+
+const (
+	// dummyELBHostname is a dummy hostname that matches the format used by AWS ELB.
+	dummyELBHostname = "dcos-lb-xA3som7gz-Q8ayl-1hYp-DcW-534ec0015f964f71.elb.us-west-2.amazonaws.com"
 )
 
 // TestComputeLoadBalancerStatus tests the "computeLoadBalancerStatus" function.
@@ -36,10 +43,6 @@ func TestComputeLoadBalancerStatus(t *testing.T) {
 				Name: "foo",
 				Frontends: []*models.V2PoolMetadataFrontend{
 					{
-						DNS: []string{
-							"foo.com",
-							"bar.com",
-						},
 						Endpoints: []*models.V2PoolMetadataFrontendEndpoint{
 							{
 								Private: []string{
@@ -55,25 +58,19 @@ func TestComputeLoadBalancerStatus(t *testing.T) {
 						Name: "dev.kubernetes01:foo:bar:8080",
 					},
 					{
-						DNS: []string{
-							"mustnotbereport.ed",
-						},
 						Endpoints: []*models.V2PoolMetadataFrontendEndpoint{
 							{
 								Private: []string{
-									"10.10.10.10",
+									"7.7.7.7",
 								},
 								Public: []string{
-									"20.20.20.20",
+									"9.9.9.9",
 								},
 							},
 						},
 						Name: "must-not-be-reported",
 					},
 					{
-						DNS: []string{
-							"baz.com",
-						},
 						Endpoints: []*models.V2PoolMetadataFrontendEndpoint{
 							{
 								Private: []string{
@@ -89,6 +86,40 @@ func TestComputeLoadBalancerStatus(t *testing.T) {
 						Name: "dev.kubernetes01:foo:bar:9090",
 					},
 				},
+				Elb: []*models.V2CloudProviderElb{
+					{
+						DNS: dummyELBHostname,
+						Listeners: []*models.V2CloudProviderAwsElbListener{
+							{
+								LinkFrontend: pointers.NewString("dev.kubernetes01:foo:bar:8080"),
+							},
+						},
+					},
+					{
+						DNS: "mustnotbereport.ed",
+						Listeners: []*models.V2CloudProviderAwsElbListener{
+							{
+								LinkFrontend: pointers.NewString("must-not-be-reported"),
+							},
+						},
+					},
+					{
+						DNS: "bar.com",
+						Listeners: []*models.V2CloudProviderAwsElbListener{
+							{
+								LinkFrontend: pointers.NewString("dev.kubernetes01:foo:bar:9090"),
+							},
+						},
+					},
+					{
+						DNS: "",
+						Listeners: []*models.V2CloudProviderAwsElbListener{
+							{
+								LinkFrontend: pointers.NewString("dev.kubernetes01:foo:bar:9090"),
+							},
+						},
+					},
+				},
 			},
 			expectedLoadBalancerStatus: &v1.LoadBalancerStatus{
 				Ingress: []v1.LoadBalancerIngress{
@@ -96,10 +127,7 @@ func TestComputeLoadBalancerStatus(t *testing.T) {
 						Hostname: "bar.com",
 					},
 					{
-						Hostname: "baz.com",
-					},
-					{
-						Hostname: "foo.com",
+						Hostname: strings.ToLower(dummyELBHostname),
 					},
 					{
 						IP: "1.2.3.4",

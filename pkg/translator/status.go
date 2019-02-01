@@ -3,6 +3,7 @@ package translator
 import (
 	"context"
 	"sort"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
@@ -26,12 +27,41 @@ func computeLoadBalancerStatus(manager manager.EdgeLBManager, poolName, clusterN
 		log.Warnf("unable to report status for %q: %v", kubernetes.Key(obj), err)
 		return nil
 	}
-	// Compute the set of DNS names, private IPs and public IPs for the pool by iterating over the list of reported frontends.
+	// Compute the set of DNS names, private IPs and public IPs for the pool.
 	var (
 		dnsNames   = make(map[string]bool)
 		privateIPs = make(map[string]bool)
 		publicIPs  = make(map[string]bool)
 	)
+	// Add all reported DNS names to the set of DNS names.
+	for _, elb := range m.Elb {
+		if elb.DNS != "" {
+			for _, listener := range elb.Listeners {
+				// Check whether the target frontend belongs to the Service/Ingress resource being processed.
+				if listener.LinkFrontend == nil {
+					continue
+				}
+				var (
+					isOwnedByObj bool
+				)
+				switch t := obj.(type) {
+				case *corev1.Service:
+					m, err := computeServiceOwnedEdgeLBObjectMetadata(*listener.LinkFrontend)
+					isOwnedByObj = err == nil && m.IsOwnedBy(clusterName, t)
+				case *extsv1beta1.Ingress:
+					m, err := computeIngressOwnedEdgeLBObjectMetadata(*listener.LinkFrontend)
+					isOwnedByObj = err == nil && m.IsOwnedBy(clusterName, t)
+				default:
+					return nil
+				}
+				// If the target frontend belongs to the Service/Ingress resource being processed, we add the DNS name of the ELB being processed.
+				if isOwnedByObj {
+					dnsNames[strings.ToLower(elb.DNS)] = true
+				}
+			}
+		}
+	}
+	// Iterate over all reported frontends, adding the corresponding private and public IPs.
 	for _, frontend := range m.Frontends {
 		// Check whether the current frontend belongs to the Service/Ingress resource being processed.
 		var (
@@ -50,10 +80,6 @@ func computeLoadBalancerStatus(manager manager.EdgeLBManager, poolName, clusterN
 		// If the current frontend doesn't belong to the Service/Ingress resource being processed, we skip it.
 		if !isOwnedByObj {
 			continue
-		}
-		// Add all reported DNS names to the set of DNS names.
-		for _, name := range frontend.DNS {
-			dnsNames[name] = true
 		}
 		// Iterate over the list of reported endpoints.
 		for _, endpoint := range frontend.Endpoints {

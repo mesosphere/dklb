@@ -97,8 +97,11 @@ github.com/mailru/easyjson v0.0.0-20180823135443-60711f1a8329 h1:2gxZ0XQIU/5z3Z3
 github.com/mailru/easyjson v0.0.0-20180823135443-60711f1a8329/go.mod h1:C1wdFJiN94OJF2b5HbByQZoLdCWB1Yqtg26g4irojpc=
 github.com/matttproud/golang_protobuf_extensions v1.0.1 h1:4hp9jkHxhMHkqkrB3Ix0jegS5sx/RkqARlsWZ6pIwiU=
 github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
+github.com/mesosphere/dcos-edge-lb v1.2.3 h1:8Vy/oc8M+LbmUFJ8jDxefUR6wl9rH517qZJr04HUBZo=
 github.com/mesosphere/dcos-edge-lb v1.2.4-0.20190129210848-724298ad3118 h1:z1QRn+YwmIaIAYTqheX8LrbqyfJDNdQLxXtTBaJ0XNA=
 github.com/mesosphere/dcos-edge-lb v1.2.4-0.20190129210848-724298ad3118/go.mod h1:+p1l5IpJ27w9tnm4MY1yOLHCtu2sh6EoLUPTsGEYrjo=
+github.com/mesosphere/dcos-edge-lb v1.2.4-0.20190201000604-f6426051b82e h1:dHu/nTnvJfkEGXo7JwLqNeZIakxG15pSpPoEaUE4Ojs=
+github.com/mesosphere/dcos-edge-lb v1.2.4-0.20190201000604-f6426051b82e/go.mod h1:+p1l5IpJ27w9tnm4MY1yOLHCtu2sh6EoLUPTsGEYrjo=
 github.com/mitchellh/mapstructure v1.1.2 h1:fmNYVwqnSfB9mZU6OS2O6GsXM+wcskZDuKQzvN1EDeE=
 github.com/mitchellh/mapstructure v1.1.2/go.mod h1:FVVH3fgwuzCH5S8UJGiWEs2h04kUh9fWfEaFds41c1Y=
 github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd h1:TRLaZ9cD/w8PVh93nsPXa1VrQ6jlwL5oN8l14QlcNfg=
