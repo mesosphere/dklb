@@ -1,0 +1,168 @@
+:sectnums:
+:numbered:
+:toc: macro
+:toc-title:
+:toclevels: 3
+:numbered!:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+= Provisioning TCP Cloud Load-Balancers
+:icons: font
+
+[discrete]
+== Table of Contents
+toc::[]
+
+== Introduction
+
+`dklb` supports exposing Kubernetes services of type `LoadBalancer` via cloud load-balancers.
+As of this writing, cloud load-balancers are supported only in DC/OS clusters launched in AWS.
+
+== Instructions
+
+=== Specifying the configuration for the cloud load-balancer
+
+`dklb` must read the cloud load-balancer's configuration from a https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/[config map].
+This config map must exist in the same Kubernetes namespace as the `Service` resource being exposed via a cloud load-balancer, and must obey the following structure:
+
+[source,yaml]
+----
+apiVersion: v1
+data:
+  spec: |
+    <spec>
+kind: ConfigMap
+metadata:
+  name: "<cloud-loadbalancer-configmap>"
+----
+
+In particular, it must have a key named `spec` containing the desired configuration for the cloud load-balancer.
+Further details on `<spec>` are provided below.
+
+=== Linking the configuration to the `Service` resource
+
+In order for `dklb` to provision a cloud load-balancer for a given `Service` resource, said resource must be annotated with the following annotation:
+
+[source,text]
+----
+kubernetes.dcos.io/cloud-loadbalancer-config: "<cloud-loadbalancer-configmap>"
+----
+
+When said annotation is specified on a `Service` resource, `dklb` creates a _dedicated_ EdgeLB pool for the `Service` resource.
+This EdgeLB pool is called `ext--<cluster-name>--<namespace>--<name>`, and has a single HAProxy instance, running on a private DC/OS agent.
+From this moment on, no further customization of the EdgeLB pool via `kubernetes.dcos.io/edgelb-pool-*` annotations is supported.
+
+[WARNING]
+====
+The fact that `dklb` creates a new, dedicated EdgeLB pool means that any EdgeLB pool previously being used to expose the `Service` resource will be left untouched from the moment the annotation is specified.
+The user is responsible for removing said EdgeLB pool _manually_ using the EdgeLB CLI.
+====
+
+==== Connecting to the cloud load-balancer
+
+After the aforementioned annotation is specified, `dklb` will start provisioning the cloud load-balancer according to the provided configuration.
+The hostname that should be used to connect to the cloud load-balancer will usually be reported shortly after in the `.status` field of the `Service` resource.
+
+== Configuration
+
+As mentioned above, the configuration for the cloud load-balancer must be specified via a config map that obeys the following structure:
+
+[source,yaml]
+----
+apiVersion: v1
+data:
+spec: |
+ <spec>
+kind: ConfigMap
+metadata:
+name: "<cloud-loadbalancer-configmap>"
+----
+
+The actual contents of `<spec>` depend on the cloud provider being used.
+
+=== AWS NLB
+
+To configure an AWS NLB, `<spec>` must be a JSON object obeying the following structure:
+
+[source,json]
+----
+{
+  "aws": {
+    "elb": [{
+      "type": "NLB",
+      "name": "<name>",
+      "internal": <internal>,
+      "subnets": [
+        <subnet-1>,
+        <subnet-2>,
+        (...),
+        <subnet-N>
+      ],
+      "listeners": [
+        {
+          "port": <service-port-1>,
+          "linkFrontend": "<cluster-name>-<service-namespace>-<service-name>-<service-port-1>"
+        },
+        {
+          "port": <service-port-2>,
+          "linkFrontend": "<cluster-name>-<service-namespace>-<service-name>-<service-port-2>"
+        },
+        (...),
+        {
+          "port": <service-port-M>,
+          "linkFrontend": "<cluster-name>-<service-namespace>-<service-name>-<service-port-M>"
+        }
+       ]
+    }]
+  }
+}
+----
+
+In the snippet above, placeholders must be replaced according to the following table:
+
+|===
+|Placeholder |Meaning
+|`<name>` |The desired name for the https://docs.aws.amazon.com/elasticloadbalancing/latest/network/introduction.html[Network Load-Balancer].
+|`<internal>` |Boolean value (i.e. `true` or `false`) indicating whether the NLB should be exposed internally only.
+|`<subnet-X>` |ID of a subnet which the NLB should join.
+|`<service-port-X>` |The service port that should be exposed via the NLB.
+|`<cluster-name>` |The name of the MKE cluster to which the current `Service` resource belongs, having any forward slashes replaced by dots.
+|`<service-namespace>`  |The name of the Kubernetes namespace in which the current `Service` resorce exists.
+|`<service-name>`|The name of the current `Service` resource.
+|===
+
+==== Example
+
+To expose the `redis` service created in the previous example using AWS NLB, and assuming the name of the MKE cluster is `dev/kubernetes01`, the following config map may be used:
+
+[source,yaml]
+----
+apiVersion: v1
+data:
+  spec: |
+    {
+        "aws": {
+            "elb": [{
+                "type": "NLB",
+                "name": "redis-nlb",
+                "internal": false,
+                "subnets": [
+                  "subnet-07a3022372ce71ad4"
+                ],
+                "listeners": [{
+                  "port": 6379,
+                  "linkFrontend": "dev.kubernetes01:default:redis:6379"
+                }]
+            }]
+        }
+    }
+kind: ConfigMap
+metadata:
+  name: redis-elb
+----
