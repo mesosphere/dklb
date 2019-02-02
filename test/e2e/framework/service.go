@@ -115,3 +115,30 @@ func (f *Framework) WaitForPublicIPForService(ctx context.Context, service *core
 	})
 	return result, err
 }
+
+// WaitForHostnameForService blocks until a hostname is reported for the specified Service resource, or until the provided context times out.
+func (f *Framework) WaitForHostnameForService(ctx context.Context, service *corev1.Service) (string, error) {
+	var (
+		result string
+		err    error
+	)
+	// Wait until the Service resource reports a non-empty status.
+	err = f.WaitUntilServiceCondition(ctx, service, func(event watchapi.Event) (b bool, e error) {
+		switch event.Type {
+		case watchapi.Added:
+			fallthrough
+		case watchapi.Modified:
+			// Iterate over the entries in ".status.loadBalancer.ingress", storing the first hostname encountered in "result".
+			for _, e := range event.Object.(*corev1.Service).Status.LoadBalancer.Ingress {
+				if e.Hostname != "" {
+					result = e.Hostname
+					break
+				}
+			}
+			return result != "", nil
+		default:
+			return false, fmt.Errorf("got event of unexpected type %q", event.Type)
+		}
+	})
+	return result, err
+}

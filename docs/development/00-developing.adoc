@@ -144,12 +144,14 @@ $ make test.unit
 
 As of this writing, `dklb`'s end-to-end test suite has the following additional requirements:
 
+* The target DC/OS cluster must be running on AWS.
 * The end-to-end test suite must run from _outside_ the target DC/OS cluster.
+* To test cloud load-balancer provisioning, the ID of a public subnet must be specified using `AWS_PUBLIC_SUBNET_ID`.
 
 To run the end-to-end test suite against the MKE cluster targeted by `$HOME/.kube/config`, the following command may be run:
 
 ```console
-$ make test.e2e
+$ make test.e2e [AWS_PUBLIC_SUBNET_ID="<aws-public-subnet-id>"]
 ```
 
 The output of a successful run of the end-to-end test suite will be similar to the following:
@@ -157,9 +159,9 @@ The output of a successful run of the end-to-end test suite will be similar to t
 [source,text]
 ----
 (...)
-Ran 12 of 12 Specs in 987.146 seconds
-SUCCESS! -- 12 Passed | 0 Failed | 0 Pending | 0 Skipped
---- PASS: TestEndToEnd (987.15s)
+Ran 13 of 13 Specs in 1297.623 seconds
+SUCCESS! -- 13 Passed | 0 Failed | 0 Pending | 0 Skipped
+--- PASS: TestEndToEnd (1297.62s)
 PASS
-ok  	github.com/mesosphere/dklb/test/e2e	987.196s
+ok  	github.com/mesosphere/dklb/test/e2e	1297.681s
 ----

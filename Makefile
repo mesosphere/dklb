@@ -39,16 +39,18 @@ skaffold:
 
 # test.e2e runs the end-to-end test suite.
 .PHONY: test.e2e
+test.e2e: AWS_PUBLIC_SUBNET_ID ?=
 test.e2e: FOCUS ?= .*
 test.e2e: KUBECONFIG ?= $(HOME)/.kube/config
 test.e2e: LOG_LEVEL := info
-test.e2e: TIMEOUT := 1200s
+test.e2e: TIMEOUT := 1800s
 test.e2e:
 	@go test -tags e2e $(ROOT_DIR)/test/e2e \
 		-ginkgo.focus="$(FOCUS)" \
 		-ginkgo.v \
 		-test.timeout="$(TIMEOUT)" \
 		-test.v \
+		-aws-public-subnet-id="$(AWS_PUBLIC_SUBNET_ID)" \
 		-edgelb-bearer-token="$$(dcos config show core.dcos_acs_token)" \
 		-edgelb-host="$$(dcos config show core.dcos_url)" \
 		-edgelb-insecure-skip-tls-verify \

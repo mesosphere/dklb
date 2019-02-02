@@ -2,6 +2,7 @@ package framework
 
 import (
 	. "github.com/onsi/gomega"
+	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	kubeerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,6 +20,8 @@ func (f *Framework) WithTemporaryNamespace(fn func(namespace *corev1.Namespace))
 	})
 	// Make sure that no error has occurred.
 	Expect(err).NotTo(HaveOccurred(), "failed to create temporary namespace")
+	// Output the name of the namespace.
+	log.Debugf("created namespace %q", ns.Name)
 	// Call the provided function with the namespace.
 	fn(ns)
 	// Delete the Kubernetes namespace and wait for it to disappear.

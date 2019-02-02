@@ -15,7 +15,14 @@ import (
 	e2eframework "github.com/mesosphere/dklb/test/e2e/framework"
 )
 
+const (
+	// awsPublicSubnetIdFlagName is the name of the flag that specifies the ID of the subnet to use in cloud load-balancer configurations.
+	awsPublicSubnetIdFlagName = "aws-public-subnet-id"
+)
+
 var (
+	// awsPublicSubnetId is the ID of the subnet to use in cloud load-balancer configurations.
+	awsPublicSubnetId string
 	// edgelbOptions is the set of options used to configure the EdgeLB Manager.
 	edgelbOptions manager.EdgeLBManagerOptions
 	// kubeconfig is the path to the kubeconfig file to use when running outside a Kubernetes cluster.
@@ -30,6 +37,7 @@ var (
 )
 
 func init() {
+	flag.StringVar(&awsPublicSubnetId, awsPublicSubnetIdFlagName, "", "the id of the subnet to use in cloud load-balancer configurations")
 	flag.StringVar(&edgelbOptions.BearerToken, "edgelb-bearer-token", "", "the (optional) bearer token to use when communicating with the edgelb api server")
 	flag.StringVar(&edgelbOptions.Host, "edgelb-host", constants.DefaultEdgeLBHost, "the host at which the edgelb api server can be reached")
 	flag.BoolVar(&edgelbOptions.InsecureSkipTLSVerify, "edgelb-insecure-skip-tls-verify", false, "whether to skip verification of the tls certificate presented by the edgelb api server")
