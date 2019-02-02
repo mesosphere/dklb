@@ -25,7 +25,7 @@ func (w *Webhook) validateAndMutateService(currentSvc, previousSvc *corev1.Servi
 	}
 
 	// If there is a previous version of the current "Service" resource, we must also validate any changes that may have been performed.
-	if previousSvc != nil {
+	if previousSvc != nil && previousSvc.Spec.Type == corev1.ServiceTypeLoadBalancer {
 		// Compute the translation options for the previous "Service" resource.
 		// There should be no errors as the resource has been previously admitted, but we still propagate them just in case.
 		previousOptions, err := translator.ComputeServiceTranslationOptions(w.clusterName, previousSvc)

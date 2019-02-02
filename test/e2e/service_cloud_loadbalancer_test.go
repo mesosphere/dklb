@@ -44,7 +44,6 @@ var _ = Describe("Service", func() {
 					initialPoolBindPort int
 					initialPoolName     string
 					finalPool           *models.V2Pool
-					finalPoolBindPort   int
 					finalPoolName       string
 					redisCfgMap         *corev1.ConfigMap
 					redisPod            *corev1.Pod
@@ -166,12 +165,17 @@ var _ = Describe("Service", func() {
 
 				// Make sure that the final EdgeLB pool has been deployed to a private DC/OS agent.
 				Expect(finalPool.Role).To(Equal(constants.EdgeLBRolePrivate))
-				// Make sure that the initial EdgeLB pool has one frontend that binds to port "0" (dynamic), and that that binding is reflected as an annotation on the Service resource.
-				finalPoolBindPort, err = strconv.Atoi(redisSvc.Annotations[fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, redisSvcPort)])
+				// Make sure that the initial EdgeLB pool has one frontend that binds to port "0" (dynamic).
 				Expect(err).NotTo(HaveOccurred())
 				Expect(finalPool.Haproxy.Frontends).To(HaveLen(1))
-				Expect(*finalPool.Haproxy.Frontends[0].BindPort).To(Equal(int32(finalPoolBindPort)))
 				Expect(*finalPool.Haproxy.Frontends[0].BindPort).To(Equal(int32(0)))
+				Expect(redisSvc.Annotations).NotTo(HaveKey(constants.EdgeLBPoolNameAnnotationKey))
+				Expect(redisSvc.Annotations).NotTo(HaveKey(constants.EdgeLBPoolRoleAnnotationKey))
+				Expect(redisSvc.Annotations).NotTo(HaveKey(constants.EdgeLBPoolNetworkAnnotationKey))
+				Expect(redisSvc.Annotations).NotTo(HaveKey(constants.EdgeLBPoolCpusAnnotationKey))
+				Expect(redisSvc.Annotations).NotTo(HaveKey(constants.EdgeLBPoolMemAnnotationKey))
+				Expect(redisSvc.Annotations).NotTo(HaveKey(constants.EdgeLBPoolSizeAnnotationKey))
+				Expect(redisSvc.Annotations).NotTo(HaveKey(fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, redisSvcPort)))
 
 				// Connect to Redis using the cloud load-balancer.
 				// Use a larget value for the retry timeout since provisioning of the cloud load-balancer may take a long time.
