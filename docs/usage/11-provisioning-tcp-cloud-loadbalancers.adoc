@@ -21,8 +21,8 @@ toc::[]
 
 == Introduction
 
-`dklb` supports exposing Kubernetes services of type `LoadBalancer` via cloud load-balancers.
-As of this writing, cloud load-balancers are supported only in DC/OS clusters launched in AWS.
+EdgeLB supports exposing Kubernetes services of type `LoadBalancer` via cloud providers' load-balancing solution. Service resources may be annotated so that `dklb` instructs EdgeLB to enable this feature for the respective pools.
+As of this writing, only [AWS ELB](https://aws.amazon.com/elasticloadbalancing/), and more specifically [NLB](https://docs.aws.amazon.com/elasticloadbalancing/latest/network/introduction.html), is supported by EdgeLB, and therefore `dklb`.
 
 == Instructions
 
@@ -54,9 +54,12 @@ In order for `dklb` to provision a cloud load-balancer for a given `Service` res
 kubernetes.dcos.io/cloud-loadbalancer-config: "<cloud-loadbalancer-configmap>"
 ----
 
-When said annotation is specified on a `Service` resource, `dklb` creates a _dedicated_ EdgeLB pool for the `Service` resource.
-This EdgeLB pool is called `ext--<cluster-name>--<namespace>--<name>`, and has a single HAProxy instance, running on a private DC/OS agent.
-From this moment on, no further customization of the EdgeLB pool via `kubernetes.dcos.io/edgelb-pool-*` annotations is supported.
+When said annotation is specified for a `Service` resource, `dklb` creates a _dedicated_ EdgeLB pool for the `Service` resource.
+This EdgeLB pool is called `ext--<cluster-name>--<namespace-name>--<service-name>`, and has a single instance, running on a private DC/OS agent.
+[WARNING]
+====
+From this moment on, further customization of the EdgeLB pool via `kubernetes.dcos.io/edgelb-pool-*` annotations is ignored.
+====
 
 [WARNING]
 ====
@@ -66,7 +69,7 @@ The user is responsible for removing said EdgeLB pool _manually_ using the EdgeL
 
 ==== Connecting to the cloud load-balancer
 
-After the aforementioned annotation is specified, `dklb` will start provisioning the cloud load-balancer according to the provided configuration.
+After the aforementioned annotation is specified, `dklb` will instruct EdgeLB to create a cloud load-balancer according to the provided configuration.
 The hostname that should be used to connect to the cloud load-balancer will usually be reported shortly after in the `.status` field of the `Service` resource.
 
 == Configuration
@@ -84,7 +87,7 @@ metadata:
 name: "<cloud-loadbalancer-configmap>"
 ----
 
-The actual contents of `<spec>` depend on the cloud provider being used.
+The actual contents of `<spec>` depend on the cloud provider being used and are defined by EdgeLB. Please, read EdgeLB pool configuration documentation for more detailed information.
 
 === AWS NLB
 
