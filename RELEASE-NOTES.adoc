@@ -1,0 +1,58 @@
+:sectnums:
+:numbered:
+:toc: macro
+:toc-title:
+:toclevels: 3
+:numbered!:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+= Release notes
+:icons: font
+
+[discrete]
+== Table of Contents
+toc::[]
+
+== v0.1.0-alpha.6
+
+=== Improvements
+
+* Add support for requesting a cloud load-balancer via the `kubernetes.dcos.io/cloud-loadbalancer-configmap` annotation.
+
+== v0.1.0-alpha.5
+
+=== Improvements
+
+* Add support for specifying a custom service group in which to create EdgeLB pools.
+* Make `dklb` use itself as a backend on `Ingress` resources referencing missing/invalid `Service` resources.
+
+== v0.1.0-alpha.4
+
+=== Improvements
+
+* Add an admission webhook that validates `Service`/`Ingress` resources.
+
+== v0.1.0-alpha.3
+
+=== Improvements
+
+* Add support for L7 (HTTP) load-balancing.
+
+== v0.1.0-alpha.2
+
+=== Improvements
+
+* Add support for specifying a virtual network via the `kubernetes.dcos.io/edgelb-pool-network` annotation.
+* Make the `kubernetes.dcos.io/edgelb-pool-name` annotation optional.
+
+== v0.1.0-alpha.1
+
+=== Improvements
+
+* Initial release with support for L4 (TCP) load-balancing.
