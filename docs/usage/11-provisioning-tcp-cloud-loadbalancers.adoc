@@ -51,7 +51,7 @@ In order for `dklb` to provision a cloud load-balancer for a given `Service` res
 
 [source,text]
 ----
-kubernetes.dcos.io/cloud-loadbalancer-config: "<cloud-loadbalancer-configmap>"
+kubernetes.dcos.io/cloud-loadbalancer-configmap: "<cloud-loadbalancer-configmap>"
 ----
 
 When said annotation is specified for a `Service` resource, `dklb` creates a _dedicated_ EdgeLB pool for the `Service` resource.
