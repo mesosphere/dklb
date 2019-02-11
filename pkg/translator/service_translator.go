@@ -14,6 +14,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	dklberrors "github.com/mesosphere/dklb/pkg/errors"
 	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
+	"github.com/mesosphere/dklb/pkg/util/pointers"
 	"github.com/mesosphere/dklb/pkg/util/prettyprint"
 )
 
@@ -177,6 +178,9 @@ func (st *ServiceTranslator) createEdgeLBPoolObject() (*models.V2Pool, error) {
 		Haproxy: &models.V2Haproxy{
 			Backends:  backends,
 			Frontends: frontends,
+			Stats: &models.V2Stats{
+				BindPort: pointers.NewInt32(0),
+			},
 		},
 	}
 

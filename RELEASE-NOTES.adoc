@@ -19,6 +19,17 @@ endif::[]
 == Table of Contents
 toc::[]
 
+== v0.1.0-alpha.7 (Unreleased)
+
+=== Improvements
+
+* Use dynamic ports for HAProxy stats.
+
+=== Documentation
+
+* Fix the name of the `kubernetes.dcos.io/cloud-loadbalancer-configmap` annotation.
+* Add the original TCP/HTTP design document to this repository.
+
 == v0.1.0-alpha.6
 
 === Improvements

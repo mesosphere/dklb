@@ -299,6 +299,8 @@ func TestCreateEdgeLBPoolObjectForIngress(t *testing.T) {
 		assert.Equal(t, test.expectedBackends, pool.Haproxy.Backends)
 		assert.Equal(t, test.expectedFrontends, pool.Haproxy.Frontends)
 		assert.Equal(t, test.expectedEventCount, len(recorder.Events))
+		// Make sure we're requesting a dynamic stats port from EdgeLB.
+		assert.Equal(t, int32(0), *pool.Haproxy.Stats.BindPort)
 	}
 }
 

@@ -555,6 +555,13 @@ In the snippet above...
 * `<namespace>` is the name of the namespace to which the `Ingress` resource belongs;
 * `<ingress-name>` is the name of the `Ingress` resource;
 
+=== Avoiding port collisions between EdgeLB pools
+
+Besides the frontend ports that expose `Service` and `Ingress` resources, and which can be customized using the aforementioned <<annotations,annotations>>, every EdgeLB pool also exposes an HAProxy statistics and debugging port (known as the `stats` port).
+This port is typically `9090`.
+This means that, unless said port is customized, it is not possible to deploy two EdgeLB pools side-by-side on the same public DC/OS agent (since both of them will request `9090`).
+To overcome this limitation while avoiding the need to directly manage port allocation between EdgeLB pools, `dklb` will explicitly request EdgeLB to allocate a https://jira.mesosphere.com/browse/DCOS-46504[_dynamic_ port] for the `stats` port by setting `.haproxy.stats.bindPort` to `0`.
+
 === Updates
 
 Since internal state can be rebuilt at any given time by pulling existing configuration from both Kubernetes and EdgeLB, updating `dklb` should be non-disruptive.

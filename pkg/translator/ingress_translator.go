@@ -284,6 +284,9 @@ func (it *IngressTranslator) createEdgeLBPoolObject(backendMap IngressBackendNod
 		Haproxy: &models.V2Haproxy{
 			Backends:  backends,
 			Frontends: []*models.V2Frontend{frontend},
+			Stats: &models.V2Stats{
+				BindPort: pointers.NewInt32(0),
+			},
 		},
 	}
 	// Request for the EdgeLB pool to join the requested DC/OS virtual network if applicable.
