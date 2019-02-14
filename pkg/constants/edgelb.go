@@ -1,8 +1,14 @@
 package constants
 
 const (
+	// EdgeLBBackendBackup holds the value used as part of "miscStr" in order to instruct EdgeLB to use a given server only as "backup".
+	EdgeLBBackendBackup = "backup"
 	// EdgeLBBackendBalanceLeastConnections holds the value used to request the "leastconn" mode for a backend.
 	EdgeLBBackendBalanceLeastConnections = "leastconn"
+	// EdgeLBBackendInsecureSkipTLSVerify holds the value used as part of "miscStr" in order to disable verification of the TLS certificate presented by a given backend (if any).
+	EdgeLBBackendInsecureSkipTLSVerify = "ssl verify none"
+	// EdgeLBBackendTLSCheck holds the value used as part of "miscStr" in order to instruct EdgeLB to perform health-checks over TLS.
+	EdgeLBBackendTLSCheck = "check-ssl"
 	// EdgeLBCloudLoadBalancerPoolNamePrefix is the prefix used in the names of EdgeLB pools requesting a cloud load-balancer to be configured.
 	EdgeLBCloudLoadBalancerPoolNamePrefix = "ext"
 	// EdgeLBFrontendBindAddress holds the bind address to use in EdgeLB frontends.

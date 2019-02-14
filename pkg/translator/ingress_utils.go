@@ -51,18 +51,51 @@ func (m *ingressOwnedEdgeLBObjectMetadata) IsOwnedBy(clusterName string, ingress
 // computeEdgeLBBackendForIngressBackend computes the EdgeLB backend that corresponds to the specified Ingress backend.
 func computeEdgeLBBackendForIngressBackend(clusterName string, ingress *extsv1beta1.Ingress, backend extsv1beta1.IngressBackend, nodePort int32) *models.V2Backend {
 	return &models.V2Backend{
-		Balance: constants.EdgeLBBackendBalanceLeastConnections,
-		Name:    computeEdgeLBBackendNameForIngressBackend(clusterName, ingress, backend),
-		// TODO (@bcustodio) Understand if/when we need to use HTTPS here.
+		Balance:  constants.EdgeLBBackendBalanceLeastConnections,
+		Name:     computeEdgeLBBackendNameForIngressBackend(clusterName, ingress, backend),
 		Protocol: models.V2ProtocolHTTP,
+		// At this point we would need to know if the target server is TLS-enabled or not so that we could configure HAProxy accordingly.
+		// This is so because when the target server is TLS-enabled, HAProxy **MUST** be configured with the "ssl verify none" option (so that it actually communicates over TLS **AND** skips certificate verification).
+		// On the other hand, specifying said option when the target server is **NOT** TLS-enabled will cause HAProxy to be unable to communicate with said server.
+		// Hence, we add the same server twice:
+		// * We add the TLS-enabled variant of the server as the preferred server, forcing health-checks to happen over TLS.
+		//   This version will be the one used whenever the server responds adequately to said TLS-enabled health-checks (and only in this situation).
+		// * We add the TLS-disabled variant of the server as the "backup" server.
+		//   This version will be the one used whenever the server does not respond adequately to TLS-enabled health-checks (and only in this situation).
+		// This will result in an HAProxy config similar to the following one:
+		//
+		// backend ingress-backend
+		//    mode http
+		//    server 1.2.3.4:5678 check check-ssl ssl verify none
+		//    server 4.3.2.1:5678 check check-ssl ssl verify none
+		//    server 1.2.3.4:5678 check backup
+		//    server 4.3.2.1:5678 check backup
 		Services: []*models.V2Service{
 			{
 				Endpoint: &models.V2Endpoint{
 					Check: &models.V2EndpointCheck{
 						Enabled: pointers.NewBool(true),
 					},
-					Port: nodePort,
-					Type: models.V2EndpointTypeCONTAINERIP,
+					MiscStr: computeEdgeLBBackendMiscStr(constants.EdgeLBBackendTLSCheck, constants.EdgeLBBackendInsecureSkipTLSVerify),
+					Port:    nodePort,
+					Type:    models.V2EndpointTypeCONTAINERIP,
+				},
+				Marathon: &models.V2ServiceMarathon{
+					// We don't want to use any Marathon service as the backend.
+				},
+				Mesos: &models.V2ServiceMesos{
+					FrameworkName:   clusterName,
+					TaskNamePattern: constants.KubeNodeTaskPattern,
+				},
+			},
+			{
+				Endpoint: &models.V2Endpoint{
+					Check: &models.V2EndpointCheck{
+						Enabled: pointers.NewBool(true),
+					},
+					MiscStr: computeEdgeLBBackendMiscStr(constants.EdgeLBBackendBackup),
+					Port:    nodePort,
+					Type:    models.V2EndpointTypeCONTAINERIP,
 				},
 				Marathon: &models.V2ServiceMarathon{
 					// We don't want to use any Marathon service as the backend.
@@ -158,6 +191,11 @@ func computeEdgeLBFrontendForIngress(clusterName string, ingress *extsv1beta1.In
 // computeEdgeLBFrontendNameForIngress computes the name of the EdgeLB frontend that corresponds to the specified Ingress resource.
 func computeEdgeLBFrontendNameForIngress(clusterName string, ingress *extsv1beta1.Ingress) string {
 	return fmt.Sprintf(edgeLBIngressFrontendNameFormatString, dklbstrings.ReplaceForwardSlashesWithDots(clusterName), ingress.Namespace, ingress.Name)
+}
+
+// computeEdgeLBBackendMiscStr computes the value to be used as "miscStr" on a given backend given the specified options.
+func computeEdgeLBBackendMiscStr(options ...string) string {
+	return strings.Join(options, " ")
 }
 
 // computeServiceOwnedEdgeLBObjectMetadata parses the provided EdgeLB backend/frontend name and returns metadata about the Ingress resource that owns it.

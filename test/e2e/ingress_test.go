@@ -5,6 +5,7 @@ package e2e_test
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/mesosphere/dcos-edge-lb/models"
 	. "github.com/onsi/ginkgo"
@@ -20,6 +21,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/util/kubernetes"
 	"github.com/mesosphere/dklb/pkg/util/pointers"
 	"github.com/mesosphere/dklb/pkg/util/retry"
+	dklbstrings "github.com/mesosphere/dklb/pkg/util/strings"
 	"github.com/mesosphere/dklb/test/e2e/framework"
 )
 
@@ -736,6 +738,103 @@ var _ = Describe("Ingress", func() {
 				err = f.KubeClient.ExtensionsV1beta1().Ingresses(ingress.Namespace).Delete(ingress.Name, metav1.NewDeleteOptions(0))
 				Expect(err).NotTo(HaveOccurred(), "failed to delete ingress %q", kubernetes.Key(ingress))
 			})
+		})
+
+		It("supports both HTTP and HTTPS backends [HTTP] [Public]", func() {
+			// NOTE: Contrary to the remaining tests, which run using dedicated namespaces, this test must use resources in the "default" namespace.
+
+			var (
+				err      error
+				ingress  *extsv1beta1.Ingress
+				publicIP string
+				svc      *corev1.Service
+			)
+
+			// Read the "default/kubernetes" service so we can later update it in order to set its ".spec.type" to "NodePort".
+			// This way we will have a suitable, TLS-enabled backend without having to deploy pods and managing TLS ourselves.
+			svc, err = f.KubeClient.CoreV1().Services(corev1.NamespaceDefault).Get("kubernetes", metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			// Update "default/kubernetes" in order to set its ".spec.type" to "NodePort".
+			svc.Spec.Type = corev1.ServiceTypeNodePort
+			svc, err = f.KubeClient.CoreV1().Services(svc.Namespace).Update(svc)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create an Ingress resource targeting the "default/kubernetes" service, annotating it to be provisioned by EdgeLB.
+			ingress, err = f.CreateEdgeLBIngress(svc.Namespace, svc.Name, func(ingress *extsv1beta1.Ingress) {
+				ingress.Annotations = map[string]string{
+					// Request for the EdgeLB pool to have the same name as the MKE cluster (having any forward slashed replaced with "--").
+					constants.EdgeLBPoolNameAnnotationKey: dklbstrings.ReplaceForwardSlashes(f.ClusterName, "--"),
+				}
+				ingress.Spec.Rules = []extsv1beta1.IngressRule{
+					{
+						IngressRuleValue: extsv1beta1.IngressRuleValue{
+							HTTP: &extsv1beta1.HTTPIngressRuleValue{
+								Paths: []extsv1beta1.HTTPIngressPath{
+									{
+										Path: "/kubernetes",
+										Backend: extsv1beta1.IngressBackend{
+											ServiceName: svc.Name,
+											ServicePort: intstr.FromInt(int(svc.Spec.Ports[0].Port)),
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+			})
+			Expect(err).NotTo(HaveOccurred(), "failed to create test ingress")
+
+			// Wait for EdgeLB to acknowledge the pool's creation.
+			err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+				ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryInterval/2)
+				defer fn()
+				_, err = f.EdgeLBManager.GetPool(ctx, ingress.Annotations[constants.EdgeLBPoolNameAnnotationKey])
+				return err == nil, nil
+			})
+			Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
+
+			// Wait for the Ingress to respond with the default backend.
+			log.Debugf("waiting for the public ip for %q to be reported", kubernetes.Key(ingress))
+			err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+				// Wait for the pool's public IP to be reported.
+				ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryTimeout)
+				defer fn()
+				publicIP, err = f.WaitForPublicIPForIngress(ctx, ingress)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(publicIP).NotTo(BeEmpty())
+				// Attempt to connect to the ingress using the reported IP.
+				log.Debugf("attempting to connect to %q at %q", kubernetes.Key(ingress), publicIP)
+				_, body, err := f.Request("GET", publicIP, "/foo")
+				if err != nil {
+					log.Debugf("waiting for the ingress to be reachable at %s", publicIP)
+					return false, nil
+				}
+				// Make sure that we've got an answer from "dklb" itself (the default backend).
+				// This guarantees that HTTP backends are supported.
+				return strings.Contains(body, "No backend is available to service this request"), nil
+			})
+			Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the ingress to be reachable")
+			log.Debugf("the ingress is reachable at %s", publicIP)
+
+			// Make sure that we can obtain a response from the Kubernetes API.
+			// This guarantees that HTTPS backends are supported.
+			status, body, err := f.Request("GET", publicIP, "/kubernetes")
+			Expect(err).NotTo(HaveOccurred(), "failed to perform http request")
+			Expect(status).To(Equal(403), "the response's status code doesn't match the expectation")
+			Expect(body).To(MatchRegexp("anonymous"), "the response's body doesn't match the expectations")
+
+			// Manually delete the Ingress resource.
+			err = f.KubeClient.ExtensionsV1beta1().Ingresses(ingress.Namespace).Delete(ingress.Name, metav1.NewDeleteOptions(0))
+			Expect(err).NotTo(HaveOccurred(), "failed to delete ingress %q", kubernetes.Key(ingress))
+
+			// Undo the change made to the "default/kubernetes" service.
+			svc, err = f.KubeClient.CoreV1().Services(svc.Namespace).Get(svc.Name, metav1.GetOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			svc.Spec.Type = corev1.ServiceTypeClusterIP
+			svc.Spec.Ports[0].NodePort = 0
+			svc, err = f.KubeClient.CoreV1().Services(svc.Namespace).Update(svc)
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })
