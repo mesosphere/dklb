@@ -3,6 +3,8 @@ package translator
 import (
 	"errors"
 	"fmt"
+	"math"
+	"sort"
 	"strings"
 
 	"github.com/mesosphere/dcos-edge-lb/models"
@@ -16,6 +18,8 @@ import (
 )
 
 const (
+	// edgeLBHostCatchAllRegex is the regular expression used by EdgeLB to match all hosts.
+	edgeLBHostCatchAllRegex = "^.*$"
 	// edgeLBIngressBackendNameFormatString is the format string used to compute the name for an EdgeLB backend corresponding to a given Ingress backend.
 	// The resulting name is of the form "<cluster-name>:<ingress-namespace>:<ingress-name>:<service-name>:<service-port>".
 	edgeLBIngressBackendNameFormatString = "%s" + separator + "%s" + separator + "%s" + separator + "%s" + separator + "%s"
@@ -41,6 +45,12 @@ type ingressOwnedEdgeLBObjectMetadata struct {
 	Namespace string
 	// IngressBackend is the reconstructed IngressBackend object represented by the current EdgeLB object (in case said object is an EdgeLB backend).
 	IngressBackend *extsv1beta1.IngressBackend
+}
+
+// prioritizedMatchingRule is a helper struct used to associate a priority with an EdgeLB "V2FrontendLinkBackendMapItems0".
+type prioritizedMatchingRule struct {
+	item     *models.V2FrontendLinkBackendMapItems0
+	priority int
 }
 
 // IsOwnedBy indicates whether the current EdgeLB object is owned by the specified Ingress resource.
@@ -145,11 +155,8 @@ func computeEdgeLBFrontendForIngress(clusterName string, ingress *extsv1beta1.In
 		LinkBackend: &models.V2FrontendLinkBackend{},
 	}
 
-	// hostItems will contain "V2FrontendLinkBackendMapItems0" items for rules that specify a ".host" field.
-	// These should take precedence over (i.e. be matched before) any rules that don't specify said field.
-	hostItems := make([]*models.V2FrontendLinkBackendMapItems0, 0)
-	// pathItems will contain "V2FrontendLinkBackendMapItems0" items for rules that don't specify a ".host" field.
-	pathItems := make([]*models.V2FrontendLinkBackendMapItems0, 0)
+	// Create the slice that will hold the set of matching rules.
+	rules := make([]prioritizedMatchingRule, 0, 0)
 
 	// Iterate over Ingress backends, building the corresponding "V2FrontendLinkBackendMapItems0" EdgeLB object.
 	kubernetesutil.ForEachIngresBackend(ingress, func(host, path *string, backend extsv1beta1.IngressBackend) {
@@ -157,33 +164,54 @@ func computeEdgeLBFrontendForIngress(clusterName string, ingress *extsv1beta1.In
 		case host == nil && path == nil:
 			frontend.LinkBackend.DefaultBackend = computeEdgeLBBackendNameForIngressBackend(clusterName, ingress, backend)
 		default:
-			item := &models.V2FrontendLinkBackendMapItems0{
-				Backend: computeEdgeLBBackendNameForIngressBackend(clusterName, ingress, backend),
-				HostEq:  *host,
+			rule := prioritizedMatchingRule{
+				item: &models.V2FrontendLinkBackendMapItems0{
+					Backend: computeEdgeLBBackendNameForIngressBackend(clusterName, ingress, backend),
+				},
+				priority: 0,
 			}
-			if *path == "" {
-				// A ".path" field has not been specified, so the current rule should catch all requests.
-				item.PathReg = edgeLBPathCatchAllRegex
-			} else {
-				// A ".path" field has been specified, so we should use it to match requests.
+
+			switch {
+			case host == nil || *host == "":
+				// No value (or an empty value) was specified for ".host".
+				// Hence we set this rule's priority as the lowest possible one, causing HAProxy to match it only **AFTER** any other rules specifying a non-empty ".host".
+				rule.item.HostReg = edgeLBHostCatchAllRegex
+				rule.priority = math.MinInt32
+			default:
+				// A non-empty value was specified for ".host".
+				// Hence we set this rule's priority to a normal level, causing HAProxy to match it **BEFORE** any other rules specifying an empty ".host".
+				rule.item.HostEq = *host
+				rule.priority = 0
+			}
+
+			switch {
+			case path == nil || *path == "":
+				// No value (or an empty value) was specified for ".path".
+				// Hence we keep this rule's priority as-is, causing HAProxy to match it only **AFTER** any other rules specifying a non-empty ".path".
+				rule.item.PathReg = edgeLBPathCatchAllRegex
+				rule.priority += 0
+			default:
+				// A non-empty value was specified for ".path".
+				// Hence we add the length of the path to this rule's priority, causing HAProxy to match it **BEFORE** any other rules specifying a shorter ".path".
 				// TODO (@bcustodio) HAProxy uses PCRE regular expressions, while the Ingress spec dictates that regular expressions follow the egrep (IEEE Std 1003.1) syntax.
 				// TODO (@bcustodio) https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.13/#httpingresspath-v1beta1-extensions
 				// TODO (@bcustodio) We need to understand whether "translation" is required/desirable (and possible), or accept PCRE and document that the syntax for paths does not follow the spec.
-				item.PathReg = fmt.Sprintf(edgeLBPathRegexFormatString, *path)
+				rule.item.PathReg = fmt.Sprintf(edgeLBPathRegexFormatString, *path)
+				rule.priority += len(*path)
 			}
-			if *host == "" {
-				// A ".host" field has not been specified, so the current rule should be matched last.
-				pathItems = append(pathItems, item)
-			} else {
-				// A ".host" field has been specified, so the current rule should be matched first.
-				hostItems = append(hostItems, item)
-			}
+
+			rules = append(rules, rule)
 		}
 	})
 
-	// Build the final map by concatenating "hostItems" and  "pathItems".
-	frontend.LinkBackend.Map = append(frontend.LinkBackend.Map, hostItems...)
-	frontend.LinkBackend.Map = append(frontend.LinkBackend.Map, pathItems...)
+	// Sort rules by descending order of their priority.
+	sort.SliceStable(rules, func(i, j int) bool {
+		return rules[i].priority > rules[j].priority
+	})
+	// Add each rule to the final slice of rules.
+	for _, rule := range rules {
+		frontend.LinkBackend.Map = append(frontend.LinkBackend.Map, rule.item)
+	}
 	// Return the computed EdgeLB frontend object.
 	return frontend
 }

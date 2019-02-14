@@ -251,8 +251,8 @@ var _ = Describe("Ingress", func() {
 				// Create an Ingress resource targeting the services above, annotating it to be provisioned by EdgeLB.
 				// The following rules are defined on the Ingress resource:
 				// * Requests for the "http-echo-4.com" host are (ALL) directed towards "http-echo-4".
-				// * Requests for "*/foo(/.*)?" are directed towards "http-echo-2".
-				// * Requests for "*/bar(/.*)?" are directed towards "http-echo-3".
+				// * Requests for the "http-echo-3.com" host and the "/bar(/.*)?" path are directed towards "http-echo-3".
+				// * Requests for the "http-echo-3.com" host and any other path are directed towards "http-echo-2".
 				// * Unmatched requests are directed towards "http-echo-1".
 				ingress, err = f.CreateEdgeLBIngress(namespace.Name, "http-echo", func(ingress *extsv1beta1.Ingress) {
 					ingress.Annotations = map[string]string{
@@ -273,11 +273,11 @@ var _ = Describe("Ingress", func() {
 					}
 					ingress.Spec.Rules = []extsv1beta1.IngressRule{
 						{
+							Host: "http-echo-3.com",
 							IngressRuleValue: extsv1beta1.IngressRuleValue{
 								HTTP: &extsv1beta1.HTTPIngressRuleValue{
 									Paths: []extsv1beta1.HTTPIngressPath{
 										{
-											Path: "/foo(/.*)?",
 											Backend: extsv1beta1.IngressBackend{
 												ServiceName: echoSvc2.Name,
 												ServicePort: intstr.FromInt(int(echoSvc2.Spec.Ports[0].Port)),
@@ -356,40 +356,28 @@ var _ = Describe("Ingress", func() {
 					path        string
 					expectedPod string
 				}{
-					// Test that requests whose path starts with "/foo" but whose host is "http-echo-4.com" are directed towards "http-echo-4".
+					// Test that requests whose path starts with "/bar" but whose host is "http-echo-4.com" are directed towards "http-echo-4".
 					{
 						host:        "http-echo-4.com",
-						path:        "/foo",
+						path:        "/bar",
 						expectedPod: echoPod4.Name,
 					},
-					// Test that requests whose path starts with "/foo" are directed towards "http-echo-2".
+					// Test that requests whose path starts with "/foo" and whose host is "http-echo-3.com" are directed towards "http-echo-2".
 					{
-						host:        publicIP,
+						host:        "http-echo-3.com",
 						path:        "/foo",
 						expectedPod: echoPod2.Name,
 					},
-					// Test that requests whose path contains "/bar" are directed towards "http-echo-2" (and not "http-echo-3") as the path starts with "/foo".
+					// Test that requests whose path starts with "/bar" and whose host is "http-echo-3.com" are directed towards "http-echo-3".
 					{
-						host:        publicIP,
-						path:        "/foo/bar",
-						expectedPod: echoPod2.Name,
-					},
-					// Test that requests whose path starts with "/bar" are directed towards "http-echo-3".
-					{
-						host:        publicIP,
-						path:        "/bar?foo=bar",
-						expectedPod: echoPod3.Name,
-					},
-					// Test that requests whose path contains "/foo" are directed towards "http-echo-3" (and not "http-echo-2") as the path starts with "/bar".
-					{
-						host:        publicIP,
-						path:        "/bar/foo",
+						host:        "http-echo-3.com",
+						path:        "/bar",
 						expectedPod: echoPod3.Name,
 					},
 					// Test that unmatched requests are directed towards "http-echo-1" (the default backend).
 					{
 						host:        publicIP,
-						path:        "/baz",
+						path:        "/foo",
 						expectedPod: echoPod1.Name,
 					},
 				}

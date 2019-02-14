@@ -562,6 +562,45 @@ This port is typically `9090`.
 This means that, unless said port is customized, it is not possible to deploy two EdgeLB pools side-by-side on the same public DC/OS agent (since both of them will request `9090`).
 To overcome this limitation while avoiding the need to directly manage port allocation between EdgeLB pools, `dklb` will explicitly request EdgeLB to allocate a https://jira.mesosphere.com/browse/DCOS-46504[_dynamic_ port] for the `stats` port by setting `.haproxy.stats.bindPort` to `0`.
 
+=== Host and path matching priorities in L7 load-balancing
+
+In order to prevent as much as possible scenarios where a "less specific" `Ingress` rule taking precedence over a "more specific" one, it is convenient to define _priorities_ that govern host and path matching.
+An example of a scenario where said priorities are useful is the following `Ingress`:
+
+
+[source,yaml]
+----
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: "edgelb"
+  name: path-matching
+spec:
+  rules:
+  - host: "foo.com"
+    http:
+      paths:
+      - backend:
+          serviceName: service-1
+          servicePort: 80
+      - backend:
+          serviceName: service-2
+          servicePort: 80
+        path: /bar
+----
+
+In the `Ingress` above, and should priorities not be adequately defined, requests made to `http://foo.com/bar` might end up being served using `service-1:80` (which has an empty value for `.path` but comes _first_) instead of `service-2:80` (in which `.path` has the specific value of `/bar` but which comes _last_).
+
+In order to overcome said scenarios as much as possible, `dklb` is to use a "prioritization scheme" similar to the one employed by the https://github.com/kubernetes/ingress-nginx/blob/master/docs/user-guide/ingress-path-matching.md#path-priority[NGINX] and https://docs.traefik.io/basics/#priorities[Traefik] ingress controllers:
+
+* Rules specifying a _non-empty_ value for `.host` take precedence (i.e. are matched **FIRST**) over rules specifying an _empty value_ for `.host` (or no value at all).
+* Rules specifying a _longer_ value for `.path` take precedence (i.e. are matched **FIRST**) over rules specifying a _shorter_ value for `.path`.
+** In particular, rules specifying an _empty_ value for `.path` are applied in a "_catch-all_" fashion, being used to match requests for which none of the previously matched rules apply.
+
+Again taking the aforementioned `Ingress` resource as an example, the application of this "prioritization scheme" results in `service-2` being unequivocally used to serve requests made to `http://foo.com/bar`.
+In its turn, `service-1` is used to serve requests to all other paths on the `foo.com` host (such as `http://foo.com/baz`).
+
 === Updates
 
 Since internal state can be rebuilt at any given time by pulling existing configuration from both Kubernetes and EdgeLB, updating `dklb` should be non-disruptive.

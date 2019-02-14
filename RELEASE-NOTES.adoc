@@ -21,7 +21,10 @@ toc::[]
 
 == v0.1.0-alpha.8 (Unreleased)
 
-* Fix a bug which caused `502 BAD GATEWAY` errors when TLS-enabled services are used as Ingress backends.
+=== Improvements
+
+* Fix a bug which causes `502 BAD GATEWAY` errors when TLS-enabled services are used as Ingress backends.
+* Match more specific paths first when provisioning EdgeLB pools for `Ingress` resources.
 
 == v0.1.0-alpha.7
 
