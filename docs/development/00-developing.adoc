@@ -35,9 +35,8 @@ To run `dklb`, the following additional software is required:
 * A https://dcos.io/[DC/OS] cluster having https://docs.mesosphere.com/services/edge-lb/[EdgeLB] installed.
 ** DC/OS must be v1.12.0 or later.
 ** EdgeLB must be built and installed from the https://github.com/mesosphere/dcos-edge-lb/tree/aws-automation[`aws-automation`] branch.
-** The DC/OS CLI must be configured to access the DC/OS cluster.
-* An https://mesosphere.com/product/kubernetes-engine/[MKE] cluster.
-** `kubernetes-cluster` must be https://github.com/mesosphere/dcos-kubernetes-cluster/commit/d74b25e8d7e4e283ba4a66fc0f027669aa4c9fc2[`d74b25e`] or later.
+** EdgeLB https://docs.mesosphere.com/services/edge-lb/1.3/[`v1.3.0`] may be used instead, but some functionality will be missing.
+* An https://mesosphere.com/product/kubernetes-engine/[MKE] https://docs.mesosphere.com/services/kubernetes/2.2.0-1.13.3/[`v2.2.0-1.13.3`] (or later) cluster.
 ** The current kubeconfig context must be configured to point at this cluster.
   
 A Docker Hub account with read/write access to the https://hub.docker.com/r/mesosphere/dklb[`mesosphere/dklb`] image repository is additionally required.

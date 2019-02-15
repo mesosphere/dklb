@@ -26,6 +26,10 @@ toc::[]
 * Fix a bug which causes `502 BAD GATEWAY` errors when TLS-enabled services are used as Ingress backends.
 * Match more specific paths first when provisioning EdgeLB pools for `Ingress` resources.
 
+=== Documentation
+
+* Point at stable MKE and EdgeLB releases.
+
 == v0.1.0-alpha.7
 
 === Improvements

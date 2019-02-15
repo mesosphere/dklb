@@ -26,8 +26,8 @@ To install `dklb`, the following prerequisites must be met:
 * A https://dcos.io/[DC/OS] cluster having https://docs.mesosphere.com/services/edge-lb/[EdgeLB] installed.
 ** DC/OS must be v1.12.0 or later.
 ** EdgeLB must be built and installed from the https://github.com/mesosphere/dcos-edge-lb/tree/aws-automation[`aws-automation`] branch.
-* An https://mesosphere.com/product/kubernetes-engine/[MKE] cluster.
-** `kubernetes-cluster` must be https://github.com/mesosphere/dcos-kubernetes-cluster/commit/6dcc522ecad977497cb843a1e3d5c1694e6c070b[`6dcc522`] or later.
+** EdgeLB https://docs.mesosphere.com/services/edge-lb/1.3/[`v1.3.0`] may be used instead, but some functionality will be missing.
+* An https://mesosphere.com/product/kubernetes-engine/[MKE] https://docs.mesosphere.com/services/kubernetes/2.2.0-1.13.3/[`v2.2.0-1.13.3`] (or later) cluster.
 ** The current kubeconfig context must be configured to point at this cluster.
 
 == Installing
