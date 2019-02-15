@@ -23,58 +23,58 @@ toc::[]
 
 === Improvements
 
-* Fix a bug which causes `502 BAD GATEWAY` errors when TLS-enabled services are used as Ingress backends.
-* Match more specific paths first when provisioning EdgeLB pools for `Ingress` resources.
+* Fix a bug which causes `502 BAD GATEWAY` errors when TLS-enabled services are used as Ingress backends (https://github.com/mesosphere/dklb/pull/16[#16]).
+* Match more specific paths first when provisioning EdgeLB pools for `Ingress` resources (https://github.com/mesosphere/dklb/pull/17[#17]).
 
 === Documentation
 
-* Point at stable MKE and EdgeLB releases.
+* Point at stable MKE and EdgeLB releases (https://github.com/mesosphere/dklb/pull/18[#18]).
 
 == v0.1.0-alpha.7
 
 === Improvements
 
-* Use dynamic ports for HAProxy stats.
+* Use dynamic ports for HAProxy stats (https://github.com/mesosphere/dklb/pull/15[#15]).
 
 === Documentation
 
-* Fix the name of the `kubernetes.dcos.io/cloud-loadbalancer-configmap` annotation.
-* Add the original TCP/HTTP design document to this repository.
+* Fix the name of the `kubernetes.dcos.io/cloud-loadbalancer-configmap` annotation (https://github.com/mesosphere/dklb/pull/13[#13]).
+* Add the original TCP/HTTP design document to this repository (https://github.com/mesosphere/dklb/pull/14[#14]).
 
 == v0.1.0-alpha.6
 
 === Improvements
 
-* Add support for requesting a cloud load-balancer via the `kubernetes.dcos.io/cloud-loadbalancer-configmap` annotation.
+* Add support for requesting a cloud load-balancer via the `kubernetes.dcos.io/cloud-loadbalancer-configmap` annotation (https://github.com/mesosphere/dklb/pull/12[#12]).
 
 == v0.1.0-alpha.5
 
 === Improvements
 
-* Add support for specifying a custom service group in which to create EdgeLB pools.
-* Make `dklb` use itself as a backend on `Ingress` resources referencing missing/invalid `Service` resources.
+* Add support for specifying a custom service group in which to create EdgeLB pools (https://github.com/mesosphere/dklb/pull/10[#10]).
+* Make `dklb` use itself as a backend on `Ingress` resources referencing missing/invalid `Service` resources (https://github.com/mesosphere/dklb/pull/9[#9]).
 
 == v0.1.0-alpha.4
 
 === Improvements
 
-* Add an admission webhook that validates `Service`/`Ingress` resources.
+* Add an admission webhook that validates `Service`/`Ingress` resources (https://github.com/mesosphere/dklb/pull/8[#8]).
 
 == v0.1.0-alpha.3
 
 === Improvements
 
-* Add support for L7 (HTTP) load-balancing.
+* Add support for L7 (HTTP) load-balancing (https://github.com/mesosphere/dklb/pull/6[#6]).
 
 == v0.1.0-alpha.2
 
 === Improvements
 
-* Add support for specifying a virtual network via the `kubernetes.dcos.io/edgelb-pool-network` annotation.
-* Make the `kubernetes.dcos.io/edgelb-pool-name` annotation optional.
+* Add support for specifying a virtual network via the `kubernetes.dcos.io/edgelb-pool-network` annotation (https://github.com/mesosphere/dklb/pull/5[#5]).
+* Make the `kubernetes.dcos.io/edgelb-pool-name` annotation optional (https://github.com/mesosphere/dklb/pull/4[#4]).
 
 == v0.1.0-alpha.1
 
 === Improvements
 
-* Initial release with support for L4 (TCP) load-balancing.
+* Initial release with support for L4 (TCP) load-balancing (https://github.com/mesosphere/dklb/pull/2[#2]).
