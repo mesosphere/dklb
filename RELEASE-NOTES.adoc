@@ -19,12 +19,21 @@ endif::[]
 == Table of Contents
 toc::[]
 
+== v0.1.0-alpha.9 (Unreleased)
+
+=== Bug fixes
+
+* Fix a bug which caused Kubernetes events not to be aggregated (https://github.com/mesosphere/dklb/pull/20[#20]).
+
 == v0.1.0-alpha.8
 
 === Improvements
 
-* Fix a bug which causes `502 BAD GATEWAY` errors when TLS-enabled services are used as Ingress backends (https://github.com/mesosphere/dklb/pull/16[#16]).
 * Match more specific paths first when provisioning EdgeLB pools for `Ingress` resources (https://github.com/mesosphere/dklb/pull/17[#17]).
+
+== Bug fixes
+
+* Fix a bug which caused `502 BAD GATEWAY` errors when TLS-enabled services were used as Ingress backends (https://github.com/mesosphere/dklb/pull/16[#16]).
 
 === Documentation
 

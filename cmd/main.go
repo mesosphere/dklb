@@ -9,11 +9,16 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
+
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
+	"k8s.io/client-go/tools/record"
 
 	"github.com/mesosphere/dklb/pkg/admission"
 	"github.com/mesosphere/dklb/pkg/backends"
@@ -24,7 +29,6 @@ import (
 	"github.com/mesosphere/dklb/pkg/features"
 	_ "github.com/mesosphere/dklb/pkg/metrics"
 	"github.com/mesosphere/dklb/pkg/signals"
-	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
 	"github.com/mesosphere/dklb/pkg/version"
 )
 
@@ -199,6 +203,12 @@ func main() {
 		}
 	}
 
+	// Create an event recorder so we can emit events during leader election and afterwards.
+	eb := record.NewBroadcaster()
+	eb.StartLogging(log.Debugf)
+	eb.StartRecordingToSink(&corev1client.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
+	er := eb.NewRecorder(scheme.Scheme, corev1.EventSource{Component: constants.ComponentName})
+
 	// Setup a resource lock so we can perform leader election.
 	rl, _ := resourcelock.New(
 		resourcelock.EndpointsResourceLock,
@@ -207,7 +217,7 @@ func main() {
 		kubeClient.CoreV1(),
 		resourcelock.ResourceLockConfig{
 			Identity:      podName,
-			EventRecorder: kubernetesutil.NewEventRecorderForNamespace(kubeClient, podNamespace),
+			EventRecorder: er,
 		},
 	)
 
@@ -229,7 +239,7 @@ func main() {
 					<-stopCh
 					runCancel()
 				}()
-				run(runCtx, kubeClient, edgelbManager)
+				run(runCtx, kubeClient, er, edgelbManager)
 			},
 			OnStoppedLeading: func() {
 				// We've stopped leading, so we should exit immediately.
@@ -244,15 +254,15 @@ func main() {
 }
 
 // run starts the controllers and blocks until they stop.
-func run(ctx context.Context, kubeClient kubernetes.Interface, edgelbManager manager.EdgeLBManager) {
+func run(ctx context.Context, kubeClient kubernetes.Interface, er record.EventRecorder, edgelbManager manager.EdgeLBManager) {
 	// Create a shared informer factory for the base API types.
 	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, resyncPeriod)
 	// Create a cache for Kubernetes resources based on the shared informer factory.
 	kubeCache := cache.NewKubernetesResourceCache(kubeInformerFactory)
 	// Create an instance of the ingress controller that uses an ingress informer for watching Ingress resources.
-	ingressController := controllers.NewIngressController(clusterName, kubeClient, kubeInformerFactory.Extensions().V1beta1().Ingresses(), kubeInformerFactory.Core().V1().Services(), kubeCache, edgelbManager)
+	ingressController := controllers.NewIngressController(clusterName, kubeClient, er, kubeInformerFactory.Extensions().V1beta1().Ingresses(), kubeInformerFactory.Core().V1().Services(), kubeCache, edgelbManager)
 	// Create an instance of the service controller that uses a service informer for watching Service resources.
-	serviceController := controllers.NewServiceController(clusterName, kubeClient, kubeInformerFactory.Core().V1().Services(), kubeInformerFactory.Core().V1().ConfigMaps(), kubeCache, edgelbManager)
+	serviceController := controllers.NewServiceController(clusterName, kubeClient, er, kubeInformerFactory.Core().V1().Services(), kubeInformerFactory.Core().V1().ConfigMaps(), kubeCache, edgelbManager)
 	// Start the shared informer factory.
 	go kubeInformerFactory.Start(ctx.Done())
 

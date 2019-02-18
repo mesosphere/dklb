@@ -14,6 +14,7 @@ import (
 	extsv1beta1informers "k8s.io/client-go/informers/extensions/v1beta1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/record"
 
 	dklbcache "github.com/mesosphere/dklb/pkg/cache"
 	"github.com/mesosphere/dklb/pkg/constants"
@@ -37,6 +38,8 @@ type IngressController struct {
 	*genericController
 	// kubeClient is a client to the Kubernetes core APIs.
 	kubeClient kubernetes.Interface
+	// er is an EventRecorder using which we can emit events associated with the Ingress resource being translated.
+	er record.EventRecorder
 	// dklbCache is the instance of the Kubernetes resource cache to use.
 	kubeCache dklbcache.KubernetesResourceCache
 	// edgelbManager is the instance of the EdgeLB manager to use for materializing EdgeLB pools for Ingress resources.
@@ -44,11 +47,12 @@ type IngressController struct {
 }
 
 // NewIngressController creates a new instance of the EdgeLB ingress controller.
-func NewIngressController(clusterName string, kubeClient kubernetes.Interface, ingressInformer extsv1beta1informers.IngressInformer, serviceInformer corev1informers.ServiceInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *IngressController {
+func NewIngressController(clusterName string, kubeClient kubernetes.Interface, er record.EventRecorder, ingressInformer extsv1beta1informers.IngressInformer, serviceInformer corev1informers.ServiceInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *IngressController {
 	// Create a new instance of the ingress controller with the specified name and threadiness.
 	c := &IngressController{
 		genericController: newGenericController(clusterName, ingressControllerName, ingressControllerThreadiness),
 		kubeClient:        kubeClient,
+		er:                er,
 		kubeCache:         kubeCache,
 		edgelbManager:     edgelbManager,
 	}
@@ -144,14 +148,11 @@ func (c *IngressController) processQueueItem(workItem WorkItem) error {
 		ingress.ObjectMeta.DeletionTimestamp = &deletionTimestamp
 	}
 
-	// Create an event recorder that we can use to report events related with the Ingress resource.
-	er := kubernetesutil.NewEventRecorderForNamespace(c.kubeClient, ingress.Namespace)
-
 	// Compute the set of options that will be used to translate the Ingress resource into an EdgeLB pool.
 	options, err := translator.ComputeIngressTranslationOptions(c.clusterName, ingress)
 	if err != nil {
 		// Emit an event and log an error, but do not re-enqueue as the resource's spec was found to be invalid.
-		er.Eventf(ingress, corev1.EventTypeWarning, constants.ReasonInvalidAnnotations, "the resource's annotations are not valid: %v", err)
+		c.er.Eventf(ingress, corev1.EventTypeWarning, constants.ReasonInvalidAnnotations, "the resource's annotations are not valid: %v", err)
 		c.logger.Errorf("failed to compute translation options for ingress %q: %v", workItem.Key, err)
 		return nil
 	}
@@ -160,9 +161,9 @@ func (c *IngressController) processQueueItem(workItem WorkItem) error {
 	prettyprint.LogfSpew(log.Tracef, options, "computed ingress translation options for %q", workItem.Key)
 
 	// Perform translation of the Ingress resource into an EdgeLB pool.
-	status, err := translator.NewIngressTranslator(c.clusterName, ingress, *options, c.kubeCache, c.edgelbManager, er).Translate()
+	status, err := translator.NewIngressTranslator(c.clusterName, ingress, *options, c.kubeCache, c.edgelbManager, c.er).Translate()
 	if err != nil {
-		er.Eventf(ingress, corev1.EventTypeWarning, constants.ReasonTranslationError, "failed to translate ingress: %v", err)
+		c.er.Eventf(ingress, corev1.EventTypeWarning, constants.ReasonTranslationError, "failed to translate ingress: %v", err)
 		c.logger.Errorf("failed to translate ingress %q: %v", workItem.Key, err)
 		return err
 	}

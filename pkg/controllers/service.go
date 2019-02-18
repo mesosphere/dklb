@@ -12,13 +12,13 @@ import (
 	corev1informers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/record"
 
 	dklbcache "github.com/mesosphere/dklb/pkg/cache"
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	"github.com/mesosphere/dklb/pkg/metrics"
 	"github.com/mesosphere/dklb/pkg/translator"
-	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
 	"github.com/mesosphere/dklb/pkg/util/prettyprint"
 )
 
@@ -35,6 +35,8 @@ type ServiceController struct {
 	*genericController
 	// kubeClient is a client to the Kubernetes core APIs.
 	kubeClient kubernetes.Interface
+	// er is an EventRecorder using which we can emit events associated with the Service resource being translated.
+	er record.EventRecorder
 	// dklbCache is the instance of the Kubernetes resource cache to use.
 	kubeCache dklbcache.KubernetesResourceCache
 	// edgelbManager is the instance of the EdgeLB manager to use for materializing EdgeLB pools for Service resources.
@@ -42,11 +44,12 @@ type ServiceController struct {
 }
 
 // NewServiceController creates a new instance of the EdgeLB service controller.
-func NewServiceController(clusterName string, kubeClient kubernetes.Interface, serviceInformer corev1informers.ServiceInformer, configMapInformer corev1informers.ConfigMapInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *ServiceController {
+func NewServiceController(clusterName string, kubeClient kubernetes.Interface, er record.EventRecorder, serviceInformer corev1informers.ServiceInformer, configMapInformer corev1informers.ConfigMapInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *ServiceController {
 	// Create a new instance of the service controller with the specified name and threadiness.
 	c := &ServiceController{
 		genericController: newGenericController(clusterName, serviceControllerName, serviceControllerThreadiness),
 		kubeClient:        kubeClient,
+		er:                er,
 		kubeCache:         kubeCache,
 		edgelbManager:     edgelbManager,
 	}
@@ -143,14 +146,11 @@ func (c *ServiceController) processQueueItem(workItem WorkItem) error {
 		service.ObjectMeta.DeletionTimestamp = &deletionTimestamp
 	}
 
-	// Create an event recorder that we can use to report events related with the Ingress resource.
-	er := kubernetesutil.NewEventRecorderForNamespace(c.kubeClient, service.Namespace)
-
 	// Compute the set of options that will be used to translate the Service resource into an EdgeLB pool.
 	options, err := translator.ComputeServiceTranslationOptions(c.clusterName, service)
 	if err != nil {
 		// Emit an event and log an error, but do not re-enqueue as the resource's spec was found to be invalid.
-		er.Eventf(service, corev1.EventTypeWarning, constants.ReasonInvalidAnnotations, "the resource's annotations are not valid: %v", err)
+		c.er.Eventf(service, corev1.EventTypeWarning, constants.ReasonInvalidAnnotations, "the resource's annotations are not valid: %v", err)
 		c.logger.Errorf("failed to compute translation options for service %q: %v", workItem.Key, err)
 		return nil
 	}
@@ -161,7 +161,7 @@ func (c *ServiceController) processQueueItem(workItem WorkItem) error {
 	// Perform translation of the Service resource into an EdgeLB pool.
 	status, err := translator.NewServiceTranslator(c.clusterName, service, *options, c.kubeCache, c.edgelbManager).Translate()
 	if err != nil {
-		er.Eventf(service, corev1.EventTypeWarning, constants.ReasonTranslationError, "failed to translate service: %v", err)
+		c.er.Eventf(service, corev1.EventTypeWarning, constants.ReasonTranslationError, "failed to translate service: %v", err)
 		c.logger.Errorf("failed to translate service %q: %v", workItem.Key, err)
 		return err
 	}
