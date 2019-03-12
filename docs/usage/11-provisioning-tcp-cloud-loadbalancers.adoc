@@ -110,16 +110,16 @@ To configure an AWS NLB, `<spec>` must be a JSON object obeying the following st
       "listeners": [
         {
           "port": <service-port-1>,
-          "linkFrontend": "<cluster-name>-<service-namespace>-<service-name>-<service-port-1>"
+          "linkFrontend": "<cluster-name>:<service-namespace>:<service-name>:<service-port-1>"
         },
         {
           "port": <service-port-2>,
-          "linkFrontend": "<cluster-name>-<service-namespace>-<service-name>-<service-port-2>"
+          "linkFrontend": "<cluster-name>:<service-namespace>:<service-name>:<service-port-2>"
         },
         (...),
         {
           "port": <service-port-M>,
-          "linkFrontend": "<cluster-name>-<service-namespace>-<service-name>-<service-port-M>"
+          "linkFrontend": "<cluster-name>:<service-namespace>:<service-name>:<service-port-M>"
         }
        ]
     }]

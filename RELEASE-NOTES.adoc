@@ -25,6 +25,10 @@ toc::[]
 
 * Fix a bug which caused Kubernetes events not to be aggregated (https://github.com/mesosphere/dklb/pull/20[#20]).
 
+=== Documentation
+
+* Use the correct separator in the cloud load-balancer example (https://github.com/mesosphere/dklb/pull/21[#21]).
+
 == v0.1.0-alpha.8
 
 === Improvements
