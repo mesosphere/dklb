@@ -26,7 +26,7 @@ To install `dklb`, the following prerequisites must be met:
 * A https://dcos.io/[DC/OS] cluster having https://docs.mesosphere.com/services/edge-lb/[EdgeLB] installed.
 ** DC/OS must be v1.12.0 or later.
 ** EdgeLB must be built and installed from the https://github.com/mesosphere/dcos-edge-lb/tree/aws-automation[`aws-automation`] branch.
-** EdgeLB https://docs.mesosphere.com/services/edge-lb/1.3/[`v1.3.0`] may be used instead, but some functionality will be missing.
+*** EdgeLB https://docs.mesosphere.com/services/edge-lb/1.3/[`v1.3.0`] may be used instead, but some functionality will be missing.
 * An https://mesosphere.com/product/kubernetes-engine/[MKE] https://docs.mesosphere.com/services/kubernetes/2.2.0-1.13.3/[`v2.2.0-1.13.3`] (or later) cluster.
 ** The current kubeconfig context must be configured to point at this cluster.
 
@@ -64,29 +64,6 @@ In order to achieve this, the following flag must be provided as an argument to 
 --edgelb-pool-group=<edgelb-pool-group>
 ----
 
-==== Disabling automatic registration of the admission webhook
-
-`dklb` includes an https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#admission-webhooks[admission webhook] that validates `Ingress` and `Service` resources annotated for provisioning with EdgeLB.
-The admission webhook makes sure that such resources are valid upon creation, and that any subsequent updates that may be performed are valid as well.
-
-`dklb` automatically registers the admission webhook upon starting.
-However, and in the unlikely event of it causing problems with `Ingress`/`Service` creation in one's MKE cluster, automatic registration of the admission webhook can be disabled by setting the following feature gate as an argument in `docs/deployment/10-deployment.yaml`:
-
-[source,text]
-----
---feature-gates=RegisterAdmissionWebhook=false
-----
-
-If `dklb` had already been started without this feature gate, one must manually unregister the admission webhook:
-
-[source,console]
-----
-$ kubectl delete mutatingwebhookconfigurations.admissionregistration.k8s.io dklb
-mutatingwebhookconfiguration.admissionregistration.k8s.io "dklb" deleted
-----
-
-WARNING: Running `dklb` without having registered its admission webhook is **NOT RECOMMENDED**, as it may lead to the creation of invalid `Ingress`/`Service` resources.
-
 == Tailing logs
 
 At any given time, only a single replica is actively working in order to satisfy Ingress/Service resources.
@@ -123,6 +100,13 @@ To uninstall `dklb`, the following commands may be run from the root of this rep
 ----
 $ kubectl delete -f docs/deployment/10-deployment.yaml
 $ kubectl delete -f docs/deployment/00-prereqs.yaml
+----
+
+Additionally, the admission webhook must be manually unregistered using the following command:
+
+[source,console]
+----
+$ kubectl delete mutatingwebhookconfiguration dklb
 ----
 
 NOTE: Deleting `dklb` **DOES NOT** delete any EdgeLB pools that may have been created.

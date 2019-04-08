@@ -21,6 +21,20 @@ toc::[]
 
 == v0.1.0-alpha.9 (Unreleased)
 
+=== Breaking changes
+
+* Replace the `kubernetes.dcos.io/edgelb-pool-\*` and `kubernetes.dcos.io/cloud-loadbalancer-configmap` annotations with a single `kubernetes.dcos.io/dklb-config` annotation (https://github.com/mesosphere/dklb/pull/22[#22]).
+** Before attempting to upgrade an existing `dklb` installation, please...
+*** Scale the `kube-system/dklb` deployment down to zero replicas;
+*** Wait for the scale down operation to finish;
+*** Replace any `kubernetes.dcos.io/edgelb-pool-*` and `kubernetes.dcos.io/cloud-loadbalancer-configmap` annotations with the new `kubernetes.dcos.io/dklb-config` annotation across all applicable `Service` and `Ingress` resources on the target cluster.
+
+=== Improvements
+
+* Generate shorter EdgeLB pool names whenever a name is not provided by the user (https://github.com/mesosphere/dklb/pull/22[#22]).
+* Allow for updating the CPU, memory and size requests for existing EdgeLB pools (https://github.com/mesosphere/dklb/pull/22[#22]).
+* Allow for customizing the CPU, memory, size and role requests for cloud-provider EdgeLB pools (https://github.com/mesosphere/dklb/pull/22[#22]).
+
 === Bug fixes
 
 * Fix a bug which caused Kubernetes events not to be aggregated (https://github.com/mesosphere/dklb/pull/20[#20]).

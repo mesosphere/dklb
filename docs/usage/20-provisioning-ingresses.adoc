@@ -31,7 +31,8 @@ Furthermore, said `Ingress` resource must be explicitly https://kubernetes.io/do
 kubernetes.io/ingress.class: edgelb
 ----
 
-`dklb` will react to the creation of such an `Ingress` resource by provisioning an EdgeLB pool (henceforth referred to as the _target EdgeLB pool_) for the `Ingress` resource based on its specification.
+`dklb` will react to the creation of such an `Ingress` resource by provisioning an EdgeLB pool (henceforth referred to as the _target EdgeLB pool_) for the `Ingress` resource.
+This EdgeLB pool is provisioned using sane default values for its name, its CPU, memory and size requirements, and other options.
 
 After provisioning said EdgeLB pool, `dklb` will periodically query EdgeLB in order to obtain the list of hostnames and IPs at which the ingress can be reached.
 These will eventually be reported on the `.status` field of the `Ingress` resource.
@@ -42,7 +43,6 @@ It should be noted that, due to the way EdgeLB pool scheduling and metadata repo
 All Kubernetes services used as backends in an `Ingress` resource annotated for provisioning with EdgeLB **MUST** be of type `NodePort` or `LoadBalancer`.
 In particular, services of type `ClusterIP` and headless services cannot be used as the backends for `Ingress` resources to be provisioned by EdgeLB.
 
-
 ==== `dklb` as the default backend
 
 In case an invalid `Service` resource is specified as a backend for a given `Ingress` resource, or whenever a default backend is not explicitly defined, `dklb` will be used as the (default) backend instead.
@@ -51,69 +51,102 @@ In case an invalid `Service` resource is specified as a backend for a given `Ing
 Whenever `dklb` gets to be used as a backend, a Kubernetes event will be emitted and associated with the `Ingress` resource being processed.
 This event contains useful information about the reason why `dklb` is being used instead of the intended backend, and may be used for diagnosing problems.
 
+=== Customizing the target EdgeLB pool
+
+As mentioned before, `dklb` uses sane defaults when provisioning EdgeLB pools for `Ingress` resources annotated for provisioning with EdgeLB.
+It is, however, possible to customize the target EdgeLB pool for a given `Ingress` resource by using the `kubernetes.dcos.io/dklb-config` annotation.
+This annotation accepts a YAML object (henceforth called the _configuration object_) with the following structure:
+
+[source,yaml]
+----
+kubernetes.dcos.io/dklb-config: |  # NOTE: The "|" character is mandatory.
+  name: dklb-pool-0
+  role: "*"
+  network: "dcos"
+  size: 3
+  cpus: 0.2
+  memory: 512
+  frontends:
+    http:
+      port: 8080
+----
+
+The subsections below provide more insight on each of the fields on the configuration object.
+
+[NOTE]
+====
+The `kubernetes.dcos.io/dklb-config` is **OPTIONAL**.
+Whenever said annotation is absent, `dklb` will generate a sane default configuration for the target EdgeLB pool and automatically inject it on the `Ingress` resource.
+====
+
+WARNING: The `kubernetes.dcos.io/dklb-config` cannot be removed after the `Ingress` resource is created.
+
 === Customizing the name of the EdgeLB pool
 
-By default, `dklb` uses the MKE cluster's name and the `Ingress` resource's namespace and name to compute the name of the target EdgeLB pool.
-To specify a custom name for said EdgeLB pool, one may annotate the `Ingress` resource with the following annotation:
+By default, `dklb` uses the MKE cluster's name and a randomly-generated five-digit suffix to compute the name of the target EdgeLB pool.
+To specify a custom name for said EdgeLB pool, one may use the `.name` field of the configuration object:
 
 [source,text]
 ----
-kubernetes.dcos.io/edgelb-pool-name: "<edgelb-pool-name>"
+kubernetes.dcos.io/dklb-config: |
+  name: "<edgelb-pool-name>"
 ----
 
 Depending on whether the "<edgelb-pool-name>" EdgeLB pool exists or not, `dklb` will create or update it in order to expose all rules defined in the `Ingress` resource.
 
-IMPORTANT: This annotation cannot be removed or changed after the `Ingress` resource is created.
+IMPORTANT: This field cannot be changed or removed after the `Ingress` resource is created.
 
 === Intra-DC/OS vs external exposure
 
 By default, `dklb` exposes ingresses to _outside_ the DC/OS cluster by requesting for the target EdgeLB pool to be scheduled onto a https://docs.mesosphere.com/1.12/overview/architecture/node-types/#public-agent-nodes[public DC/OS agent].
-However, and in order to accommodate all possible needs, `dklb` supports explicitly specifying a http://mesos.apache.org/documentation/latest/roles/[Mesos role] for the target EdgeLB pool:
+However, and in order to accommodate all possible needs, `dklb` supports explicitly specifying a http://mesos.apache.org/documentation/latest/roles/[Mesos role] for the target EdgeLB pool using the `.role` field of the configuration object:
 
 [source,text]
 ----
-kubernetes.dcos.io/edgelb-pool-role: "<edgelb-pool-role>"
+kubernetes.dcos.io/dklb-config: |
+  role: "<edgelb-pool-role>"
 ----
 
 In particular, to expose an ingress to _inside_ DC/OS only, `*` should be used as the value of `<edgelb-pool-role>`.
 Providing said value will cause `dklb` to request for the target EdgeLB pool to be scheduled onto a https://docs.mesosphere.com/1.12/overview/architecture/node-types/#private-agent-nodes[private DC/OS agent].
 
-IMPORTANT: This annotation cannot be removed or changed after the `Ingress` resource is created.
+IMPORTANT: This field cannot be changed or removed after the `Service` resource is created.
 
-=== Customizing EdgeLB pool frontend bind port
+=== Customizing the frontend bind port
 
 `dklb` provisions the target EdgeLB pool by looking at the ingress's rules and creating an EdgeLB https://docs.mesosphere.com/services/edge-lb/1.2/pool-configuration/v2-reference/[backend] per referrenced `Service` resource, and a single EdgeLB https://docs.mesosphere.com/services/edge-lb/1.2/pool-configuration/v2-reference/[frontend].
 By default, `dklb` uses port `80` as the frontend's bind port.
 In particular, this means that HTTPS is not supported at the moment (see <<limitations>>).
 
 In some situations, using a different port number as the frontend's bind port may be required.
-In order to accommodate more advanced use cases, `dklb` supports defining a custom port via the following annotation:
+In order to accommodate more advanced use cases, `dklb` supports defining a custom port via the `.frontends.http.port` field of the configuration object:
 
 [source,text]
 ----
-kubernetes.dcos.io/edgelb-pool-port: "<frontend-bind-port>"
+kubernetes.dcos.io/dklb-config: |
+  frontends:
+    http:
+      port: <frontend-bind-port>
 ----
 
-When such an annotation is provided, `dklb` will use `<frontend-bind-port>` instead of port `80` as the actual frontend bind port.
+When this field is provided on the configuration object, `dklb` will use `<frontend-bind-port>` instead of port `80` as the actual frontend bind port.
 
-WARNING: Changing the value of this annotation after the `Ingress` resource is created is supported, but may cause disruption (as the target EdgeLB pool will most likely be re-deployed).
+WARNING: Changing the value of this field after the `Ingress` resource is created is supported, but may cause disruption (as the target EdgeLB pool will most likely be re-deployed).
 
-=== Customizing the target EdgeLB pool
+==== Customizing the CPU, memory and size of the EdgeLB pool
 
 `dklb` supports customizing CPU, memory and size requests for the target EdgeLB pool.
-Custom values for these requests can be specified using the following annotations:
+Custom values for these requests can be specified using the `.cpus`, `.memory` and `.size` fields, respectively:
 
 [source,text]
 ----
-kubernetes.dcos.io/edgelb-pool-cpus: "<edgelb-pool-cpus>"
-kubernetes.dcos.io/edgelb-pool-mem: "<edgelb-pool-mem>"
-kubernetes.dcos.io/edgelb-pool-size: "<edgelb-pool-size>"
+kubernetes.dcos.io/dklb-config: |
+  cpus: <edgelb-pool-cpus>
+  memory: <edgelb-pool-memory>
+  size: <edgelb-pool-size>
 ----
 
-The values of `<edgelb-pool-cpus>` and `<edgelb-pool-mem>` must obey the same format as https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/[container resource requests and limits] (e.g. `200m` for 0.2 CPU and `32Mi` for 32MiB RAM).
-The value of `<edgelb-pool-size>` must be a positive integer.
-
-IMPORTANT: These annotations cannot be removed or changed after the `Ingress` resource is created.
+In the above representation, `<edgelb-pool-cpus>` is a floating-point number (e.g. `0.2`), and `<edgelb-pool-memory>` and `<edgelb-pool-size>` are integers (e.g. `512` and `3`, respectively).
 
 === Advanced topics
 
@@ -123,19 +156,20 @@ By design, pools exposing Kubernetes ingresses to _outside_ the DC/OS cluster (i
 
 Also by design, pools exposing Kubernetes ingresses to _inside_ the DC/OS cluster must be scheduled onto a https://docs.mesosphere.com/1.12/networking/SDN/[DC/OS virtual network].
 By default, these pools are scheduled onto the `dcos` virtual network.
-It is, however, possible to pick a custom DC/OS virtual network for these pools by providing the following annotation:
+It is, however, possible to pick a custom DC/OS virtual network for these pools by using the `.network` field of the configuration object:
 
 [source,text]
 ----
-kubernetes.dcos.io/edgelb-pool-network: "<edgelb-pool-network>"
+kubernetes.dcos.io/dklb-config: |
+  network: "<edgelb-pool-network>"
 ----
 
-IMPORTANT: This annotation cannot be removed or changed after the `Ingress` resource is created.
+IMPORTANT: This field cannot be changed or removed after the `Service` resource is created.
 
 ==== Using a pre-existing pool to expose a Kubernetes ingress
 
 In certain scenarios, it may be desirable to use a pre-existing EdgeLB pool to expose a Kubernetes ingress (instead of having `dklb` creating one).
-This can easily be achieved by providing the name of the pre-existing EdgeLB pool as the value of the `kubernetes.dcos.io/edgelb-pool-name` annotation.
+This can easily be achieved by providing the name of the pre-existing EdgeLB pool as the value of the `.name` field of the configuration object.
 
 [[limitations]]
 == Limitations
@@ -187,7 +221,8 @@ kind: Ingress
 metadata:
   annotations:
     kubernetes.io/ingress.class: edgelb
-    kubernetes.dcos.io/edgelb-pool-name: dklb-echo
+    kubernetes.dcos.io/dklb-config: |
+      name: dklb-echo
   labels:
     owner: dklb
   name: dklb-echo
@@ -215,7 +250,7 @@ NAME        HOSTS                             ADDRESS   PORTS   AGE
 dklb-echo   http-echo-1.com,http-echo-2.com             80      3s
 ----
 
-The annotations defined on this `Ingress` resource will cause `dklb` to expose the ingress using an EdgeLB pool called `dklb-echo`.
+The `kubernetes.dcos.io/dklb-config` annotation defined on this `Ingress` resource will cause `dklb` to expose the ingress using an EdgeLB pool called `dklb-echo`.
 At this point, querying the EdgeLB API should confirm the existence of a pool called `dklb-echo` exposing port `80`:
 
 [source,console]

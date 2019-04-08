@@ -159,7 +159,7 @@ This was quickly dropped due to the greater complexity of tracking and authentic
 The solution hereby proposed is to produce two https://github.com/kubernetes/sample-controller/blob/master/docs/controller-client-go.md[controllers] that manage EdgeLB pool configurations in reaction to:
 
 * Creation, update or deletion of all `Service` resources of type `LoadBalancer`;
-* Creation, update or deletion of `Ingress` resources <<annotations,explicitly annotated>> to be provisioned by EdgeLB.
+* Creation, update or deletion of `Ingress` resources explicitly annotated to be provisioned by EdgeLB.
 
 Each Kubernetes cluster bundles its own set of said controllers, which in turn manage their own set of EdgeLB pools that use `NodePort` services as their backends.
 When each controller starts, it sits and watches any Kubernetes API events related to any `Service`/`Ingress` resources, and other such related resources (such as `Service` and `ConfigMap` resources) which belong to the Kubernetes cluster the controller is running in.
@@ -213,79 +213,81 @@ The pictured components will work as follows:
 * As a result of the target EdgeLB pool being created or (re-)configured, the `Service`/`Ingress` resource's `.status` fields are updated in order to convey information about the hostname(s)/IP(s) of the EdgeLB pool that points at them.
 * As the provisioning and status updating process is fully asynchronous in its nature, any errors that may be encountered during the provisioning operation will be communicated via Kubernetes events associated with the `Service`/`Ingress` resource being synced.
 
-Specific parts of this process may be configured or tweaked on a per-resource basis using https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/[annotations].
+Specific parts of this process may be configured or tweaked on a per-resource basis using an https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/[annotation] containing a <<configuration,configuration object>>.
 
-[[annotations]]
-=== Annotations
+[[configuration]]
+=== Configuration
 
 Two of the most common ways to customize behaviour in Kubernetes are annotations and config maps.
-Annotations are simpler to manage and allow for storing configuration in the very same resource that is being configured.
-Hence, and also due to them being the _de facto_ way for configuring `Service`/`Ingress` resources in Kubernetes, we have decided to adopt annotations for the time being in order to customize translation of said kinds of resources.
+A third, less common but very effective way to do it is to specify the representation of a custom object inside a single annotation, the value of which is parsed as JSON or YAML as required.
+Due to the flexibility, effectiveness and extensiveness of this approach, we have decided to adopt a single annotation containing the YAML representation of a _configuration object_ in order to customize translation of said kinds of resources.
+This annotation is chosen as `kubernetes.dcos.io/dklb-config`.
 
-==== `Service` annotations
+==== Configuration object for `Service` resources
 
 By default, `Service` resources of type `LoadBalancer` are exposed _externally_.
 It should be noted that all `Service` resources of type `LoadBalancer` created in a given Kubernetes cluster will be provisioned by EdgeLB.
-In order for a given `Service` resource of type `LoadBalancer` to be exposed internally it *MUST* be explicitly annotated with
+In order for a given `Service` resource of type `LoadBalancer` to be exposed internally it *MUST* specify the following configuration object:
 
 [source,text]
 ----
-kubernetes.dcos.io/edgelb-pool-role: "<edgelb-pool-role>"
+kubernetes.dcos.io/dklb-config: |
+  role: "<edgelb-pool-role>"
 ----
 
 where `<edgelb-pool-role>` represents a Mesos role defined on the cluster (or `*` in order to indicate _any_ private DC/OS agent).
-In order to make further customization possible and to accomodate more advanced use cases, the following additional annotations will be supported on `Service` resources of type `LoadBalancer`:
+In order to make further customization possible and to accomodate more advanced use cases, the following additional fields will be supported on the configuration object for `Service` resources of type `LoadBalancer`:
 
 [%header,cols=3*]
 |===
-|Key
+|Field inside the `kubernetes.dcos.io/dklb-config` annotation
 |Type
 |Description
 
-|`kubernetes.dcos.io/edgelb-pool-name`
+|`.name`
 |`string`
 |*Optional.*
- Defaults to `<cluster-name>--<namespace>--<name>`.
+ Defaults to `<cluster-name>--<suffix>`.
  Allows for specifying the name of the EdgeLB pool to use to expose the `Service` resource.
  If an EdgeLB pool with the provided name doesn't exist, and depending on the chosen creation strategy, it will be created.
- If such an EdgeLB pool exists, it will always be updated according to the `Service` resource's spec and to the remaining annotations that may be provided.
+ If such an EdgeLB pool exists, it will always be updated according to the `Service` resource's spec and to the remaining fields that may be provided on the configuration object.
 
-|`kubernetes.dcos.io/edgelb-pool-role`
+|`.role`
 |`string`
 |*Optional.*
  Defaults to `slave_public`.
  Allows for specifying the role to use for the EdgeLB pool (e.g., to expose a service to inside the DC/OS cluster only, the value `*` may be used).
 
-|`kubernetes.dcos.io/edgelb-pool-network`
+|`.network`
 |`string`
 |*Optional.*
- Defaults to `dcos`.
- This option is only valid if the `kubernetes.dcos.io/edgelb-pool-role` annotation is set to anything different than `slave_public`.
+ Defaults to `""` if `.role` is `slave_public`, and `dcos` otherwise.
+ If the value of the `.role` field is different from `slave_public`, this field is forcibly set to `dcos`.
 
-|`kubernetes.dcos.io/edgelb-pool-cpus`
-|`Quantity`
+|`.cpus`
+|`float64`
 |*Optional.*
- Defaults to `100m` (meaning `0.1` CPU).
+ Defaults to `0.1` (meaning 0.1 CPUs).
  Allows for specifying the CPU requirements for each instance in the EdgeLB pool.
 
-|`kubernetes.dcos.io/edgelb-pool-mem`
-|`Quantity`
+|`.memory`
+|`int32`
 |*Optional.*
- Defaults to `128Mi`.
+ Defaults to `128` (meaning 128MB).
  Allows for specifying the RAM requirements for each instance in the EdgeLB pool.
 
-|`kubernetes.dcos.io/edgelb-pool-size`
+|`.size`
 |`int`
 |*Optional.*
  Defaults to `1`.
  Allows for specifying the number of load-balancer instances in the EdgeLB pool.
 
-|`kubernetes.dcos.io/edgelb-pool-portmap.<port>`
-|`int`
+|`.frontends[*].port` and `.frontends[0].servicePort`
+|`int32`
 |*Optional.*
- Allows for customizing the EdgeLB frontend bind port to use to expose the service's `<port>` port.
+ Allows for customizing the EdgeLB frontend bind port to use to expose the service's `<servicePort>` port.
 
-|`kubernetes.dcos.io/edgelb-pool-creation-strategy`
+|`.strategies.creation`
 |`string`
 |*Optional.*
  Possible values are `IfNotPresent`, `Once` or `Never`.
@@ -295,30 +297,30 @@ In order to make further customization possible and to accomodate more advanced 
  `Once` means an EdgeLB pool will be created if it hasn't existed before.
  `Never` means an EdgeLB pool will never be created, having to be created out-of-band.
 
-|`kubernetes.dcos.io/cloud-loadbalancer-configmap`
+|`.cloudProviderConfiguration`
 |`string`
 |*Optional.*
- Allows for specifying the name of a `ConfigMap` resource containing the configuration for a cloud load-balancer.
+ Allows for specifying the _raw_, JSON-encoded configuration for a cloud load-balancer.
  Said configuration is passed to the EdgeLB pool's configuration unchanged.
 |===
 
 [WARNING]
 ====
-When the `kubernetes.dcos.io/cloud-loadbalancer-configmap` annotation is defined on a `Service` resource, all remaining annotations defined above are ignored, and a _dedicated_ EdgeLB pool is created for the `Service` resource.
+When the `.cloudProviderConfiguration` field is defined on the configuration object for a `Service` resource, the `.network` and `.frontends` fields are ignored, and a _dedicated_ EdgeLB pool is created for the `Service` resource.
 This EdgeLB pool will be <<naming,named>> according to the following format:
 
 [source,text]
 ----
-ext--<cluster-name>--<namespace>--<name>
+cloud--<cluster-name>--<suffix>
 ----
 
 This is done in order for `dklb` to be able to guarantee that the EdgeLB pool has a configuration that is compatible with the cloud load-balancer.
 ====
 
-It should be noted and clearly documented that changing the value of any of these annotations after creating the `Service` resource has the potential to cause disruption and lead to unpredictable behaviour.
+It should be noted and clearly documented that changing the value of any of these fields after creating the `Service` resource has the potential to cause disruption and lead to unpredictable behaviour.
 In order to further prevent this from happening, an https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/[admission webhook] will be implemented.
 
-An example of a `Service` resource of type `LoadBalancer` that uses the aforementioned annotations can be found below:
+An example of a `Service` resource of type `LoadBalancer` that uses the aforementioned annotation and configuration object can be found below:
 
 [source,yaml]
 ----
@@ -326,14 +328,18 @@ apiVersion: v1
 kind: Service
 metadata:
   annotations:
-    kubernetes.dcos.io/edgelb-pool-name: foo
-    kubernetes.dcos.io/edgelb-pool-network: foo_network
-    kubernetes.dcos.io/edgelb-pool-role: foo_lb
-    kubernetes.dcos.io/edgelb-pool-cpus: "200m"
-    kubernetes.dcos.io/edgelb-pool-mem: "256Mi"
-    kubernetes.dcos.io/edgelb-pool-size: 3
-    kubernetes.dcos.io/edgelb-pool-portmap.80: 10254
-    kubernetes.dcos.io/edgelb-pool-portmap.8080: 23674
+    kubernetes.dcos.io/dklb-config |
+      name: foo
+      role: foo_lb
+      network: foo_network
+      cpus: 0.2
+      memory: 256
+      size: 3
+      frontends:
+      - port: 10254
+        servicePort: 80
+      - port: 23674
+        servicePort: 8080
   name: foo
 spec:
   type: LoadBalancer
@@ -359,7 +365,7 @@ Creating such a `Service` resource will cause the service controller to:
 * Configure the _three_ EdgeLB pool's instances to use `0.2` CPU and `256MiB` RAM.
 * Expose port `80` as port `10254`, port `8080` as port `23674`, and port `3306` as port `3306` (as no explicit mapping is defined).
 
-==== `Ingress` annotations
+==== Configuration object for `Ingress` resources
 
 Contrary to what happens for `Service` resources of type `LoadBalancer`, `Ingress` resources that are to be satisfied by the ingress controller *MUST* be explicitly annotated with
 
@@ -369,67 +375,68 @@ kubernetes.io/ingress.class: edgelb
 ----
 
 Like in the case of `Service` resources of type `LoadBalancer`, `Ingress` resources are exposed _externally_ by default.
-In order for a given `Ingress` resource to be exposed internally it *MUST* be explicitly annotated with
+In order for a given `Ingress` resource to be exposed internally it *MUST*specify the following configuration object:
 
 [source,text]
 ----
-kubernetes.dcos.io/edgelb-pool-role: "<edgelb-pool-role>"
+kubernetes.dcos.io/dklb-config: |
+role: "<edgelb-pool-role>"
 ----
 
 where `<edgelb-pool-role>` represents a Mesos role defined on the cluster (or `*` in order to indicate _any_ private DC/OS agent).
-In order to make further customization possible and to accomodate more advanced use cases, the following annotations will be supported on `Ingress` resources:
+In order to make further customization possible and to accomodate more advanced use cases, the following additional fields will be supported on the configuration object for `Ingress` resources:
 
 [%header,cols=3*]
 |===
-|Key
+|Field inside the `kubernetes.dcos.io/dklb-config` annotation
 |Type
 |Description
 
-|`kubernetes.dcos.io/edgelb-pool-name`
+|`.name`
 |`string`
 |*Optional.*
- Defaults to `<cluster-name>--<namespace>--<name>`.
+ Defaults to `<cluster-name>--<suffix>`.
  Allows for specifying the name of the EdgeLB pool to use to expose the `Ingress` resource.
  If an EdgeLB pool with the provided name doesn't exist, and depending on the chosen creation strategy, it will be created.
- If such an EdgeLB pool exists, it will always be updated according to the `Ingress` resource's spec and to the remaining annotations that may be provided.
+ If such an EdgeLB pool exists, it will always be updated according to the `Ingress` resource's spec and to the remaining fields that may be provided on the configuration object.
 
-|`kubernetes.dcos.io/edgelb-pool-role`
+|`.role`
 |`string`
 |*Optional.*
  Defaults to `slave_public`.
  Allows for specifying the role to use for the EdgeLB pool (e.g., to expose a service to inside the DC/OS cluster only, the value `*` may be used).
 
-|`kubernetes.dcos.io/edgelb-pool-network`
+|`.network`
 |`string`
 |*Optional.*
- Defaults to `dcos`.
- This option is only valid if the `kubernetes.dcos.io/edgelb-pool-role` annotation is set to anything different than `slave_public`.
+ Defaults to `""` if `.role` is `slave_public`, and `dcos` otherwise.
+ If the value of the `.role` field is different from `slave_public`, this field is forcibly set to `dcos`.
 
-|`kubernetes.dcos.io/edgelb-pool-cpus`
-|`Quantity`
+|`.cpus`
+|`float64`
 |*Optional.*
- Defaults to `100m` (meaning `0.1` CPU).
+ Defaults to `0.1` (meaning 0.1 CPUs).
  Allows for specifying the CPU requirements for each instance in the EdgeLB pool.
 
-|`kubernetes.dcos.io/edgelb-pool-mem`
-|`Quantity`
+|`.memory`
+|`int32`
 |*Optional.*
- Defaults to `128Mi`.
+ Defaults to `128` (meaning 128MB).
  Allows for specifying the RAM requirements for each instance in the EdgeLB pool.
 
-|`kubernetes.dcos.io/edgelb-pool-size`
-|`int`
+|`.size`
+|`int32`
 |*Optional.*
  Defaults to `1`.
  Allows for specifying the number of load-balancer instances in the EdgeLB pool.
 
-|`kubernetes.dcos.io/edgelb-pool-port`
-|`int`
+|`.frontends.http.port`
+|`int32`
 |*Optional.*
  Defaults to `80`.
  Allows for customizing the EdgeLB frontend bind port to use to expose the ingress.
 
-|`kubernetes.dcos.io/edgelb-pool-creation-strategy`
+|`.strategies.creation`
 |`string`
 |*Optional.*
  Possible values are `IfNotPresent`, `Once` or `Never`.
@@ -438,35 +445,15 @@ In order to make further customization possible and to accomodate more advanced 
  `IfNotPresent` means an EdgeLB pool will be created whenever it doesn't exist.
  `Once` means an EdgeLB pool will be created if it hasn't existed before.
  `Never` means an EdgeLB pool will never be created, having to be created out-of-band.
-
-|`kubernetes.dcos.io/cloud-loadbalancer-configmap`
-|`string`
-|*Optional.*
- Allows for specifying the name of a `ConfigMap` resource containing the configuration for a cloud load-balancer.
- Said configuration is passed to the EdgeLB pool's configuration unchanged.
 |===
 
-[WARNING]
-====
-When the `kubernetes.dcos.io/cloud-loadbalancer-configmap` annotation is defined on an `Ingress` resource, all remaining annotations defined above are ignored, and a _dedicated_ EdgeLB pool is created for the `Ingress` resource.
-This EdgeLB pool will be <<naming,named>> according to the following format:
-
-[source,text]
-----
-ext--<cluster-name>--<namespace>--<name>
-----
-
-This is done in order for `dklb` to be able to guarantee that the EdgeLB pool has a configuration that is compatible with the cloud load-balancer.
-====
-
-It should be noted and clearly documented that changing the value of any of these annotations after creating the `Ingress` resource has the potential to cause disruption and lead to unpredictable behaviour.
+It should be noted and clearly documented that changing the value of any of these fields after creating the `Ingress` resource has the potential to cause disruption and lead to unpredictable behaviour.
 In order to further prevent this from happening, an https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/[admission webhook] will be implemented.
 
 [[naming]]
 === Naming of EdgeLB objects
 
-
-The fact that the `kubernetes.dcos.io/edgelb-pool-name` annotation allows for specifying the name of an existing EdgeLB pool to be reused makes it mandatory to define a naming strategy for EdgeLB objects that allows for...
+The fact that the `kubernetes.dcos.io/dklb-config` annotation allows for specifying the name of an existing EdgeLB pool to be reused makes it mandatory to define a naming strategy for EdgeLB objects that allows for...
 
 * ... preventing (or at least minimizing) name clashes with existing EdgeLB objects (which may be managed by instances of `dklb` or not);
 * ... clearly identify which cluster, namespace and resource a given EdgeLB object managed by a `dklb` instance belongs to.
@@ -557,7 +544,7 @@ In the snippet above...
 
 === Avoiding port collisions between EdgeLB pools
 
-Besides the frontend ports that expose `Service` and `Ingress` resources, and which can be customized using the aforementioned <<annotations,annotations>>, every EdgeLB pool also exposes an HAProxy statistics and debugging port (known as the `stats` port).
+Besides the frontend ports that expose `Service` and `Ingress` resources, and which can be customized using the aforementioned <<configuration,configuration object>>, every EdgeLB pool also exposes an HAProxy statistics and debugging port (known as the `stats` port).
 This port is typically `9090`.
 This means that, unless said port is customized, it is not possible to deploy two EdgeLB pools side-by-side on the same public DC/OS agent (since both of them will request `9090`).
 To overcome this limitation while avoiding the need to directly manage port allocation between EdgeLB pools, `dklb` will explicitly request EdgeLB to allocate a https://jira.mesosphere.com/browse/DCOS-46504[_dynamic_ port] for the `stats` port by setting `.haproxy.stats.bindPort` to `0`.
@@ -620,7 +607,7 @@ _Scenario:_ EdgeLB fails to create a pool for a given resource.
 
 * *FACT 1.1:* A resource (`Service`/`Ingress`) is enqueued for processing by a controller whenever it is created/modified/deleted, and every time the controller's _resync period_ elapses.
   This resync period can be kept as small as necessary so that we keep retrying often enough.
-* *DECISION 1.2:* Every time a resource is enqueued for processing, each controller will check if the target EdgeLB pool exists, and create it if it doesn't (depending on the value of the `kubernetes.dcos.io/edgelb-pool-creation-strategy` annotation).
+* *DECISION 1.2:* Every time a resource is enqueued for processing, each controller will check if the target EdgeLB pool exists, and create it if it doesn't (depending on the value of the `.strategy.creation` field of the configuration object).
 * *DECISION 1.3:* If for some reason creation of the EdgeLB pool fails, the controller will report reconciliation as having failed and try again later.
 * *DECISION 1.4:* Failures in reconciliation will be reported via a Kubernetes event associated with the resource, clearly communicating the root cause of the problem (e.g. unauthorized, connection timeout, …).
   It will also, whenever possible, provide suggestions of next steps to the user.
@@ -648,11 +635,11 @@ _Scenario:_ EdgeLB is not installed / has no permissions / (...).
 
 _Scenario:_ A `Service` resource is changed after an EdgeLB pool has been provisioned.
 
-* *FACT 4.1:* The annotations defined and supported in `Service` resources of type `LoadBalancer` allow the user as much freedom as possible with respect to the EdgeLB pool's name and (frontend) bind ports.
-* *FACT 4.2:* Using the `kubernetes.dcos.io/edgelb-pool-portmap.<port>` annotation, the user will be able to specify the (fixed) frontend port where `<port>` is exposed.
-* *FACT 4.3:* A `Service` resource's `<port>` may change without it being necessary to update the value of the corresponding `kubernetes.dcos.io/edgelb-pool-portmap.<port>` annotation.
+* *FACT 4.1:* The `kubernetes.dcos.io/dklb-config` defined and supported in `Service` resources of type `LoadBalancer` allow the user as much freedom as possible with respect to the EdgeLB pool's name and (frontend) bind ports.
+* *FACT 4.2:* Using the `.frontends` field of the configuration object, the user will be able to specify the (fixed) frontend port where `<port>` is exposed.
+* *FACT 4.3:* A `Service` resource's `<port>` may change without it being necessary to update the value of the corresponding `.frontends` field.
 * *DECISION 4.4:* React by updating the target EdgeLB pool according to the change.
-* *DECISION 4.5:* Let the user be warned via documentation that there may be disruption in this scenario, especially if there is a new port being added to the `Service` resource, or if the value of any `kubernetes.dcos.io/edgelb-pool-portmap.<port>` annotation changes.
+* *DECISION 4.5:* Let the user be warned via documentation that there may be disruption in this scenario, especially if there is a new port being added to the `Service` resource, or if the value of any item in the `.frontends` field of the configuration object.
   The service's IP(s) will most certainly change, and will have to be updated in the `.status` field.
 * *ALTERNATIVE 4.6 (dropped):* Use a validating admission webhook to prevent changes to `.spec` and to a subset of `.metadata.annotations` on `Service`/`Ingress` resources.
 ** *NOTE 4.6.1:* It is unclear whether this is a viable idea.
@@ -676,7 +663,7 @@ _Scenario:_ User removes EdgeLB pool out-of-band (through the EdgeLB CLI).
 * *FACT 6.1:* The controllers should try as much as possible not to depend on anything besides the EdgeLB Management API.
   For all intents and purposes, the view of the world the controllers have is the one provided by the EdgeLB Management API.
 * *FACT 6.2:* The EdgeLB Management API will stop reporting this EdgeLB pool as existing.
-* *FACT 6.3:* After the EdgeLB pool referenced by `kubernetes.dcos.io/edgelb-pool-name` is created or updated, its hostname(s)/IP(s) will be reported in the `Service`/`Ingress` resource's `.status` field.
+* *FACT 6.3:* After the EdgeLB pool referenced by the `.name` field of the configuration object is created or updated, its hostname(s)/IP(s) will be reported in the `Service`/`Ingress` resource's `.status` field.
 * *DECISION 6.4:* The next time the resync period elapses, the controllers should report that the EdgeLB pool has been found missing via an event.
 * *DECISION 6.5:* Define a set of strategies, selectable via the `kubernetes.dcos.io/edgelb-pool-creation-strategy` annotation, defining whether a new EdgeLB pool should be re-created or if the controller(s) should stop syncing the resource.
 * *DECISION 6.6:* Clearly document this as a scenario where disruption (either temporary or permanent) will exist.

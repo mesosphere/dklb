@@ -28,70 +28,46 @@ As of this writing, only [AWS ELB](https://aws.amazon.com/elasticloadbalancing/)
 
 === Specifying the configuration for the cloud load-balancer
 
-`dklb` must read the cloud load-balancer's configuration from a https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/[config map].
-This config map must exist in the same Kubernetes namespace as the `Service` resource being exposed via a cloud load-balancer, and must obey the following structure:
-
-[source,yaml]
-----
-apiVersion: v1
-data:
-  spec: |
-    <spec>
-kind: ConfigMap
-metadata:
-  name: "<cloud-loadbalancer-configmap>"
-----
-
-In particular, it must have a key named `spec` containing the desired configuration for the cloud load-balancer.
-Further details on `<spec>` are provided below.
-
-=== Linking the configuration to the `Service` resource
-
-In order for `dklb` to provision a cloud load-balancer for a given `Service` resource, said resource must be annotated with the following annotation:
+`dklb` must read the _raw_, JSON-encoded cloud load-balancer's configuration from the `.cloudProviderConfiguration` field of the configuration object.
 
 [source,text]
 ----
-kubernetes.dcos.io/cloud-loadbalancer-configmap: "<cloud-loadbalancer-configmap>"
+kubernetes.dcos.io/dklb-config: |  # NOTE: The "|" character is mandatory.
+  cloudProviderConfiguration: |  # NOTE: The "|" character is mandatory.
+    {
+      "aws": {...}
+    }
 ----
 
-When said annotation is specified for a `Service` resource, `dklb` creates a _dedicated_ EdgeLB pool for the `Service` resource.
-This EdgeLB pool is called `ext--<cluster-name>--<namespace-name>--<service-name>`, and has a single instance, running on a private DC/OS agent.
+When said field is specified in the configuration object for a `Service` resource, `dklb` creates a _dedicated_ EdgeLB pool for the `Service` resource.
+This EdgeLB pool is called `cloud--<cluster-name>--<suffix>`, where `<suffix>` is a randomly-generated five-character string.
+
 [WARNING]
 ====
-From this moment on, further customization of the EdgeLB pool via `kubernetes.dcos.io/edgelb-pool-*` annotations is ignored.
+The fact that `dklb` creates a new, dedicated EdgeLB pool means that any EdgeLB pool previously being used to expose the `Service` resource will be left untouched from the moment the `.cloudProviderConfiguration` field is specified.
+The user is responsible for removing said EdgeLB pool _manually_ using the EdgeLB CLI.
 ====
 
 [WARNING]
 ====
-The fact that `dklb` creates a new, dedicated EdgeLB pool means that any EdgeLB pool previously being used to expose the `Service` resource will be left untouched from the moment the annotation is specified.
-The user is responsible for removing said EdgeLB pool _manually_ using the EdgeLB CLI.
+When the `.cloudProviderConfiguration` field is specified, the `.network` and `.frontends` fields of the configuration object are ignored.
+The `.role`, `.cpus`, `.memory` and `.size` fields are still observed and may be tweaked as required.
 ====
 
 ==== Connecting to the cloud load-balancer
 
-After the aforementioned annotation is specified, `dklb` will instruct EdgeLB to create a cloud load-balancer according to the provided configuration.
+After the `.cloudProviderConfiguration` field is specified on the configuration object, `dklb` will instruct EdgeLB to create a cloud load-balancer according to the provided configuration.
 The hostname that should be used to connect to the cloud load-balancer will usually be reported shortly after in the `.status` field of the `Service` resource.
 
 == Configuration
 
-As mentioned above, the configuration for the cloud load-balancer must be specified via a config map that obeys the following structure:
-
-[source,yaml]
-----
-apiVersion: v1
-data:
-spec: |
- <spec>
-kind: ConfigMap
-metadata:
-name: "<cloud-loadbalancer-configmap>"
-----
-
-The actual contents of `<spec>` depend on the cloud provider being used and are defined by EdgeLB. Please, read EdgeLB pool configuration documentation for more detailed information.
+As mentioned above, the configuration for the cloud load-balancer must be specified via the `.cloudProviderConfiguration` field in _raw_, JSON-encoded format:
+The actual contents of the field depend on the cloud provider being used and are defined by EdgeLB.
+Please, read EdgeLB pool configuration documentation for more detailed information.
 
 === AWS NLB
 
-To configure an AWS NLB, `<spec>` must be a JSON object obeying the following structure:
+To configure an AWS NLB, the value of the `.cloudProviderConfiguration` field must be a JSON object obeying the following structure:
 
 [source,json]
 ----
@@ -142,13 +118,12 @@ In the snippet above, placeholders must be replaced according to the following t
 
 ==== Example
 
-To expose the `redis` service created in the previous example using AWS NLB, and assuming the name of the MKE cluster is `dev/kubernetes01`, the following config map may be used:
+To expose the `redis` service created in the previous example using AWS NLB, and assuming the name of the MKE cluster is `dev/kubernetes01`, the following value for the `kubernetes.dcos.io/dklb-config` may be used:
 
-[source,yaml]
+[source,text]
 ----
-apiVersion: v1
-data:
-  spec: |
+kubernetes.dcos.io/dklb-config: |
+  cloudProviderConfiguration: |
     {
         "aws": {
             "elb": [{
@@ -165,7 +140,7 @@ data:
             }]
         }
     }
-kind: ConfigMap
-metadata:
-  name: redis-elb
+  cpus: 0.2
+  memory: 512
+  size: 3
 ----
