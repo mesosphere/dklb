@@ -111,9 +111,9 @@ func RegisterWebhook(kubeClient kubernetes.Interface, admissionTLSCaBundle, admi
 		return err
 	}
 
-	// At this point the webhook is already registered but the spec of the corresponding "MutatingWebhookConfiguration" resource may differ.
+	// At this point the webhook is already registered but the spec of the corresponding MutatingWebhookConfiguration resource may differ.
 
-	// Read the latest version of the "MutatingWebhookConfiguration" resource.
+	// Read the latest version of the MutatingWebhookConfiguration resource.
 	currentCfg, err := kubeClient.AdmissionregistrationV1beta1().MutatingWebhookConfigurations().Get(mutatingWebhookConfigurationResourceName, metav1.GetOptions{})
 	if err != nil {
 		// We've failed to fetch the latest version of the config

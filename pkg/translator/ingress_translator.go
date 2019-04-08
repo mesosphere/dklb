@@ -17,6 +17,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	dklberrors "github.com/mesosphere/dklb/pkg/errors"
+	translatorapi "github.com/mesosphere/dklb/pkg/translator/api"
 	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
 	"github.com/mesosphere/dklb/pkg/util/pointers"
 	"github.com/mesosphere/dklb/pkg/util/prettyprint"
@@ -33,12 +34,10 @@ var (
 
 // IngressTranslator is the base implementation of IngressTranslator.
 type IngressTranslator struct {
-	// clusterName is the name of the Mesos framework that corresponds to the current Kubernetes cluster.
-	clusterName string
 	// ingress is the Ingress resource to be translated.
 	ingress *extsv1beta1.Ingress
-	// options is the set of options used to perform translation.
-	options IngressTranslationOptions
+	// spec is the EdgeLB pool configuration object to use when performing translation.
+	spec *translatorapi.IngressEdgeLBPoolSpec
 	// kubeCache is the instance of the Kubernetes resource cache to use.
 	kubeCache dklbcache.KubernetesResourceCache
 	// manager is the instance of the EdgeLB manager to use for managing EdgeLB pools.
@@ -52,12 +51,10 @@ type IngressTranslator struct {
 }
 
 // NewIngressTranslator returns an ingress translator that can be used to translate the specified Ingress resource into an EdgeLB pool.
-func NewIngressTranslator(clusterName string, ingress *extsv1beta1.Ingress, options IngressTranslationOptions, kubeCache dklbcache.KubernetesResourceCache, manager manager.EdgeLBManager, recorder record.EventRecorder) *IngressTranslator {
+func NewIngressTranslator(ingress *extsv1beta1.Ingress, kubeCache dklbcache.KubernetesResourceCache, manager manager.EdgeLBManager, recorder record.EventRecorder) *IngressTranslator {
 	return &IngressTranslator{
-		clusterName: clusterName,
 		// Use a clone of the Ingress resource as we may need to modify it in order to inject the default backend.
 		ingress:   ingress.DeepCopy(),
-		options:   options,
 		kubeCache: kubeCache,
 		manager:   manager,
 		logger:    log.WithField("ingress", kubernetesutil.Key(ingress)),
@@ -68,16 +65,20 @@ func NewIngressTranslator(clusterName string, ingress *extsv1beta1.Ingress, opti
 
 // Translate performs translation of the associated Ingress resource into an EdgeLB pool.
 func (it *IngressTranslator) Translate() (*corev1.LoadBalancerStatus, error) {
+	// Grab the EdgeLB pool configuration object from the Ingress resource.
+	spec, err := translatorapi.GetIngressEdgeLBPoolSpec(it.ingress)
+	if err != nil {
+		return nil, fmt.Errorf("the edgelb pool configuration object is not valid: %v", err)
+	}
+	it.spec = spec
+
+	// Dump the EdgeLB pool configuration object for debugging purposes.
+	prettyprint.LogfSpew(log.Tracef, spec, "edgelb pool configuration object for %q", kubernetesutil.Key(it.ingress))
+
 	// Attempt to determine the node port at which the default backend is exposed.
 	defaultBackendNodePort, err := it.determineDefaultBackendNodePort()
 	if err != nil {
 		return nil, err
-	}
-
-	// Return immediately if translation is paused.
-	if it.options.EdgeLBPoolTranslationPaused {
-		it.logger.Warnf("skipping translation of %q as translation is paused for the resource", kubernetesutil.Key(it.ingress))
-		return nil, nil
 	}
 
 	// Compute the mapping between Ingress backends defined on the current Ingress resource and their target node ports.
@@ -86,10 +87,10 @@ func (it *IngressTranslator) Translate() (*corev1.LoadBalancerStatus, error) {
 	// Check whether an EdgeLB pool with the requested name already exists in EdgeLB.
 	ctx, fn := context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
 	defer fn()
-	pool, err := it.manager.GetPool(ctx, it.options.EdgeLBPoolName)
+	pool, err := it.manager.GetPool(ctx, *it.spec.Name)
 	if err != nil {
 		if !dklberrors.IsNotFound(err) {
-			return nil, fmt.Errorf("failed to check for the existence of the %q edgelb pool: %v", it.options.EdgeLBPoolName, err)
+			return nil, fmt.Errorf("failed to check for the existence of the %q edgelb pool: %v", *it.spec.Name, err)
 		}
 	}
 	// If the target EdgeLB pool does not exist, we must try to create it,
@@ -195,14 +196,14 @@ func (it *IngressTranslator) computeNodePortForIngressBackend(backend extsv1beta
 func (it *IngressTranslator) createEdgeLBPool(backendMap IngressBackendNodePortMap) (*corev1.LoadBalancerStatus, error) {
 	// If the pool creation strategy is "Never", the target EdgeLB pool must be provisioned manually.
 	// Hence, we should just exit.
-	if it.options.EdgeLBPoolCreationStrategy == constants.EdgeLBPoolCreationStrategyNever {
-		return nil, fmt.Errorf("edgelb pool %q targeted by ingress %q does not exist, but the pool creation strategy is %q", it.options.EdgeLBPoolName, kubernetesutil.Key(it.ingress), it.options.EdgeLBPoolCreationStrategy)
+	if *it.spec.Strategies.Creation == translatorapi.EdgeLBPoolCreationStrategyNever {
+		return nil, fmt.Errorf("edgelb pool %q targeted by ingress %q does not exist, but the pool creation strategy is %q", *it.spec.Name, kubernetesutil.Key(it.ingress), *it.spec.Strategies.Creation)
 	}
 
 	// If the Ingress resource's ".status" field contains at least one IP/host, that means an EdgeLB pool has once existed, but has been deleted manually.
 	// Hence, and if the EdgeLB pool creation strategy is "Once", we should also just exit.
-	if len(it.ingress.Status.LoadBalancer.Ingress) > 0 && it.options.EdgeLBPoolCreationStrategy == constants.EdgeLBPoolCreationStrategyOnce {
-		return nil, fmt.Errorf("edgelb pool %q targeted by ingress %q has probably been manually deleted, and the pool creation strategy is %q", it.options.EdgeLBPoolName, kubernetesutil.Key(it.ingress), it.options.EdgeLBPoolCreationStrategy)
+	if len(it.ingress.Status.LoadBalancer.Ingress) > 0 && *it.spec.Strategies.Creation == translatorapi.EdgeLBPoolCreationStrategyOnce {
+		return nil, fmt.Errorf("edgelb pool %q targeted by ingress %q has probably been manually deleted, and the pool creation strategy is %q", *it.spec.Name, kubernetesutil.Key(it.ingress), *it.spec.Strategies.Creation)
 	}
 
 	// At this point, we know that we must create the target EdgeLB pool based on the specified options and Ingress backend map.
@@ -216,7 +217,7 @@ func (it *IngressTranslator) createEdgeLBPool(backendMap IngressBackendNodePortM
 		return nil, err
 	}
 	// Compute and return the status of the load-balancer.
-	return computeLoadBalancerStatus(it.manager, pool.Name, it.clusterName, it.ingress), nil
+	return computeLoadBalancerStatus(it.manager, pool.Name, it.ingress), nil
 }
 
 // updateOrDeleteEdgeLBPool makes a decision on whether the specified EdgeLB pool should be updated/deleted based on the current status of the associated Ingress resource.
@@ -234,7 +235,7 @@ func (it *IngressTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool, backe
 	// If the EdgeLB pool doesn't need to be updated, we just compute and return an updated "LoadBalancerStatus" object.
 	if !wasChanged {
 		it.logger.Debugf("edgelb pool %q is synced", pool.Name)
-		return computeLoadBalancerStatus(it.manager, pool.Name, it.clusterName, it.ingress), nil
+		return computeLoadBalancerStatus(it.manager, pool.Name, it.ingress), nil
 	}
 
 	// At this point we know that the EdgeLB pool must be either updated or deleted.
@@ -257,7 +258,7 @@ func (it *IngressTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool, backe
 	if _, err := it.manager.UpdatePool(ctx, pool); err != nil {
 		return nil, err
 	}
-	return computeLoadBalancerStatus(it.manager, pool.Name, it.clusterName, it.ingress), nil
+	return computeLoadBalancerStatus(it.manager, pool.Name, it.ingress), nil
 }
 
 // createEdgeLBPoolObject creates an EdgeLB pool object that satisfies the current Ingress resource.
@@ -265,22 +266,22 @@ func (it *IngressTranslator) createEdgeLBPoolObject(backendMap IngressBackendNod
 	// Iterate over Ingress backends and their target node ports, and create the corresponding EdgeLB backend objects.
 	backends := make([]*models.V2Backend, 0, len(backendMap))
 	for backend, nodePort := range backendMap {
-		backends = append(backends, computeEdgeLBBackendForIngressBackend(it.clusterName, it.ingress, backend, nodePort))
+		backends = append(backends, computeEdgeLBBackendForIngressBackend(it.ingress, backend, nodePort))
 	}
 	// Sort backends alphabetically in order to get a predictable output, as ranging over a map can produce different results every time.
 	sort.SliceStable(backends, func(i, j int) bool {
 		return backends[i].Name < backends[j].Name
 	})
 	// Create the (single) EdgeLB frontend object.
-	frontend := computeEdgeLBFrontendForIngress(it.clusterName, it.ingress, it.options)
+	frontend := computeEdgeLBFrontendForIngress(it.ingress, *it.spec)
 	// Create the base EdgeLB pool object.
 	p := &models.V2Pool{
-		Name:      it.options.EdgeLBPoolName,
+		Name:      *it.spec.Name,
 		Namespace: &it.poolGroup,
-		Role:      it.options.EdgeLBPoolRole,
-		Cpus:      float64(it.options.EdgeLBPoolCpus.MilliValue()) / 1000,
-		Mem:       int32(it.options.EdgeLBPoolMem.Value() / (1024 * 1024)),
-		Count:     pointers.NewInt32(int32(it.options.EdgeLBPoolSize)),
+		Role:      *it.spec.Role,
+		Cpus:      *it.spec.CPUs,
+		Mem:       *it.spec.Memory,
+		Count:     it.spec.Size,
 		Haproxy: &models.V2Haproxy{
 			Backends:  backends,
 			Frontends: []*models.V2Frontend{frontend},
@@ -290,10 +291,10 @@ func (it *IngressTranslator) createEdgeLBPoolObject(backendMap IngressBackendNod
 		},
 	}
 	// Request for the EdgeLB pool to join the requested DC/OS virtual network if applicable.
-	if it.options.EdgeLBPoolNetwork != constants.EdgeLBHostNetwork {
+	if *it.spec.Network != constants.EdgeLBHostNetwork {
 		p.VirtualNetworks = []*models.V2PoolVirtualNetworksItems0{
 			{
-				Name: it.options.EdgeLBPoolNetwork,
+				Name: *it.spec.Network,
 			},
 		}
 	}
@@ -326,7 +327,7 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 		// Parse the name of the EdgeLB backend in order to determine if the current Ingress owns it.
 		// If the current EdgeLB backend isn't owned by the current Ingress, it is left unchanged.
 		backendMetadata, err := computeIngressOwnedEdgeLBObjectMetadata(backend.Name)
-		if err != nil || !backendMetadata.IsOwnedBy(it.clusterName, it.ingress) {
+		if err != nil || !backendMetadata.IsOwnedBy(it.ingress) {
 			updatedBackends = append(updatedBackends, backend)
 			report.Report("no changes required for backend %q (not owned by %s)", backend.Name, kubernetesutil.Key(it.ingress))
 			continue
@@ -351,7 +352,7 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 		visitedIngressBackends[currentIngressBackend] = true
 		// Compute the desired state for the current EdgeLB backend.
 		// In case differences are detected, we replace  the existing EdgeLB backend with the computed one.
-		desiredBackend := computeEdgeLBBackendForIngressBackend(it.clusterName, it.ingress, currentIngressBackend, backendMap[currentIngressBackend])
+		desiredBackend := computeEdgeLBBackendForIngressBackend(it.ingress, currentIngressBackend, backendMap[currentIngressBackend])
 		if !reflect.DeepEqual(backend, desiredBackend) {
 			wasChanged = true
 			updatedBackends = append(updatedBackends, desiredBackend)
@@ -376,7 +377,7 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 		// Parse the name of the EdgeLB frontend in order to determine if the current Ingress owns it.
 		// If the current EdgeLB frontend isn't owned by the current Ingress, it is left unchanged.
 		frontendMetadata, err := computeIngressOwnedEdgeLBObjectMetadata(frontend.Name)
-		if err != nil || !frontendMetadata.IsOwnedBy(it.clusterName, it.ingress) {
+		if err != nil || !frontendMetadata.IsOwnedBy(it.ingress) {
 			updatedFrontends = append(updatedFrontends, frontend)
 			report.Report("no changes required for frontend %q (not owned by %s)", frontend.Name, kubernetesutil.Key(it.ingress))
 			continue
@@ -392,7 +393,7 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 		frontendExists = true
 		// Compute the desired state for the current EdgeLB frontend.
 		// In case differences are detected, we replace the existing EdgeLB frontend with the computed one.
-		desiredFrontend := computeEdgeLBFrontendForIngress(it.clusterName, it.ingress, it.options)
+		desiredFrontend := computeEdgeLBFrontendForIngress(it.ingress, *it.spec)
 		if !reflect.DeepEqual(frontend, desiredFrontend) {
 			wasChanged = true
 			updatedFrontends = append(updatedFrontends, desiredFrontend)
@@ -420,7 +421,7 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 	for ingressBackend, nodePort := range backendMap {
 		if _, visited := visitedIngressBackends[ingressBackend]; !visited {
 			wasChanged = true
-			desiredBackend := computeEdgeLBBackendForIngressBackend(it.clusterName, it.ingress, ingressBackend, nodePort)
+			desiredBackend := computeEdgeLBBackendForIngressBackend(it.ingress, ingressBackend, nodePort)
 			newBackends = append(newBackends, desiredBackend)
 			report.Report("must create backend %q", desiredBackend.Name)
 		}
@@ -434,9 +435,31 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 	// If the EdgeLB frontend for the current Ingress resource does not exist in the EdgeLB pool, create it now.
 	if !frontendExists {
 		wasChanged = true
-		desiredFrontend := computeEdgeLBFrontendForIngress(it.clusterName, it.ingress, it.options)
+		desiredFrontend := computeEdgeLBFrontendForIngress(it.ingress, *it.spec)
 		pool.Haproxy.Frontends = append(pool.Haproxy.Frontends, desiredFrontend)
 		report.Report("must create frontend %q", desiredFrontend.Name)
+	}
+
+	// Update the CPU request as necessary.
+	desiredCpus := *it.spec.CPUs
+	if pool.Cpus != desiredCpus {
+		pool.Cpus = desiredCpus
+		wasChanged = true
+		report.Report("must update the cpu request")
+	}
+	// Update the memory request as necessary.
+	desiredMem := *it.spec.Memory
+	if pool.Mem != desiredMem {
+		pool.Mem = desiredMem
+		wasChanged = true
+		report.Report("must update the memory request")
+	}
+	// Update the size request as necessary.
+	desiredSize := *it.spec.Size
+	if *pool.Count != desiredSize {
+		pool.Count = &desiredSize
+		wasChanged = true
+		report.Report("must update the size request")
 	}
 
 	// Return a value indicating whether the pool was changed, and the EdgeLB pool inspection report.

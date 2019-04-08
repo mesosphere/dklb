@@ -12,7 +12,7 @@ import (
 
 // TestForEachIngressBackend tests the "ForEachIngressBackend" function.
 func TestForEachIngressBackend(t *testing.T) {
-	ingress := ingresstestutil.DummyIngressResource("foo", "bar", func(ingress *extsv1beta1.Ingress) {
+	ingress := ingresstestutil.DummyEdgeLBIngressResource("foo", "bar", func(ingress *extsv1beta1.Ingress) {
 		ingress.Spec.Backend = &extsv1beta1.IngressBackend{
 			ServiceName: "1",
 		}

@@ -5,6 +5,7 @@ package e2e_test
 import (
 	"flag"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -18,6 +19,8 @@ import (
 const (
 	// awsPublicSubnetIdFlagName is the name of the flag that specifies the ID of the subnet to use in cloud load-balancer configurations.
 	awsPublicSubnetIdFlagName = "aws-public-subnet-id"
+	// cooldownDuration is the duration of the "cool-down" period between successive tests.
+	cooldownDuration = 2 * time.Second
 )
 
 var (
@@ -56,6 +59,8 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = BeforeEach(func() {
+	// Introduce a slight "cool-down" period in order to prevent tests from failing due to the existence of EdgeLB pools that are still being deleted.
+	time.Sleep(cooldownDuration)
 	// Make sure the test prerequisites have been met.
 	if err := f.CheckTestPrerequisites(); err != nil {
 		log.Fatalf("failed to meet test prerequisites: %v", err)

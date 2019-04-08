@@ -115,10 +115,24 @@ func (f *Framework) CheckTestPrerequisites() error {
 
 // determineExternalIP attempts to determine the external IP of the host where the test suite is running on.
 func determineExternalIP() (string, error) {
-	c := externalip.DefaultConsensus(nil, nil)
+	// Create a new consensus with the default configuration.
+	c := externalip.NewConsensus(externalip.DefaultConsensusConfig(), nil)
+	// Add sources known to correctly return an IPV4
+	if err := c.AddVoter(externalip.NewHTTPSource("https://ipinfo.io/ip"), 1); err != nil {
+		return "", err
+	}
+	if err := c.AddVoter(externalip.NewHTTPSource("https://myexternalip.com/raw"), 1); err != nil {
+		return "", err
+	}
+	if err := c.AddVoter(externalip.NewHTTPSource("https://checkip.amazonaws.com"), 1); err != nil {
+		return "", err
+	}
+	// Try to determine the external IP.
 	i, err := c.ExternalIP()
 	if err != nil {
 		return "", err
 	}
+	// Log the result and return.
+	log.Debugf("reported external ip: %s", i.String())
 	return i.String(), nil
 }

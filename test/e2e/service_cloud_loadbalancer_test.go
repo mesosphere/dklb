@@ -6,24 +6,25 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/go-redis/redis"
 	"github.com/mesosphere/dcos-edge-lb/models"
+	"k8s.io/apimachinery/pkg/util/intstr"
+
+	translatorapi "github.com/mesosphere/dklb/pkg/translator/api"
+	"github.com/mesosphere/dklb/pkg/util/kubernetes"
+	"github.com/mesosphere/dklb/pkg/util/pointers"
+
+	"github.com/mesosphere/dklb/pkg/constants"
+	"github.com/mesosphere/dklb/pkg/util/retry"
+	"github.com/mesosphere/dklb/test/e2e/framework"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
-
-	"github.com/mesosphere/dklb/pkg/constants"
-	"github.com/mesosphere/dklb/pkg/translator"
-	"github.com/mesosphere/dklb/pkg/util/kubernetes"
-	"github.com/mesosphere/dklb/pkg/util/pointers"
-	"github.com/mesosphere/dklb/pkg/util/retry"
-	"github.com/mesosphere/dklb/pkg/util/strings"
-	"github.com/mesosphere/dklb/test/e2e/framework"
 )
 
 var _ = Describe("Service", func() {
@@ -35,21 +36,18 @@ var _ = Describe("Service", func() {
 				return
 			}
 
-			// Create a temporary namespace for the current test.
 			f.WithTemporaryNamespace(func(namespace *corev1.Namespace) {
 				var (
-					err                 error
-					hostname            string
-					initialPool         *models.V2Pool
-					initialPoolBindPort int
-					initialPoolName     string
-					finalPool           *models.V2Pool
-					finalPoolName       string
-					redisCfgMap         *corev1.ConfigMap
-					redisPod            *corev1.Pod
-					redisSvc            *corev1.Service
-					redisSvcName        string
-					redisSvcPort        int32
+					err           error
+					hostname      string
+					initialPool   *models.V2Pool
+					initialSpec   *translatorapi.ServiceEdgeLBPoolSpec
+					finalPool     *models.V2Pool
+					finalPoolName string
+					redisPod      *corev1.Pod
+					redisSvc      *corev1.Service
+					redisSvcName  string
+					redisSvcPort  int32
 				)
 
 				// Create a pod running Redis.
@@ -73,18 +71,27 @@ var _ = Describe("Service", func() {
 				})
 				Expect(err).NotTo(HaveOccurred(), "failed to create redis test pod")
 
-				// Define the name of the initial EdgeLB pool.
-				initialPoolName = namespace.Name
-
 				// Define the name and service port of the "redis" Service resource we will be creating, so we can use it in the cloud load-balancer's configuration.
 				redisSvcName = "redis"
 				redisSvcPort = 6379
 
+				// Create an object holding the target EdgeLB pool's initial specification for the "redis" service.
+				initialSpec = &translatorapi.ServiceEdgeLBPoolSpec{
+					BaseEdgeLBPoolSpec: translatorapi.BaseEdgeLBPoolSpec{
+						Name: pointers.NewString(namespace.Name),
+						Role: pointers.NewString(constants.EdgeLBRolePublic),
+					},
+					Frontends: []translatorapi.ServiceEdgeLBPoolFrontendSpec{
+						{
+							Port:        pointers.NewInt32(16379),
+							ServicePort: redisSvcPort,
+						},
+					},
+				}
+
 				// Create a service of type LoadBalancer targeting the pod created above.
 				redisSvc, err = f.CreateServiceOfTypeLoadBalancer(namespace.Name, redisSvcName, func(svc *corev1.Service) {
-					svc.Annotations = map[string]string{
-						constants.EdgeLBPoolNameAnnotationKey: initialPoolName,
-					}
+					_ = translatorapi.SetServiceEdgeLBPoolSpec(svc, initialSpec)
 					svc.Spec.Ports = []corev1.ServicePort{
 						{
 							Name:       "redis",
@@ -101,21 +108,17 @@ var _ = Describe("Service", func() {
 				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
 					ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryInterval/2)
 					defer fn()
-					initialPool, err = f.EdgeLBManager.GetPool(ctx, initialPoolName)
+					initialPool, err = f.EdgeLBManager.GetPool(ctx, *initialSpec.Name)
 					return err == nil, nil
 				})
 				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
 
-				// Make sure that the initial EdgeLB pool has been deployed to a public DC/OS agent.
+				// Make sure that the initial EdgeLB pool has been deployed to a single, public DC/OS agent, and that the frontend's bind port is the expected one.
 				Expect(initialPool.Role).To(Equal(constants.EdgeLBRolePublic))
-				// Make sure that the initial EdgeLB pool has one frontend that binds to port "redisSvcPort", and that that binding is reflected as an annotation on the Service resource.
-				initialPoolBindPort, err = strconv.Atoi(redisSvc.Annotations[fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, redisSvcPort)])
-				Expect(err).NotTo(HaveOccurred())
 				Expect(initialPool.Haproxy.Frontends).To(HaveLen(1))
-				Expect(*initialPool.Haproxy.Frontends[0].BindPort).To(Equal(int32(initialPoolBindPort)))
-				Expect(*initialPool.Haproxy.Frontends[0].BindPort).To(Equal(int32(redisSvcPort)))
+				Expect(*initialPool.Haproxy.Frontends[0].BindPort).To(Equal(*((*initialSpec).Frontends[0].Port)))
 
-				// Create a configmap containing the cloud load-balancer's configuration.
+				// Create the desired cloud-provider configuration.
 				redisCfgBytes, _ := json.Marshal(&models.V2CloudProvider{
 					Aws: &models.V2CloudProviderAws{
 						Elb: []*models.V2CloudProviderAwsElb{
@@ -136,23 +139,16 @@ var _ = Describe("Service", func() {
 						},
 					},
 				})
-				redisCfgMap, err = f.CreateConfigMap(namespace.Name, "redis-aws-nlb", func(configMap *corev1.ConfigMap) {
-					configMap.Data = map[string]string{
-						constants.CloudLoadBalancerSpecKey: string(redisCfgBytes),
-					}
+
+				// Update the target EdgeLB pool specification with the cloud-provider configuration.
+				finalPoolName = fmt.Sprintf("%s--%s", constants.EdgeLBCloudProviderPoolNamePrefix, *initialSpec.Name)
+				redisSvc, err = f.UpdateServiceEdgeLBPoolSpec(redisSvc, func(spec *translatorapi.ServiceEdgeLBPoolSpec) {
+					spec.Name = &finalPoolName
+					spec.CloudProviderConfiguration = pointers.NewString(string(redisCfgBytes))
+					spec.Size = pointers.NewInt32(2)
+					spec.Role = pointers.NewString(constants.EdgeLBRolePrivate)
 				})
-
-				// Re-read the Service resource from the Kubernetes API as it may have been updated in the meantime.
-				redisSvc, err = f.KubeClient.CoreV1().Services(redisSvc.Namespace).Get(redisSvc.Name, metav1.GetOptions{})
-				Expect(err).NotTo(HaveOccurred(), "failed to read an updated version of the service resource")
-
-				// Set the annotation specifying the name of the configmap used to configure a cloud load-balancer.
-				redisSvc.Annotations[constants.CloudLoadBalancerConfigMapNameAnnotationKey] = redisCfgMap.Name
-				redisSvc, err = f.KubeClient.CoreV1().Services(redisSvc.Namespace).Update(redisSvc)
-				Expect(err).ToNot(HaveOccurred(), "failed to update the test service")
-
-				// Compute the (expected) name of the target (final) EdgeLB pool.
-				finalPoolName = translator.ComputeEdgeLBPoolName(constants.EdgeLBCloudLoadBalancerPoolNamePrefix, strings.ReplaceForwardSlashes(f.ClusterName, "--"), redisSvc.Namespace, redisSvc.Name)
+				Expect(err).NotTo(HaveOccurred(), "failed to update the test service with the cloud-provider configuration")
 
 				// Wait for EdgeLB to acknowledge the final EdgeLB pool's creation.
 				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
@@ -165,17 +161,11 @@ var _ = Describe("Service", func() {
 
 				// Make sure that the final EdgeLB pool has been deployed to a private DC/OS agent.
 				Expect(finalPool.Role).To(Equal(constants.EdgeLBRolePrivate))
+				Expect(*finalPool.Count).To(Equal(int32(2)))
 				// Make sure that the initial EdgeLB pool has one frontend that binds to port "0" (dynamic).
 				Expect(err).NotTo(HaveOccurred())
 				Expect(finalPool.Haproxy.Frontends).To(HaveLen(1))
 				Expect(*finalPool.Haproxy.Frontends[0].BindPort).To(Equal(int32(0)))
-				Expect(redisSvc.Annotations).NotTo(HaveKey(constants.EdgeLBPoolNameAnnotationKey))
-				Expect(redisSvc.Annotations).NotTo(HaveKey(constants.EdgeLBPoolRoleAnnotationKey))
-				Expect(redisSvc.Annotations).NotTo(HaveKey(constants.EdgeLBPoolNetworkAnnotationKey))
-				Expect(redisSvc.Annotations).NotTo(HaveKey(constants.EdgeLBPoolCpusAnnotationKey))
-				Expect(redisSvc.Annotations).NotTo(HaveKey(constants.EdgeLBPoolMemAnnotationKey))
-				Expect(redisSvc.Annotations).NotTo(HaveKey(constants.EdgeLBPoolSizeAnnotationKey))
-				Expect(redisSvc.Annotations).NotTo(HaveKey(fmt.Sprintf("%s%d", constants.EdgeLBPoolPortMapKeyPrefix, redisSvcPort)))
 
 				// Connect to Redis using the cloud load-balancer.
 				// Use a larget value for the retry timeout since provisioning of the cloud load-balancer may take a long time.
@@ -205,8 +195,8 @@ var _ = Describe("Service", func() {
 				// Manually delete the initial EdgeLB pool.
 				ctx, fn := context.WithTimeout(context.Background(), framework.DefaultEdgeLBOperationTimeout)
 				defer fn()
-				err = f.EdgeLBManager.DeletePool(ctx, initialPoolName)
-				Expect(err).NotTo(HaveOccurred(), "failed to delete edgelb pool %q", initialPoolName)
+				err = f.EdgeLBManager.DeletePool(ctx, *initialSpec.Name)
+				Expect(err).NotTo(HaveOccurred(), "failed to delete edgelb pool %q", initialSpec.Name)
 			})
 		})
 	})

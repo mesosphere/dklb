@@ -4,17 +4,17 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"math/rand"
 	"os"
 	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
-	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
-
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
@@ -23,6 +23,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/admission"
 	"github.com/mesosphere/dklb/pkg/backends"
 	"github.com/mesosphere/dklb/pkg/cache"
+	"github.com/mesosphere/dklb/pkg/cluster"
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/controllers"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
@@ -52,8 +53,6 @@ var (
 	admissionTLSCertFile string
 	// admissionTLSPrivateKeyFile is the path to the file containing the private key to use for serving the admission webhook.
 	admissionTLSPrivateKeyFile string
-	// clusterName is the name of the Mesos framework that corresponds to the current Kubernetes cluster.
-	clusterName string
 	// edgelbOptions is the set of options used to configure the EdgeLB Manager.
 	edgelbOptions manager.EdgeLBManagerOptions
 	// featureGates is a comma-separated list of "key=value" pairs used to toggle certain features.
@@ -87,7 +86,7 @@ func init() {
 	flag.StringVar(&edgelbOptions.Scheme, "edgelb-scheme", constants.DefaultEdgeLBScheme, "the scheme to use when communicating with the edgelb api server")
 	flag.StringVar(&featureGates, "feature-gates", "", "a comma-separated list of \"key=value\" pairs used to toggle certain features")
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "the path to the kubeconfig file to use when running outside a kubernetes cluster")
-	flag.StringVar(&clusterName, "kubernetes-cluster-framework-name", "", "the name of the mesos framework that corresponds to the current kubernetes cluster")
+	flag.StringVar(&cluster.Name, "kubernetes-cluster-framework-name", "", "the name of the mesos framework that corresponds to the current kubernetes cluster")
 	flag.StringVar(&logLevel, "log-level", log.InfoLevel.String(), "the log level to use")
 	flag.StringVar(&podNamespace, "pod-namespace", "", "the name of the namespace in which the current instance of the application is deployed (used to perform leader election)")
 	flag.StringVar(&podName, "pod-name", "", "the identity of the current instance of the application (used to perform leader election)")
@@ -95,6 +94,9 @@ func init() {
 }
 
 func main() {
+	// Initialize our source of randomness, which we'll later use to generate random names for EdgeLB pools.
+	rand.Seed(time.Now().UnixNano())
+
 	// Parse the provided command-line flags.
 	flag.Parse()
 
@@ -115,7 +117,7 @@ func main() {
 	if podName == "" {
 		log.Fatalf("--pod-name must be set")
 	}
-	if clusterName == "" {
+	if cluster.Name == "" {
 		log.Fatalf("--kubernetes-cluster-framework-name must be set")
 	}
 
@@ -187,7 +189,7 @@ func main() {
 				log.Fatalf("failed to read the tls certificate: %v", err)
 			}
 			// Create and start the admission webhook.
-			if err := admission.NewWebhook(clusterName, p).Run(stopCh); err != nil {
+			if err := admission.NewWebhook(p).Run(stopCh); err != nil {
 				log.Fatalf("failed to serve the admission webhook: %v", err)
 			}
 		}()
@@ -258,11 +260,11 @@ func run(ctx context.Context, kubeClient kubernetes.Interface, er record.EventRe
 	// Create a shared informer factory for the base API types.
 	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, resyncPeriod)
 	// Create a cache for Kubernetes resources based on the shared informer factory.
-	kubeCache := cache.NewKubernetesResourceCache(kubeInformerFactory)
-	// Create an instance of the ingress controller that uses an ingress informer for watching Ingress resources.
-	ingressController := controllers.NewIngressController(clusterName, kubeClient, er, kubeInformerFactory.Extensions().V1beta1().Ingresses(), kubeInformerFactory.Core().V1().Services(), kubeCache, edgelbManager)
-	// Create an instance of the service controller that uses a service informer for watching Service resources.
-	serviceController := controllers.NewServiceController(clusterName, kubeClient, er, kubeInformerFactory.Core().V1().Services(), kubeInformerFactory.Core().V1().ConfigMaps(), kubeCache, edgelbManager)
+	kubeCache := cache.NewInformerBackedResourceCache(kubeInformerFactory)
+	// Create an instance of the ingress controller.
+	ingressController := controllers.NewIngressController(kubeClient, er, kubeInformerFactory.Extensions().V1beta1().Ingresses(), kubeInformerFactory.Core().V1().Services(), kubeCache, edgelbManager)
+	// Create an instance of the service controller.
+	serviceController := controllers.NewServiceController(kubeClient, er, kubeInformerFactory.Core().V1().Services(), kubeCache, edgelbManager)
 	// Start the shared informer factory.
 	go kubeInformerFactory.Start(ctx.Done())
 

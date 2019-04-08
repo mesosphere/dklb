@@ -64,9 +64,9 @@ func (f *Framework) Request(method, host, path string) (int, string, error) {
 
 // EchoRequest performs a "method" request to the specified host and path, returning the resulting "echo" response or an error.
 // TODO (@bcustodio) Add support for HTTPS if/when necessary.
-func (f *Framework) EchoRequest(method, host, path string, headers map[string]string) (*EchoResponse, error) {
+func (f *Framework) EchoRequest(method, host string, port int32, path string, headers map[string]string) (*EchoResponse, error) {
 	// Build the HTTP request.
-	req, err := http.NewRequest(method, fmt.Sprintf("http://%s%s", host, path), nil)
+	req, err := http.NewRequest(method, fmt.Sprintf("http://%s:%d%s", host, port, path), nil)
 	if err != nil {
 		return nil, err
 	}

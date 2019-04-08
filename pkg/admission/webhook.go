@@ -30,15 +30,15 @@ const (
 var (
 	// admissionPath is the path where the admission endpoint is served.
 	admissionPath = "/admissionrequests"
-	// ingressGvk is the "GroupVersionKind" that corresponds to "Ingress" resources.
+	// ingressGvk is the "GroupVersionKind" that corresponds to Ingress resources.
 	ingressGvk = &schema.GroupVersionKind{Group: "extensions", Version: "v1beta1", Kind: "Ingress"}
-	// ingressGvr is the "GroupVersionResource" that corresponds to "Ingress" resources.
+	// ingressGvr is the "GroupVersionResource" that corresponds to Ingress resources.
 	ingressGvr = metav1.GroupVersionResource{Group: "extensions", Version: "v1beta1", Resource: "ingresses"}
 	// patchType is the type of patch sent in admission responses.
 	patchType = admissionv1beta1.PatchTypeJSONPatch
-	// serviceGvk is the "GroupVersionKind" that corresponds to "Service" resources.
+	// serviceGvk is the "GroupVersionKind" that corresponds to Service resources.
 	serviceGvk = &schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Service"}
-	// serviceGvr is the "GroupVersionResource" that corresponds to "Service" resources.
+	// serviceGvr is the "GroupVersionResource" that corresponds to Service resources.
 	serviceGvr = metav1.GroupVersionResource{Group: "", Version: "v1", Resource: "services"}
 )
 
@@ -46,21 +46,18 @@ var (
 type Webhook struct {
 	// codecs is the codec factory to use to serialize/deserialize Kubernetes resources.
 	codecs serializer.CodecFactory
-	// clusterName is the name of the Mesos framework that corresponds to the current Kubernetes cluster.
-	clusterName string
 	// tlsCertificate is the TLS certificate to use for the server.
 	tlsCertificate tls.Certificate
 }
 
 // NewWebhook creates a new instance of the admission webhook.
-func NewWebhook(clusterName string, tlsCertificate tls.Certificate) *Webhook {
-	// Create a new scheme and register the "Ingress" and "Service" types so we can serialize/deserialize them.
+func NewWebhook(tlsCertificate tls.Certificate) *Webhook {
+	// Create a new scheme and register the Ingress and Service types so we can serialize/deserialize them.
 	scheme := runtime.NewScheme()
 	scheme.AddKnownTypes(extsv1beta1.SchemeGroupVersion, &extsv1beta1.Ingress{})
 	scheme.AddKnownTypes(corev1.SchemeGroupVersion, &corev1.Service{})
 	return &Webhook{
 		codecs:         serializer.NewCodecFactory(scheme),
-		clusterName:    clusterName,
 		tlsCertificate: tlsCertificate,
 	}
 }
@@ -152,7 +149,7 @@ func (w *Webhook) validateAndMutateResource(rev admissionv1beta1.AdmissionReview
 		// It is used to identify the kind of resource (Ingress/Service) we are dealing with in the current request.
 		currentGVK *schema.GroupVersionKind
 		// mutatedObj will contain a clone of "currentObj".
-		// It will be modified as required in order to explicitly set the values of all annotations.
+		// It will be modified as required in order to explicitly set a value for the "kubernetes.dcos.io/dklb-config" annotation when none is provided.
 		mutatedObj runtime.Object
 		// previousObj will contain the previous version of the current resource.
 		// It will only be set and considered in case the current operation's type is "UPDATE".
@@ -164,24 +161,31 @@ func (w *Webhook) validateAndMutateResource(rev admissionv1beta1.AdmissionReview
 	// Set "currentGVK" based on the provided GVR (group/version/resource).
 	switch rev.Request.Resource {
 	case ingressGvr:
-		// We're dealing with an "Ingress" resource.
+		// We're dealing with an Ingress resource.
 		currentGVK = ingressGvk
 	case serviceGvr:
-		// We're dealing with a "Service" resource.
+		// We're dealing with a Service resource.
 		currentGVK = serviceGvk
 	default:
 		// We're dealing with an unsupported resource, so we must fail.
 		return admissionResponseFromError(fmt.Errorf("failed to validate resource with unsupported gvr %s", rev.Request.Resource.String()))
 	}
 
-	// Deserialize the current object.
-	currentObj, _, err = w.codecs.UniversalDeserializer().Decode(rev.Request.Object.Raw, currentGVK, nil)
-	if err != nil {
-		return admissionResponseFromError(fmt.Errorf("failed to deserialize the current object: %v", err))
-	}
-
-	// If the current request corresponds to an update operation, we also deserialize the previous version of the resource so we can validate the transition.
-	if rev.Request.Operation == admissionv1beta1.Update {
+	// Populate "currentObj" and "previousObj" based on the type of the current operation.
+	switch rev.Request.Operation {
+	case admissionv1beta1.Create:
+		// Deserialize the current object.
+		currentObj, _, err = w.codecs.UniversalDeserializer().Decode(rev.Request.Object.Raw, currentGVK, nil)
+		if err != nil {
+			return admissionResponseFromError(fmt.Errorf("failed to deserialize the current object: %v", err))
+		}
+	case admissionv1beta1.Update:
+		// Deserialize the current object.
+		currentObj, _, err = w.codecs.UniversalDeserializer().Decode(rev.Request.Object.Raw, currentGVK, nil)
+		if err != nil {
+			return admissionResponseFromError(fmt.Errorf("failed to deserialize the current object: %v", err))
+		}
+		// Deserialize the previous object.
 		previousObj, _, err = w.codecs.UniversalDeserializer().Decode(rev.Request.OldObject.Raw, currentGVK, nil)
 		if err != nil {
 			return admissionResponseFromError(fmt.Errorf("failed to deserialize the previous object: %v", err))

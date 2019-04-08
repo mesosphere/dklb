@@ -23,17 +23,3 @@ func DummyServiceResource(namespace, name string, opts ...ResourceCustomizer) *c
 	}
 	return res
 }
-
-// WithAnnotations returns a customizer that sets the specified annotations to a Service resource.
-func WithAnnotations(annotations map[string]string) ResourceCustomizer {
-	return func(service *corev1.Service) {
-		service.Annotations = annotations
-	}
-}
-
-// WithPorts returns a customizer that sets the specified ports on a Service resource.
-func WithPorts(ports []corev1.ServicePort) ResourceCustomizer {
-	return func(service *corev1.Service) {
-		service.Spec.Ports = ports
-	}
-}

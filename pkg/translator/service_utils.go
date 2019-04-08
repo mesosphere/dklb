@@ -6,6 +6,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mesosphere/dklb/pkg/cluster"
+	translatorapi "github.com/mesosphere/dklb/pkg/translator/api"
+
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/util/pointers"
 
@@ -31,18 +34,18 @@ type servicePortBackendFrontend struct {
 }
 
 // backendNameForServicePort computes the name of the backend used for the specified service port.
-func backendNameForServicePort(clusterName string, service *corev1.Service, port corev1.ServicePort) string {
-	return fmt.Sprintf(serviceBackendNameFormatString, stringsutil.ReplaceForwardSlashesWithDots(clusterName), service.Namespace, service.Name, port.Port)
+func backendNameForServicePort(service *corev1.Service, port corev1.ServicePort) string {
+	return fmt.Sprintf(serviceBackendNameFormatString, stringsutil.ReplaceForwardSlashesWithDots(cluster.Name), service.Namespace, service.Name, port.Port)
 }
 
 // frontendNameForServicePort computes the name of the frontend used for the specified service port.
-func frontendNameForServicePort(clusterName string, service *corev1.Service, port corev1.ServicePort) string {
-	return fmt.Sprintf(serviceFrontendNameFormatString, stringsutil.ReplaceForwardSlashesWithDots(clusterName), service.Namespace, service.Name, port.Port)
+func frontendNameForServicePort(service *corev1.Service, port corev1.ServicePort) string {
+	return fmt.Sprintf(serviceFrontendNameFormatString, stringsutil.ReplaceForwardSlashesWithDots(cluster.Name), service.Namespace, service.Name, port.Port)
 }
 
 // serviceOwnedEdgeLBObjectMetadata groups together information about about the Service resource that owns a given EdgeLB backend/frontend.
 type serviceOwnedEdgeLBObjectMetadata struct {
-	// ClusterName is the name of the Kubernetes cluster to which the Service resource belongs.
+	// Name is the name of the Kubernetes cluster to which the Service resource belongs.
 	ClusterName string
 	// Name is the name of the Service resource.
 	Name string
@@ -53,16 +56,16 @@ type serviceOwnedEdgeLBObjectMetadata struct {
 }
 
 // IsOwnedBy indicates whether the current object is owned by the specified Service resource.
-func (sp *serviceOwnedEdgeLBObjectMetadata) IsOwnedBy(clusterName string, service *corev1.Service) bool {
-	return sp.ClusterName == clusterName && sp.Namespace == service.Namespace && sp.Name == service.Name
+func (sp *serviceOwnedEdgeLBObjectMetadata) IsOwnedBy(service *corev1.Service) bool {
+	return sp.ClusterName == cluster.Name && sp.Namespace == service.Namespace && sp.Name == service.Name
 }
 
 // computeBackendForServicePort computes the backend that correspond to the specified service port.
-func computeBackendForServicePort(clusterName string, service *corev1.Service, servicePort corev1.ServicePort) *models.V2Backend {
+func computeBackendForServicePort(service *corev1.Service, servicePort corev1.ServicePort) *models.V2Backend {
 	// Compute the name to give to the backend.
 	return &models.V2Backend{
 		Balance:  constants.EdgeLBBackendBalanceLeastConnections,
-		Name:     backendNameForServicePort(clusterName, service, servicePort),
+		Name:     backendNameForServicePort(service, servicePort),
 		Protocol: models.V2ProtocolTCP,
 		Services: []*models.V2Service{
 			{
@@ -77,7 +80,7 @@ func computeBackendForServicePort(clusterName string, service *corev1.Service, s
 					// We don't want to use any Marathon service as the backend.
 				},
 				Mesos: &models.V2ServiceMesos{
-					FrameworkName:   clusterName,
+					FrameworkName:   cluster.Name,
 					TaskNamePattern: constants.KubeNodeTaskPattern,
 				},
 			},
@@ -99,20 +102,27 @@ func computeBackendForServicePort(clusterName string, service *corev1.Service, s
 }
 
 // computeFrontendForServicePort computes the frontend that correspond to the specified service port.
-func computeFrontendForServicePort(clusterName string, service *corev1.Service, servicePort corev1.ServicePort, options ServiceTranslationOptions) *models.V2Frontend {
+func computeFrontendForServicePort(service *corev1.Service, spec translatorapi.ServiceEdgeLBPoolSpec, servicePort corev1.ServicePort) *models.V2Frontend {
 	var (
 		bindPort     int32
 		frontendName string
 	)
-	// Compute the value to use as the frontend bind port, falling back to the service port in case one isn't provided.
-	portOverride, exists := options.EdgeLBPoolPortMap[servicePort.Port]
-	if !exists {
-		bindPort = servicePort.Port
+
+	// If a cloud-provider configuration is being specified, force a dynamic frontend port.
+	// Otherwise, compute the value to use as the frontend bind port, falling back to the service port in case one isn't provided.
+	if *spec.CloudProviderConfiguration != "" {
+		bindPort = 0
 	} else {
-		bindPort = portOverride
+		bindPort = servicePort.Port
+		for _, frontend := range spec.Frontends {
+			if frontend.ServicePort == servicePort.Port {
+				bindPort = *frontend.Port
+			}
+		}
 	}
+
 	// Compute the name to give to the frontend.
-	frontendName = frontendNameForServicePort(clusterName, service, servicePort)
+	frontendName = frontendNameForServicePort(service, servicePort)
 	// Compute the backend and frontend objects and return them.
 	return &models.V2Frontend{
 		BindAddress: constants.EdgeLBFrontendBindAddress,
@@ -120,7 +130,7 @@ func computeFrontendForServicePort(clusterName string, service *corev1.Service, 
 		Protocol:    models.V2ProtocolTCP,
 		BindPort:    &bindPort,
 		LinkBackend: &models.V2FrontendLinkBackend{
-			DefaultBackend: backendNameForServicePort(clusterName, service, servicePort),
+			DefaultBackend: backendNameForServicePort(service, servicePort),
 		},
 	}
 }

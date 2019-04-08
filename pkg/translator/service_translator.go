@@ -13,6 +13,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	dklberrors "github.com/mesosphere/dklb/pkg/errors"
+	translatorapi "github.com/mesosphere/dklb/pkg/translator/api"
 	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
 	"github.com/mesosphere/dklb/pkg/util/pointers"
 	"github.com/mesosphere/dklb/pkg/util/prettyprint"
@@ -20,12 +21,10 @@ import (
 
 // ServiceTranslator is the base implementation of ServiceTranslator.
 type ServiceTranslator struct {
-	// clusterName is the name of the Mesos framework that corresponds to the current Kubernetes cluster.
-	clusterName string
 	// service is the Service resource to be translated.
 	service *corev1.Service
-	// options is the set of options used to perform translation.
-	options ServiceTranslationOptions
+	// spec is the EdgeLB pool configuration object to use when performing translation.
+	spec *translatorapi.ServiceEdgeLBPoolSpec
 	// kubeCache is the instance of the Kubernetes resource cache to use.
 	kubeCache dklbcache.KubernetesResourceCache
 	// manager is the instance of the EdgeLB manager to use for managing EdgeLB pools.
@@ -37,33 +36,35 @@ type ServiceTranslator struct {
 }
 
 // NewServiceTranslator returns a service translator that can be used to translate the specified Service resource into an EdgeLB pool.
-func NewServiceTranslator(clusterName string, service *corev1.Service, options ServiceTranslationOptions, kubeCache dklbcache.KubernetesResourceCache, manager manager.EdgeLBManager) *ServiceTranslator {
+func NewServiceTranslator(service *corev1.Service, kubeCache dklbcache.KubernetesResourceCache, manager manager.EdgeLBManager) *ServiceTranslator {
 	return &ServiceTranslator{
-		clusterName: clusterName,
-		service:     service,
-		options:     options,
-		kubeCache:   kubeCache,
-		manager:     manager,
-		logger:      log.WithField("service", kubernetesutil.Key(service)),
-		poolGroup:   manager.PoolGroup(),
+		service:   service,
+		kubeCache: kubeCache,
+		manager:   manager,
+		logger:    log.WithField("service", kubernetesutil.Key(service)),
+		poolGroup: manager.PoolGroup(),
 	}
 }
 
 // Translate performs translation of the associated Service resource into an EdgeLB pool.
 func (st *ServiceTranslator) Translate() (*corev1.LoadBalancerStatus, error) {
-	// Return immediately if pool translation is paused.
-	if st.options.EdgeLBPoolTranslationPaused {
-		st.logger.Warnf("skipping translation of %q as translation is paused for the resource", kubernetesutil.Key(st.service))
-		return nil, nil
+	// Grab the EdgeLB pool configuration object from the Service resource.
+	spec, err := translatorapi.GetServiceEdgeLBPoolSpec(st.service)
+	if err != nil {
+		return nil, fmt.Errorf("the edgelb pool configuration object is not valid: %v", err)
 	}
+	st.spec = spec
+
+	// Dump the EdgeLB pool configuration object for debugging purposes.
+	prettyprint.LogfSpew(log.Tracef, spec, "edgelb pool configuration object for %q", kubernetesutil.Key(st.service))
 
 	// Check whether a pool with the requested name already exists in EdgeLB.
 	ctx, fn := context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
 	defer fn()
-	pool, err := st.manager.GetPool(ctx, st.options.EdgeLBPoolName)
+	pool, err := st.manager.GetPool(ctx, *st.spec.Name)
 	if err != nil {
 		if !dklberrors.IsNotFound(err) {
-			return nil, fmt.Errorf("failed to check for the existence of the %q edgelb pool: %v", st.options.EdgeLBPoolName, err)
+			return nil, fmt.Errorf("failed to check for the existence of the %q edgelb pool: %v", *st.spec.Name, err)
 		}
 	}
 	// If the target EdgeLB pool does not exist, we must try to create it,
@@ -80,14 +81,14 @@ func (st *ServiceTranslator) Translate() (*corev1.LoadBalancerStatus, error) {
 func (st *ServiceTranslator) createEdgeLBPool() (*corev1.LoadBalancerStatus, error) {
 	// If the pool creation strategy is "Never", the target pool must be provisioned manually.
 	// Hence, we should just exit.
-	if st.options.EdgeLBPoolCreationStrategy == constants.EdgeLBPoolCreationStrategyNever {
-		return nil, fmt.Errorf("edgelb pool %q targeted by service %q does not exist, but the pool creation strategy is %q", st.options.EdgeLBPoolName, kubernetesutil.Key(st.service), st.options.EdgeLBPoolCreationStrategy)
+	if *st.spec.Strategies.Creation == translatorapi.EdgeLBPoolCreationStrategyNever {
+		return nil, fmt.Errorf("edgelb pool %q targeted by service %q does not exist, but the pool creation strategy is %q", *st.spec.Name, kubernetesutil.Key(st.service), *st.spec.Strategies.Creation)
 	}
 
 	// If the Service resource's ".status" field contains at least one IP/host, that means a pool has once existed, but has been deleted manually.
 	// Hence, and if the pool creation strategy is "Once", we should also just exit.
-	if len(st.service.Status.LoadBalancer.Ingress) > 0 && st.options.EdgeLBPoolCreationStrategy == constants.EdgeLBPoolCreationStrategyOnce {
-		return nil, fmt.Errorf("edgelb pool %q targeted by service %q has probably been manually deleted, and the pool creation strategy is %q", st.options.EdgeLBPoolName, kubernetesutil.Key(st.service), st.options.EdgeLBPoolCreationStrategy)
+	if len(st.service.Status.LoadBalancer.Ingress) > 0 && *st.spec.Strategies.Creation == translatorapi.EdgeLBPoolCreationStrategyOnce {
+		return nil, fmt.Errorf("edgelb pool %q targeted by service %q has probably been manually deleted, and the pool creation strategy is %q", *st.spec.Name, kubernetesutil.Key(st.service), *st.spec.Strategies.Creation)
 	}
 
 	// At this point, we know that we must create the target EdgeLB pool based on the specified options.
@@ -104,7 +105,7 @@ func (st *ServiceTranslator) createEdgeLBPool() (*corev1.LoadBalancerStatus, err
 		return nil, err
 	}
 	// Compute and return the status of the load-balancer.
-	return computeLoadBalancerStatus(st.manager, pool.Name, st.clusterName, st.service), nil
+	return computeLoadBalancerStatus(st.manager, pool.Name, st.service), nil
 }
 
 // updateOrDeleteEdgeLBPool makes a decision on whether the specified EdgeLB pool should be updated/deleted based on the current status of the associated Service resource.
@@ -125,7 +126,7 @@ func (st *ServiceTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool) (*cor
 	// If the pool doesn't need to be updated, we just compute and return an updated "LoadBalancerStatus" object.
 	if !wasChanged {
 		st.logger.Debugf("edgelb pool %q is synced", pool.Name)
-		return computeLoadBalancerStatus(st.manager, pool.Name, st.clusterName, st.service), nil
+		return computeLoadBalancerStatus(st.manager, pool.Name, st.service), nil
 	}
 
 	// At this point we know that the pool must be either updated or deleted.
@@ -148,7 +149,7 @@ func (st *ServiceTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool) (*cor
 	if _, err := st.manager.UpdatePool(ctx, pool); err != nil {
 		return nil, err
 	}
-	return computeLoadBalancerStatus(st.manager, pool.Name, st.clusterName, st.service), nil
+	return computeLoadBalancerStatus(st.manager, pool.Name, st.service), nil
 }
 
 // createEdgeLBPoolObject creates an EdgeLB pool object that satisfies the current Service resource.
@@ -159,7 +160,7 @@ func (st *ServiceTranslator) createEdgeLBPoolObject() (*models.V2Pool, error) {
 	// Iterate over port definitions and create the corresponding backend and frontend objects.
 	for _, port := range st.service.Spec.Ports {
 		// Compute the backend and frontend for the current service port.
-		backend, frontend := computeBackendForServicePort(st.clusterName, st.service, port), computeFrontendForServicePort(st.clusterName, st.service, port, st.options)
+		backend, frontend := computeBackendForServicePort(st.service, port), computeFrontendForServicePort(st.service, *st.spec, port)
 		// Append the backend to the slice of backends.
 		backends = append(backends, backend)
 		// Append the frontend to the slice of frontends.
@@ -167,14 +168,13 @@ func (st *ServiceTranslator) createEdgeLBPoolObject() (*models.V2Pool, error) {
 	}
 
 	// Create and return the pool object.
-	s := int32(st.options.EdgeLBPoolSize)
 	p := &models.V2Pool{
-		Name:      st.options.EdgeLBPoolName,
+		Name:      *st.spec.Name,
 		Namespace: &st.poolGroup,
-		Role:      st.options.EdgeLBPoolRole,
-		Cpus:      float64(st.options.EdgeLBPoolCpus.MilliValue()) / 1000,
-		Mem:       int32(st.options.EdgeLBPoolMem.Value() / (1024 * 1024)),
-		Count:     &s,
+		Role:      *st.spec.Role,
+		Cpus:      *st.spec.CPUs,
+		Mem:       *st.spec.Memory,
+		Count:     st.spec.Size,
 		Haproxy: &models.V2Haproxy{
 			Backends:  backends,
 			Frontends: frontends,
@@ -185,8 +185,8 @@ func (st *ServiceTranslator) createEdgeLBPoolObject() (*models.V2Pool, error) {
 	}
 
 	// Request for a cloud load-balancer to be configured if applicable.
-	if st.options.CloudLoadBalancerConfigMapName != nil {
-		o, err := st.computeCloudLoadBalancerObject()
+	if *st.spec.CloudProviderConfiguration != "" {
+		o, err := st.unmarshalCloudProviderObject(*st.spec.CloudProviderConfiguration)
 		if err != nil {
 			return nil, err
 		}
@@ -194,10 +194,10 @@ func (st *ServiceTranslator) createEdgeLBPoolObject() (*models.V2Pool, error) {
 	}
 
 	// Request for the pool to join the requested DC/OS virtual network if applicable.
-	if st.options.EdgeLBPoolNetwork != constants.EdgeLBHostNetwork {
+	if *st.spec.Network != constants.EdgeLBHostNetwork {
 		p.VirtualNetworks = []*models.V2PoolVirtualNetworksItems0{
 			{
-				Name: st.options.EdgeLBPoolNetwork,
+				Name: *st.spec.Network,
 			},
 		}
 	}
@@ -222,8 +222,8 @@ func (st *ServiceTranslator) updateEdgeLBPoolObject(pool *models.V2Pool) (wasCha
 	if !serviceDeleted {
 		for _, port := range st.service.Spec.Ports {
 			desiredBackendFrontends[port.Port] = servicePortBackendFrontend{
-				Backend:  computeBackendForServicePort(st.clusterName, st.service, port),
-				Frontend: computeFrontendForServicePort(st.clusterName, st.service, port, st.options),
+				Backend:  computeBackendForServicePort(st.service, port),
+				Frontend: computeFrontendForServicePort(st.service, *st.spec, port),
 			}
 		}
 	}
@@ -242,7 +242,7 @@ func (st *ServiceTranslator) updateEdgeLBPoolObject(pool *models.V2Pool) (wasCha
 		// Parse the name of the backend in order to determine if the current service owns it.
 		// If the current backend isn't owned by the current service, it is left unchanged.
 		backendMetadata, err := computeServiceOwnedEdgeLBObjectMetadata(backend.Name)
-		if err != nil || !backendMetadata.IsOwnedBy(st.clusterName, st.service) {
+		if err != nil || !backendMetadata.IsOwnedBy(st.service) {
 			updatedBackends = append(updatedBackends, backend)
 			report.Report("no changes required for backend %q (not owned by %s)", backend.Name, kubernetesutil.Key(st.service))
 			continue
@@ -289,7 +289,7 @@ func (st *ServiceTranslator) updateEdgeLBPoolObject(pool *models.V2Pool) (wasCha
 		// Parse the name of the frontend in order to determine if the current service owns it.
 		// If the current frontend isn't owned by the current service, it is left unchanged.
 		frontendMetadata, err := computeServiceOwnedEdgeLBObjectMetadata(frontend.Name)
-		if err != nil || !frontendMetadata.IsOwnedBy(st.clusterName, st.service) {
+		if err != nil || !frontendMetadata.IsOwnedBy(st.service) {
 			updatedFrontends = append(updatedFrontends, frontend)
 			report.Report("no changes required for frontend %q (not owned by %s)", frontend.Name, kubernetesutil.Key(st.service))
 			continue
@@ -349,22 +349,44 @@ func (st *ServiceTranslator) updateEdgeLBPoolObject(pool *models.V2Pool) (wasCha
 		}
 	}
 
-	// Update the cloud load-balancer configuration as required.
-	if st.options.CloudLoadBalancerConfigMapName != nil {
+	// Update the CPU request as necessary.
+	desiredCpus := *st.spec.CPUs
+	if pool.Cpus != desiredCpus {
+		pool.Cpus = desiredCpus
+		wasChanged = true
+		report.Report("must update the cpu request")
+	}
+	// Update the memory request as necessary.
+	desiredMem := *st.spec.Memory
+	if pool.Mem != desiredMem {
+		pool.Mem = desiredMem
+		wasChanged = true
+		report.Report("must update the memory request")
+	}
+	// Update the size request as necessary.
+	desiredSize := *st.spec.Size
+	if *pool.Count != desiredSize {
+		pool.Count = &desiredSize
+		wasChanged = true
+		report.Report("must update the size request")
+	}
+
+	// Update the cloud-provider configuration as required.
+	if *st.spec.CloudProviderConfiguration != "" {
 		// Grab the current value of the ".cloudProvider" field.
 		currentCloudLoadBalancerObject := pool.CloudProvider
 		// Compute the desired value for the ".cloudProvider field.
-		desiredCloudLoadBalancerObject, err := st.computeCloudLoadBalancerObject()
+		desiredCloudLoadBalancerObject, err := st.unmarshalCloudProviderObject(*st.spec.CloudProviderConfiguration)
 		if err != nil {
 			return false, report, err
 		}
 		// Update the pool with the desired configuration if and only if the current and desired configurations differ.
 		if reflect.DeepEqual(currentCloudLoadBalancerObject, desiredCloudLoadBalancerObject) {
-			report.Report("no changes to cloud loadbalancer configuration are required")
+			report.Report("no changes to the cloud-provider configuration are required")
 		} else {
 			pool.CloudProvider = desiredCloudLoadBalancerObject
 			wasChanged = true
-			report.Report("must update cloud loadbalancer configuration")
+			report.Report("must update the cloud-provider configuration")
 		}
 	}
 

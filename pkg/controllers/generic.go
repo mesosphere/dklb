@@ -76,10 +76,9 @@ func (c *genericController) Run(ctx context.Context) error {
 }
 
 // newGenericController returns a new generic controller.
-func newGenericController(clusterName, name string, threadiness int) *genericController {
+func newGenericController(name string, threadiness int) *genericController {
 	// Return a new instance of a generic controller.
 	return &genericController{
-		clusterName: clusterName,
 		logger:      log.WithField("controller", name),
 		workqueue:   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), name),
 		threadiness: threadiness,

@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/watch"
 
+	translatorapi "github.com/mesosphere/dklb/pkg/translator/api"
 	"github.com/mesosphere/dklb/pkg/util/kubernetes"
 )
 
@@ -24,12 +25,15 @@ const (
 // ServiceCustomizer represents a function that can be used to customize a Service resource.
 type ServiceCustomizer func(service *corev1.Service)
 
+type ServiceEdgeLBPoolSpecCustomizer func(spec *translatorapi.ServiceEdgeLBPoolSpec)
+
 // CreateService creates the Service resource with the specified namespace and name in the Kubernetes API after running it through the specified customization function.
 func (f *Framework) CreateService(namespace, name string, fn ServiceCustomizer) (*corev1.Service, error) {
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      name,
+			Annotations: make(map[string]string, 0),
+			Namespace:   namespace,
+			Name:        name,
 		},
 	}
 	if fn != nil {
@@ -60,6 +64,17 @@ func (f *Framework) CreateServiceForEchoPod(pod *corev1.Pod) (*corev1.Service, e
 			},
 		}
 	})
+}
+
+// UpdateServiceEdgeLBPoolSpec updates the EdgeLB pool specification contained in specified Service resource according to the supplied customization function.
+func (f *Framework) UpdateServiceEdgeLBPoolSpec(service *corev1.Service, fn ServiceEdgeLBPoolSpecCustomizer) (*corev1.Service, error) {
+	s, err := translatorapi.GetServiceEdgeLBPoolSpec(service)
+	if err != nil {
+		return nil, err
+	}
+	fn(s)
+	_ = translatorapi.SetServiceEdgeLBPoolSpec(service, s)
+	return f.KubeClient.CoreV1().Services(service.Namespace).Update(service)
 }
 
 // WaitUntilServiceCondition blocks until the specified condition function is verified, or until the provided context times out.

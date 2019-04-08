@@ -13,11 +13,14 @@ import (
 	"k8s.io/client-go/tools/watch"
 
 	"github.com/mesosphere/dklb/pkg/constants"
+	translatorapi "github.com/mesosphere/dklb/pkg/translator/api"
 	"github.com/mesosphere/dklb/pkg/util/kubernetes"
 )
 
 // IngressCustomizer represents a function that can be used to customize an Ingress resource.
 type IngressCustomizer func(ingress *extsv1beta1.Ingress)
+
+type IngressEdgeLBPoolSpecCustomizer func(spec *translatorapi.IngressEdgeLBPoolSpec)
 
 // CreateIngress creates the Ingress resource with the specified namespace and name in the Kubernetes API after running it through the specified customization function.
 func (f *Framework) CreateIngress(namespace, name string, fn IngressCustomizer) (*extsv1beta1.Ingress, error) {
@@ -41,6 +44,17 @@ func (f *Framework) CreateEdgeLBIngress(namespace, name string, fn IngressCustom
 		fn(ingress)
 		ingress.Annotations[constants.EdgeLBIngressClassAnnotationKey] = constants.EdgeLBIngressClassAnnotationValue
 	})
+}
+
+// UpdateIngressEdgeLBPoolSpec updates the EdgeLB pool specification contained in specified Ingress resource according to the supplied customization function.
+func (f *Framework) UpdateIngressEdgeLBPoolSpec(ingress *extsv1beta1.Ingress, fn IngressEdgeLBPoolSpecCustomizer) (*extsv1beta1.Ingress, error) {
+	s, err := translatorapi.GetIngressEdgeLBPoolSpec(ingress)
+	if err != nil {
+		return nil, err
+	}
+	fn(s)
+	_ = translatorapi.SetIngressEdgeLBPoolSpec(ingress, s)
+	return f.KubeClient.ExtensionsV1beta1().Ingresses(ingress.Namespace).Update(ingress)
 }
 
 // WaitUntilIngressCondition blocks until the specified condition function is verified, or until the provided context times out.

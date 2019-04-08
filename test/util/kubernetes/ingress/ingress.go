@@ -3,16 +3,21 @@ package ingress
 import (
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/mesosphere/dklb/pkg/constants"
 )
 
 // ResourceCustomizer represents a function that can be used to customize an Ingress resource.
 type ResourceCustomizer func(ingress *extsv1beta1.Ingress)
 
-// DummyIngressResource returns a dummy, minimal Ingress resource with the specified namespace and name.
+// DummyEdgeLBIngressResource returns a dummy, minimal Ingress resource with the specified namespace and name.
 // If any customization functions are specified, they are run before the resource is returned.
-func DummyIngressResource(namespace, name string, opts ...ResourceCustomizer) *extsv1beta1.Ingress {
+func DummyEdgeLBIngressResource(namespace, name string, opts ...ResourceCustomizer) *extsv1beta1.Ingress {
 	res := &extsv1beta1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
+			Annotations: map[string]string{
+				constants.EdgeLBIngressClassAnnotationKey: constants.EdgeLBIngressClassAnnotationValue,
+			},
 			Namespace: namespace,
 			Name:      name,
 		},
@@ -22,11 +27,4 @@ func DummyIngressResource(namespace, name string, opts ...ResourceCustomizer) *e
 		fn(res)
 	}
 	return res
-}
-
-// WithAnnotations returns a customizer that sets the specified annotations to an Ingress resource.
-func WithAnnotations(annotations map[string]string) ResourceCustomizer {
-	return func(ingress *extsv1beta1.Ingress) {
-		ingress.Annotations = annotations
-	}
 }

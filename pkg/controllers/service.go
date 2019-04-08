@@ -2,9 +2,9 @@ package controllers
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,7 +19,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	"github.com/mesosphere/dklb/pkg/metrics"
 	"github.com/mesosphere/dklb/pkg/translator"
-	"github.com/mesosphere/dklb/pkg/util/prettyprint"
+	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
 )
 
 const (
@@ -44,10 +44,10 @@ type ServiceController struct {
 }
 
 // NewServiceController creates a new instance of the EdgeLB service controller.
-func NewServiceController(clusterName string, kubeClient kubernetes.Interface, er record.EventRecorder, serviceInformer corev1informers.ServiceInformer, configMapInformer corev1informers.ConfigMapInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *ServiceController {
+func NewServiceController(kubeClient kubernetes.Interface, er record.EventRecorder, serviceInformer corev1informers.ServiceInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *ServiceController {
 	// Create a new instance of the service controller with the specified name and threadiness.
 	c := &ServiceController{
-		genericController: newGenericController(clusterName, serviceControllerName, serviceControllerThreadiness),
+		genericController: newGenericController(serviceControllerName, serviceControllerThreadiness),
 		kubeClient:        kubeClient,
 		er:                er,
 		kubeCache:         kubeCache,
@@ -55,7 +55,6 @@ func NewServiceController(clusterName string, kubeClient kubernetes.Interface, e
 	}
 	// Make the controller wait for the caches to sync.
 	c.hasSyncedFuncs = []cache.InformerSynced{
-		configMapInformer.Informer().HasSynced,
 		serviceInformer.Informer().HasSynced,
 		kubeCache.HasSynced,
 	}
@@ -90,19 +89,6 @@ func NewServiceController(clusterName string, kubeClient kubernetes.Interface, e
 				return
 			}
 			c.enqueueTombstone(svc)
-		},
-	})
-	// Setup an event handler to inform us when ConfigMap resources change.
-	// This allows us to enqueue all Service resources that reference a given ConfigMap resource whenever it changes.
-	configMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			c.enqueueReferencingServices(obj.(*corev1.ConfigMap))
-		},
-		UpdateFunc: func(_, obj interface{}) {
-			c.enqueueReferencingServices(obj.(*corev1.ConfigMap))
-		},
-		DeleteFunc: func(obj interface{}) {
-			c.enqueueReferencingServices(obj.(*corev1.ConfigMap))
 		},
 	})
 
@@ -146,20 +132,15 @@ func (c *ServiceController) processQueueItem(workItem WorkItem) error {
 		service.ObjectMeta.DeletionTimestamp = &deletionTimestamp
 	}
 
-	// Compute the set of options that will be used to translate the Service resource into an EdgeLB pool.
-	options, err := translator.ComputeServiceTranslationOptions(c.clusterName, service)
-	if err != nil {
-		// Emit an event and log an error, but do not re-enqueue as the resource's spec was found to be invalid.
-		c.er.Eventf(service, corev1.EventTypeWarning, constants.ReasonInvalidAnnotations, "the resource's annotations are not valid: %v", err)
-		c.logger.Errorf("failed to compute translation options for service %q: %v", workItem.Key, err)
+	// Return immediately if translation is paused for the current Ingress resource.
+	if service.Annotations[constants.DklbPaused] == strconv.FormatBool(true) {
+		c.er.Eventf(service, corev1.EventTypeWarning, constants.ReasonTranslationPaused, "translation is paused for the resource")
+		c.logger.Warnf("skipping translation of %q as translation is paused for the resource", kubernetesutil.Key(service))
 		return nil
 	}
 
-	// Output some tracing information about the computed set of options.
-	prettyprint.LogfSpew(log.Tracef, options, "computed service translation options for %q", workItem.Key)
-
 	// Perform translation of the Service resource into an EdgeLB pool.
-	status, err := translator.NewServiceTranslator(c.clusterName, service, *options, c.kubeCache, c.edgelbManager).Translate()
+	status, err := translator.NewServiceTranslator(service, c.kubeCache, c.edgelbManager).Translate()
 	if err != nil {
 		c.er.Eventf(service, corev1.EventTypeWarning, constants.ReasonTranslationError, "failed to translate service: %v", err)
 		c.logger.Errorf("failed to translate service %q: %v", workItem.Key, err)
@@ -175,23 +156,4 @@ func (c *ServiceController) processQueueItem(workItem WorkItem) error {
 		}
 	}
 	return nil
-}
-
-// enqueueReferencingServices enqueues Service resources that reference the provided ConfigMap resource.
-func (c *ServiceController) enqueueReferencingServices(configMap *corev1.ConfigMap) {
-	// Grab a list of all Service resources in the same namespace as the ConfigMap resource.
-	services, err := c.kubeCache.GetServices(configMap.Namespace)
-	if err != nil {
-		c.logger.Errorf("failed to list all services in namespace %q: %v", configMap.Name, err)
-		return
-	}
-	// Iterate over all listed Service resources, checking whether each one references this ConfigMap resource and enqueueing it if it does.
-	for _, service := range services {
-		obj := service
-		if obj.GetAnnotations() != nil {
-			if obj.GetAnnotations()[constants.CloudLoadBalancerConfigMapNameAnnotationKey] == configMap.Name {
-				c.enqueue(obj)
-			}
-		}
-	}
 }

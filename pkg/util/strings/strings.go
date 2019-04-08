@@ -1,8 +1,22 @@
 package strings
 
 import (
+	"math/rand"
 	"strings"
 )
+
+const (
+	randomLetters = "abcdefghijklmnopqrstuvwxyz0123456789"
+)
+
+// RandomStringWithLength returns a random alphanumeric string.
+func RandomStringWithLength(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = randomLetters[rand.Intn(len(randomLetters))]
+	}
+	return string(b)
+}
 
 // ReplaceDotsWithForwardSlashes returns a string built from the specified one by replacing all dots ("/") with a forward slash ("/").
 func ReplaceDotsWithForwardSlashes(v string) string {
