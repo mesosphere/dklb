@@ -22,7 +22,7 @@ toc::[]
 == Introduction
 
 EdgeLB supports exposing Kubernetes services of type `LoadBalancer` via cloud providers' load-balancing solution. Service resources may be annotated so that `dklb` instructs EdgeLB to enable this feature for the respective pools.
-As of this writing, only [AWS ELB](https://aws.amazon.com/elasticloadbalancing/), and more specifically [NLB](https://docs.aws.amazon.com/elasticloadbalancing/latest/network/introduction.html), is supported by EdgeLB, and therefore `dklb`.
+As of this writing, only https://aws.amazon.com/elasticloadbalancing/[AWS ELB], and more specifically https://docs.aws.amazon.com/elasticloadbalancing/latest/network/introduction.html[NLB], is supported by EdgeLB, and therefore `dklb`.
 
 == Instructions
 
