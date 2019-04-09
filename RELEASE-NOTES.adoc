@@ -19,7 +19,7 @@ endif::[]
 == Table of Contents
 toc::[]
 
-== v0.1.0-alpha.9 (Unreleased)
+== v0.1.0-alpha.9
 
 === Breaking changes
 
