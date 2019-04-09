@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/mesosphere/dklb/pkg/cluster"
 	"github.com/mesosphere/dklb/pkg/constants"
+	"github.com/mesosphere/dklb/pkg/errors"
 	"github.com/mesosphere/dklb/pkg/util/strings"
 )
 
@@ -22,10 +25,11 @@ const (
 	edgeLBPoolNameSuffixLength = 5
 )
 
-// NewRandomEdgeLBPoolName returns a string meant to be used as the name of an EdgeLB pool.
+// newRandomEdgeLBPoolName returns a string meant to be used as the name of an EdgeLB pool.
 // The computed name is of the form "[<prefix>--]<cluster-name>--<suffix>", where "<prefix>" is the specified (possibly empty) string and "<suffix>" is a randomly-generated suffix.
 // It is guaranteed not to exceed 63 characters.
-func NewRandomEdgeLBPoolName(prefix string) string {
+// It is also guaranteed, to the best of our ability, not to clash with the names of any pre-existing EdgeLB pool.
+func newRandomEdgeLBPoolName(prefix string) string {
 	// If the specified prefix is non-empty, append it with the component separator (i.e. "<prefix>--").
 	if prefix != "" {
 		prefix = prefix + edgeLBPoolNameComponentSeparator
@@ -39,8 +43,23 @@ func NewRandomEdgeLBPoolName(prefix string) string {
 	if len(clusterName) > maxClusterNameLength {
 		clusterName = clusterName[:edgeLBPoolNameMaxLength]
 	}
-	// Return the computed name.
-	return prefix + clusterName + suffix
+	// Join the prefix, cluster name and suffix in order to obtain a candidate name.
+	candidate := prefix + clusterName + suffix
+	// If we haven't been given an instance of the EdgeLB manager to work with, return the candidate name immediately.
+	if manager == nil {
+		return candidate
+	}
+	// Otherwise, check whether an EdgeLB pool with the candidate name already exists.
+	ctx, fn := context.WithTimeout(context.TODO(), 5*time.Second)
+	defer fn()
+	_, err := manager.GetPool(ctx, candidate)
+	if err != nil && errors.IsNotFound(err) {
+		// EdgeLB reports that no EdgeLB pool with the candidate name exists, so we are good to go.
+		return candidate
+	}
+	// At this point we know that either an EdgeLB pool with the candidate name already exists, or that there has been a networking/unknown error while reaching out to EdgeLB.
+	// In both cases we call ourselves again, hoping that a better candidate is generated next time around, and that no errors other than "404 NOT FOUND" occur.
+	return newRandomEdgeLBPoolName(prefix)
 }
 
 // GetIngressEdgeLBPoolSpec attempts to parse the contents of the "kubernetes.dcos.io/dklb-config" annotation of the specified Ingress resource as the specification of the target EdgeLB pool.

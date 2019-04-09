@@ -46,7 +46,7 @@ func (o *BaseEdgeLBPoolSpec) setDefaults() {
 		o.Memory = &DefaultEdgeLBPoolMemory
 	}
 	if o.Name == nil {
-		o.Name = pointers.NewString(NewRandomEdgeLBPoolName(""))
+		o.Name = pointers.NewString(newRandomEdgeLBPoolName(""))
 	}
 	if o.Role == nil {
 		o.Role = pointers.NewString(DefaultEdgeLBPoolRole)
@@ -69,7 +69,7 @@ func (o *BaseEdgeLBPoolSpec) setDefaults() {
 	if *o.CloudProviderConfiguration != "" {
 		// If the target EdgeLB pool's name doesn't start with the prefix used for cloud-provider pools, we generate a new name using that prefix.
 		if !strings.HasPrefix(*o.Name, constants.EdgeLBCloudProviderPoolNamePrefix) {
-			o.Name = pointers.NewString(NewRandomEdgeLBPoolName(constants.EdgeLBCloudProviderPoolNamePrefix))
+			o.Name = pointers.NewString(newRandomEdgeLBPoolName(constants.EdgeLBCloudProviderPoolNamePrefix))
 		}
 		// If the target EdgeLB pool's network is not the host network, we override it.
 		if *o.Network != constants.EdgeLBHostNetwork {

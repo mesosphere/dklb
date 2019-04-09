@@ -30,6 +30,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/features"
 	_ "github.com/mesosphere/dklb/pkg/metrics"
 	"github.com/mesosphere/dklb/pkg/signals"
+	translatorapi "github.com/mesosphere/dklb/pkg/translator/api"
 	"github.com/mesosphere/dklb/pkg/version"
 )
 
@@ -141,6 +142,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to build edgelb manager: %v", err)
 	}
+	// Instruct the Translator API to use the current instance of the EdgeLB Manager whenever access to EdgeLB is required.
+	translatorapi.SetEdgeLBManager(edgelbManager)
 
 	// Check the version of the EdgeLB API server that is currently installed, and issue a warning in case it could not be detected within a couple seconds.
 	ctx, fn := context.WithTimeout(context.Background(), 2*time.Second)
