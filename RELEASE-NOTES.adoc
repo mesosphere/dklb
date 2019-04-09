@@ -34,6 +34,7 @@ toc::[]
 * Generate shorter EdgeLB pool names whenever a name is not provided by the user (https://github.com/mesosphere/dklb/pull/22[#22]).
 * Allow for updating the CPU, memory and size requests for existing EdgeLB pools (https://github.com/mesosphere/dklb/pull/22[#22]).
 * Allow for customizing the CPU, memory, size and role requests for cloud-provider EdgeLB pools (https://github.com/mesosphere/dklb/pull/22[#22]).
+* Use the `skaffold/v1beta7` API (https://github.com/mesosphere/dklb/pull/22[#22]).
 
 === Bug fixes
 
