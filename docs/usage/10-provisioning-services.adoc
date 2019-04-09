@@ -45,7 +45,7 @@ This annotation accepts a YAML object (henceforth called the _configuration obje
 [source,yaml]
 ----
 kubernetes.dcos.io/dklb-config: |  # NOTE: The "|" character is mandatory.
-  name: dklb-pool-0
+  name: "dklb-pool-0"
   role: "*"
   network: "dcos"
   size: 3

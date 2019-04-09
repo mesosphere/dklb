@@ -329,12 +329,14 @@ kind: Service
 metadata:
   annotations:
     kubernetes.dcos.io/dklb-config |
-      name: foo
-      role: foo_lb
-      network: foo_network
+      name: "foo"
+      role: "foo_lb"
+      network: "foo_network"
       cpus: 0.2
       memory: 256
       size: 3
+      strategies:
+        creation: "IfNotPresent"
       frontends:
       - port: 10254
         servicePort: 80
