@@ -14,7 +14,7 @@ build: GOFLAGS ?= ""
 build: GOOS ?= linux
 build: LDFLAGS ?= -s -w
 build:
-	@GOARCH=$(GOARCH) GOFLAGS=$(GOFLAGS) GOOS=$(GOOS) go build \
+	@CGO_ENABLED=0 GOARCH=$(GOARCH) GOFLAGS=$(GOFLAGS) GOOS=$(GOOS) go build \
 		-ldflags="$(LDFLAGS) -X github.com/mesosphere/dklb/pkg/version.Version=$(VERSION)" \
 		-o $(ROOT_DIR)/build/dklb \
 		-v \
