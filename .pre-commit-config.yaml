@@ -1,0 +1,43 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.1.0
+    hooks:
+      - id: check-executables-have-shebangs
+        stages: [commit,push]
+      - id: check-merge-conflict
+        args: ["--assume-in-merge"]
+        stages: [commit,push]
+      - id: check-yaml
+        args: ["-m", "--unsafe"]
+        stages: [commit,push]
+      - id: detect-private-key
+        stages: [commit,push]
+      - id: end-of-file-fixer
+        stages: [commit,push]
+      - id: forbid-new-submodules
+        stages: [commit,push]
+      - id: mixed-line-ending
+        args: ["-f", "lf"]
+        exclude: \.bat$
+        stages: [commit,push]
+      - id: no-commit-to-branch
+        args: ["-b", "master"]
+        stages: [commit,push]
+      - id: trailing-whitespace
+        stages: [commit,push]
+  - repo: https://github.com/jorisroovers/gitlint
+    rev: v0.10.0
+    hooks:
+      - id: gitlint
+        stages: [commit-msg]
+  - repo: https://github.com/jumanjihouse/pre-commit-hooks
+    rev: 1.11.0
+    hooks:
+      - id: shfmt
+        stages: [commit,push]
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v1.16.0
+    hooks:
+      - id: golangci-lint
+        args: ["--fix", "-Egoimports", "-Egofmt", "-Egolint", "-Egovet"]
+        stages: [commit,push]
