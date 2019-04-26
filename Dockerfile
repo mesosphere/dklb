@@ -1,5 +1,5 @@
 # Build the "dklb" binary taking the "vendor/" directory into account.
-FROM golang:1.11.4 AS builder
+FROM golang:1.12.4 AS builder
 ARG VERSION
 ENV GOFLAGS="-mod=vendor"
 WORKDIR /src

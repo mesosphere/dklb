@@ -25,7 +25,7 @@ To build `dklb`, the following software is required:
 
 * https://git-scm.com/[`git`].
 * https://www.gnu.org/software/make/[`make`].
-* https://golang.org/[Go] 1.11.4+.
+* https://golang.org/[Go] 1.12.4+.
 ** `dklb` makes use of the https://github.com/golang/go/wiki/Modules[Go modules] experiment present in Go 1.11+ only.
 ** Go 1.11.3 and earlier were found to have issues computing the checksum of certain modules.
 * https://pre-commit.com/[`pre-commit`] installed according to https://pre-commit.com/#install[these instructions] and configured according to https://github.com/mesosphere/eng-tag/blob/master/style-guide.md#style-validation[these instructions].
