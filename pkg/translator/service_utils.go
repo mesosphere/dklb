@@ -6,15 +6,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mesosphere/dklb/pkg/cluster"
-	translatorapi "github.com/mesosphere/dklb/pkg/translator/api"
-
-	"github.com/mesosphere/dklb/pkg/constants"
-	"github.com/mesosphere/dklb/pkg/util/pointers"
-
 	"github.com/mesosphere/dcos-edge-lb/models"
 	corev1 "k8s.io/api/core/v1"
 
+	"github.com/mesosphere/dklb/pkg/cluster"
+	"github.com/mesosphere/dklb/pkg/constants"
+	translatorapi "github.com/mesosphere/dklb/pkg/translator/api"
+	"github.com/mesosphere/dklb/pkg/util/pointers"
 	stringsutil "github.com/mesosphere/dklb/pkg/util/strings"
 )
 

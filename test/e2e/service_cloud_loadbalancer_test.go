@@ -9,22 +9,19 @@ import (
 
 	"github.com/go-redis/redis"
 	"github.com/mesosphere/dcos-edge-lb/models"
-	"k8s.io/apimachinery/pkg/util/intstr"
-
-	translatorapi "github.com/mesosphere/dklb/pkg/translator/api"
-	"github.com/mesosphere/dklb/pkg/util/kubernetes"
-	"github.com/mesosphere/dklb/pkg/util/pointers"
-
-	"github.com/mesosphere/dklb/pkg/constants"
-	"github.com/mesosphere/dklb/pkg/util/retry"
-	"github.com/mesosphere/dklb/test/e2e/framework"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"github.com/mesosphere/dklb/pkg/constants"
+	translatorapi "github.com/mesosphere/dklb/pkg/translator/api"
+	"github.com/mesosphere/dklb/pkg/util/kubernetes"
+	"github.com/mesosphere/dklb/pkg/util/pointers"
+	"github.com/mesosphere/dklb/pkg/util/retry"
+	"github.com/mesosphere/dklb/test/e2e/framework"
 )
 
 var _ = Describe("Service", func() {

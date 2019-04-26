@@ -39,5 +39,5 @@ repos:
     rev: v1.16.0
     hooks:
       - id: golangci-lint
-        args: ["--fix", "-Egoimports", "-Egofmt", "-Egolint", "-Egovet"]
+        args: ["--fix", "-c", ".golangci.yml"]
         stages: [commit,push]
