@@ -7,7 +7,7 @@ COPY . .
 RUN make build
 
 # Copy the "dklb" binary from the "builder" container.
-FROM gcr.io/distroless/base
+FROM gcr.io/distroless/static:a4fd5de337e31911aeee2ad5248284cebeb6a6f4
 LABEL name=mesosphere/dklb
 ARG VERSION
 LABEL version=${VERSION}

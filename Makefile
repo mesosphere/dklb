@@ -5,7 +5,7 @@ ROOT_DIR := $(shell git rev-parse --show-toplevel)
 VERSION ?= $(shell git describe --always --dirty=-dev)
 
 # Ensure go mod is always used.
-export GO111MODULE=on
+export GO111MODULE := on
 
 # build builds the dklb binary for the specified architecture (defaults to "amd64") and operating system (defaults to "linux").
 .PHONY: build
