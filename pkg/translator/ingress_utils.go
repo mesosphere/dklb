@@ -158,7 +158,7 @@ func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translat
 	}
 
 	// Create the slice that will hold the set of matching rules.
-	rules := make([]prioritizedMatchingRule, 0, 0)
+	var rules []prioritizedMatchingRule
 
 	// Iterate over Ingress backends, building the corresponding "V2FrontendLinkBackendMapItems0" EdgeLB object.
 	kubernetesutil.ForEachIngresBackend(ingress, func(host, path *string, backend extsv1beta1.IngressBackend) {

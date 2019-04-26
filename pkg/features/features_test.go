@@ -72,10 +72,7 @@ func TestParseFeatureMap(t *testing.T) {
 
 // TestIsEnabled tests the "IsEnabled" function.
 func TestIsEnabled(t *testing.T) {
-	var (
-		m features.FeatureMap
-	)
-	m = features.FeatureMap{
+	m := features.FeatureMap{
 		features.RegisterAdmissionWebhook: true,
 	}
 	assert.True(t, m.IsEnabled(features.RegisterAdmissionWebhook))

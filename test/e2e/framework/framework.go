@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/glendc/go-external-ip"
-	. "github.com/onsi/gomega"
+	externalip "github.com/glendc/go-external-ip"
+	. "github.com/onsi/gomega" // nolint:golint
 	log "github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"

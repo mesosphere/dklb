@@ -4,6 +4,9 @@ ROOT_DIR := $(shell git rev-parse --show-toplevel)
 # VERSION holds the version of dklb being built.
 VERSION ?= $(shell git describe --always --dirty=-dev)
 
+# Ensure go mod is always used.
+export GO111MODULE=on
+
 # build builds the dklb binary for the specified architecture (defaults to "amd64") and operating system (defaults to "linux").
 .PHONY: build
 build: GOARCH ?= amd64

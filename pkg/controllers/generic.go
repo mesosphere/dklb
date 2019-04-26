@@ -29,8 +29,6 @@ type WorkItem struct {
 
 // genericController contains basic functionality shared by all controllers.
 type genericController struct {
-	// clusterName is the name of the Mesos framework that corresponds to the current Kubernetes cluster.
-	clusterName string
 	// logger is the logger that the controller will use.
 	logger log.FieldLogger
 	// workqueue is a rate limited work queue.

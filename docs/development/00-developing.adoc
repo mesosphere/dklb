@@ -30,7 +30,7 @@ To build `dklb`, the following software is required:
 ** Go 1.11.3 and earlier were found to have issues computing the checksum of certain modules.
 
 To run `dklb`, the following additional software is required:
-  
+
 * https://github.com/GoogleContainerTools/skaffold[`skaffold`]
 * A https://dcos.io/[DC/OS] cluster having https://docs.mesosphere.com/services/edge-lb/[EdgeLB] installed.
 ** DC/OS must be v1.12.0 or later.
@@ -38,7 +38,7 @@ To run `dklb`, the following additional software is required:
 ** EdgeLB https://docs.mesosphere.com/services/edge-lb/1.3/[`v1.3.0`] may be used instead, but some functionality will be missing.
 * An https://mesosphere.com/product/kubernetes-engine/[MKE] https://docs.mesosphere.com/services/kubernetes/2.2.0-1.13.3/[`v2.2.0-1.13.3`] (or later) cluster.
 ** The current kubeconfig context must be configured to point at this cluster.
-  
+
 A Docker Hub account with read/write access to the https://hub.docker.com/r/mesosphere/dklb[`mesosphere/dklb`] image repository is additionally required.
 
 == Cloning the repository

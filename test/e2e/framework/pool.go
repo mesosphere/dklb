@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/mesosphere/dcos-edge-lb/models"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" // nolint:golint
 
 	dklberrors "github.com/mesosphere/dklb/pkg/errors"
 	"github.com/mesosphere/dklb/pkg/util/retry"

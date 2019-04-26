@@ -1,7 +1,7 @@
 package framework
 
 import (
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" // nolint:golint
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	kubeerrors "k8s.io/apimachinery/pkg/api/errors"

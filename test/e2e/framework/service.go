@@ -31,7 +31,7 @@ type ServiceEdgeLBPoolSpecCustomizer func(spec *translatorapi.ServiceEdgeLBPoolS
 func (f *Framework) CreateService(namespace, name string, fn ServiceCustomizer) (*corev1.Service, error) {
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Annotations: make(map[string]string, 0),
+			Annotations: make(map[string]string),
 			Namespace:   namespace,
 			Name:        name,
 		},
