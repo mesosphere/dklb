@@ -25,11 +25,15 @@ build:
 docker: IMG ?= mesosphere/dklb
 docker: TAG ?= $(VERSION)
 docker:
-# We depend on "github.com/mesosphere/dcos-edge-lb", which can't be pulled from inside "docker build".
-# Hence, we must create a "vendor/" directory containing said modules before running "docker build".
-# The Dockerfile must then invoke "make build GOFLAGS=-mod=vendor", or otherwise the build will fail.
-	@go mod vendor
-	@docker build --build-arg VERSION=$(VERSION) --no-cache --tag "$(IMG):$(TAG)" $(ROOT_DIR)
+# We depend on "github.com/mesosphere/dcos-edge-lb", which can't be pulled from inside "docker build"
+# without specifying a GITHUB_TOKEN that can be used to pull private Mesosphere repositories.
+ifndef GITHUB_TOKEN
+	$(error Please specify GITHUB_TOKEN that can be used to pull private Mesosphere repositories)
+endif
+	@docker build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg GITHUB_TOKEN=$(GITHUB_TOKEN) \
+		--tag "$(IMG):$(TAG)" $(ROOT_DIR)
 
 # skaffold deploys dklb to the Kubernetes repository targeted by the current context using skaffold.
 .PHONY: skaffold

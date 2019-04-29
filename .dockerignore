@@ -7,3 +7,4 @@ Dockerfile
 hack/
 README.md
 test/
+vendor/

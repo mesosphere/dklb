@@ -1,8 +1,9 @@
-# Build the "dklb" binary taking the "vendor/" directory into account.
 FROM golang:1.12.4 AS builder
-ARG VERSION
-ENV GOFLAGS="-mod=vendor"
 WORKDIR /src
+COPY go.mod go.sum ./
+ARG GITHUB_TOKEN
+RUN git config --global url."https://${GITHUB_TOKEN}:x-oauth-basic@github.com/mesosphere".insteadOf "https://github.com/mesosphere"
+RUN go mod download
 COPY . .
 RUN make build
 
