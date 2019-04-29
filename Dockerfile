@@ -8,6 +8,9 @@ RUN make build
 
 # Copy the "dklb" binary from the "builder" container.
 FROM gcr.io/distroless/base
+LABEL name=mesosphere/dklb
+ARG VERSION
+LABEL version=${VERSION}
 COPY --from=builder /src/build/dklb /dklb
 ENV CLUSTER_NAME ""
 ENV POD_NAME ""
