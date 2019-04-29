@@ -7,13 +7,18 @@ VERSION ?= $(shell git describe --always --dirty=-dev)
 # Ensure go mod is always used.
 export GO111MODULE := on
 
+include make/platform.mk
+include make/ci.mk
+
+.DEFAULT_GOAL := build
+
 # build builds the dklb binary for the specified architecture (defaults to "amd64") and operating system (defaults to "linux").
 .PHONY: build
 build: GOARCH ?= amd64
 build: GOFLAGS ?= ""
 build: GOOS ?= linux
 build: LDFLAGS ?= -s -w
-build:
+build: gitauth
 	@CGO_ENABLED=0 GOARCH=$(GOARCH) GOFLAGS=$(GOFLAGS) GOOS=$(GOOS) go build \
 		-ldflags="$(LDFLAGS) -X github.com/mesosphere/dklb/pkg/version.Version=$(VERSION)" \
 		-o $(ROOT_DIR)/build/dklb \
@@ -51,7 +56,7 @@ test.e2e: FOCUS ?= .*
 test.e2e: KUBECONFIG ?= $(HOME)/.kube/config
 test.e2e: LOG_LEVEL := info
 test.e2e: TIMEOUT := 1800s
-test.e2e:
+test.e2e: gitauth
 	@go test -tags e2e $(ROOT_DIR)/test/e2e \
 		-ginkgo.focus="$(FOCUS)" \
 		-ginkgo.v \
@@ -68,5 +73,10 @@ test.e2e:
 
 # test.unit runs the unit test suite.
 .PHONY: test.unit
-test.unit:
+test.unit: gitauth
 	@go test -race -v $(ROOT_DIR)/...
+
+gitauth:
+ifdef GITHUB_TOKEN
+	@git config --global url."https://$(GITHUB_TOKEN):x-oauth-basic@github.com/mesosphere".insteadOf "https://github.com/mesosphere"
+endif
