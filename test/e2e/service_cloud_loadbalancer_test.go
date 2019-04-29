@@ -28,8 +28,8 @@ var _ = Describe("Service", func() {
 	Context("of type LoadBalancer and for which a cloud load-balancer has been requested", func() {
 		It("is correctly provisioned by EdgeLB [TCP] [Public] [Cloud]", func() {
 			// Skip the test if no AWS public subnet ID was specified.
-			if awsPublicSubnetId == "" {
-				Skip(fmt.Sprintf("a non-empty value for --%s must be specified", awsPublicSubnetIdFlagName))
+			if awsPublicSubnetID == "" {
+				Skip(fmt.Sprintf("a non-empty value for --%s must be specified", awsPublicSubnetIDFlagName))
 				return
 			}
 
@@ -129,7 +129,7 @@ var _ = Describe("Service", func() {
 								},
 								Name: pointers.NewString(redisSvcName),
 								Subnets: []string{
-									awsPublicSubnetId,
+									awsPublicSubnetID,
 								},
 								Type: pointers.NewString("NLB"),
 							},
