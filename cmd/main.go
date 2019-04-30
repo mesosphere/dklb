@@ -23,7 +23,6 @@ import (
 	"github.com/mesosphere/dklb/pkg/admission"
 	"github.com/mesosphere/dklb/pkg/backends"
 	"github.com/mesosphere/dklb/pkg/cache"
-	"github.com/mesosphere/dklb/pkg/cluster"
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/controllers"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
@@ -68,6 +67,8 @@ var (
 	podNamespace string
 	// podName is the identity of the current instance of the application (used to perform leader election).
 	podName string
+	// kubernetesClusterFrameworkName is the name of the mesos framework that corresponds to the current kubernetes cluster.
+	kubernetesClusterFrameworkName string
 	// resyncPeriod is the maximum amount of time that may elapse between two consecutive synchronizations of Ingress/Service resources and the status of EdgeLB pools.
 	resyncPeriod time.Duration
 	// srvWaitGroup is a WaitGroup used to wait for the default backend and admission webhook servers to shutdown.
@@ -87,7 +88,7 @@ func init() {
 	flag.StringVar(&edgelbOptions.Scheme, "edgelb-scheme", constants.DefaultEdgeLBScheme, "the scheme to use when communicating with the edgelb api server")
 	flag.StringVar(&featureGates, "feature-gates", "", "a comma-separated list of \"key=value\" pairs used to toggle certain features")
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "the path to the kubeconfig file to use when running outside a kubernetes cluster")
-	flag.StringVar(&cluster.Name, "kubernetes-cluster-framework-name", "", "the name of the mesos framework that corresponds to the current kubernetes cluster")
+	flag.StringVar(&kubernetesClusterFrameworkName, "kubernetes-cluster-framework-name", "", "the name of the mesos framework that corresponds to the current kubernetes cluster")
 	flag.StringVar(&logLevel, "log-level", log.InfoLevel.String(), "the log level to use")
 	flag.StringVar(&podNamespace, "pod-namespace", "", "the name of the namespace in which the current instance of the application is deployed (used to perform leader election)")
 	flag.StringVar(&podName, "pod-name", "", "the identity of the current instance of the application (used to perform leader election)")
@@ -118,7 +119,7 @@ func main() {
 	if podName == "" {
 		log.Fatalf("--pod-name must be set")
 	}
-	if cluster.Name == "" {
+	if kubernetesClusterFrameworkName == "" {
 		log.Fatalf("--kubernetes-cluster-framework-name must be set")
 	}
 
@@ -265,9 +266,9 @@ func run(ctx context.Context, kubeClient kubernetes.Interface, er record.EventRe
 	// Create a cache for Kubernetes resources based on the shared informer factory.
 	kubeCache := cache.NewInformerBackedResourceCache(kubeInformerFactory)
 	// Create an instance of the ingress controller.
-	ingressController := controllers.NewIngressController(kubeClient, er, kubeInformerFactory.Extensions().V1beta1().Ingresses(), kubeInformerFactory.Core().V1().Services(), kubeCache, edgelbManager)
+	ingressController := controllers.NewIngressController(kubeClient, er, kubeInformerFactory.Extensions().V1beta1().Ingresses(), kubeInformerFactory.Core().V1().Services(), kubeCache, edgelbManager, kubernetesClusterFrameworkName)
 	// Create an instance of the service controller.
-	serviceController := controllers.NewServiceController(kubeClient, er, kubeInformerFactory.Core().V1().Services(), kubeCache, edgelbManager)
+	serviceController := controllers.NewServiceController(kubeClient, er, kubeInformerFactory.Core().V1().Services(), kubeCache, edgelbManager, kubernetesClusterFrameworkName)
 	// Start the shared informer factory.
 	go kubeInformerFactory.Start(ctx.Done())
 

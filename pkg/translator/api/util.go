@@ -9,7 +9,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
 
-	"github.com/mesosphere/dklb/pkg/cluster"
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/errors"
 	"github.com/mesosphere/dklb/pkg/util/strings"
@@ -29,7 +28,7 @@ const (
 // The computed name is of the form "[<prefix>--]<cluster-name>--<suffix>", where "<prefix>" is the specified (possibly empty) string and "<suffix>" is a randomly-generated suffix.
 // It is guaranteed not to exceed 63 characters.
 // It is also guaranteed, to the best of our ability, not to clash with the names of any pre-existing EdgeLB pool.
-func newRandomEdgeLBPoolName(prefix string) string {
+func newRandomEdgeLBPoolName(prefix, kubernetesClusterName string) string {
 	// If the specified prefix is non-empty, append it with the component separator (i.e. "<prefix>--").
 	if prefix != "" {
 		prefix = prefix + edgeLBPoolNameComponentSeparator
@@ -39,7 +38,7 @@ func newRandomEdgeLBPoolName(prefix string) string {
 	// Compute the maximum length of the "<cluster-name>" component.
 	maxClusterNameLength := edgeLBPoolNameMaxLength - len(prefix) - len(suffix)
 	// Compute a "safe" version of the cluster's name.
-	clusterName := strings.ReplaceForwardSlashes(cluster.Name, edgeLBPoolNameComponentSeparator)
+	clusterName := strings.ReplaceForwardSlashes(kubernetesClusterName, edgeLBPoolNameComponentSeparator)
 	if len(clusterName) > maxClusterNameLength {
 		clusterName = clusterName[:edgeLBPoolNameMaxLength]
 	}
@@ -59,7 +58,7 @@ func newRandomEdgeLBPoolName(prefix string) string {
 	}
 	// At this point we know that either an EdgeLB pool with the candidate name already exists, or that there has been a networking/unknown error while reaching out to EdgeLB.
 	// In both cases we call ourselves again, hoping that a better candidate is generated next time around, and that no errors other than "404 NOT FOUND" occur.
-	return newRandomEdgeLBPoolName(prefix)
+	return newRandomEdgeLBPoolName(prefix, kubernetesClusterName)
 }
 
 // GetIngressEdgeLBPoolSpec attempts to parse the contents of the "kubernetes.dcos.io/dklb-config" annotation of the specified Ingress resource as the specification of the target EdgeLB pool.

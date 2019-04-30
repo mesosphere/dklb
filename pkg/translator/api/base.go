@@ -31,6 +31,8 @@ type BaseEdgeLBPoolSpec struct {
 	Size *int32 `yaml:"size"`
 	//  Strategies groups together strategies used to customize the management of the target EdgeLB pool.
 	Strategies *EdgeLBPoolManagementStrategies `yaml:"strategies"`
+	// kubernetesClusterName is the name of the mesos framework that corresponds to the current kubernetes cluster.
+	kubernetesClusterName string
 }
 
 // SetDefaults sets default values wherever a value hasn't been specifically provided.
@@ -46,7 +48,7 @@ func (o *BaseEdgeLBPoolSpec) setDefaults() {
 		o.Memory = &DefaultEdgeLBPoolMemory
 	}
 	if o.Name == nil {
-		o.Name = pointers.NewString(newRandomEdgeLBPoolName(""))
+		o.Name = pointers.NewString(newRandomEdgeLBPoolName("", o.kubernetesClusterName))
 	}
 	if o.Role == nil {
 		o.Role = pointers.NewString(DefaultEdgeLBPoolRole)
@@ -69,7 +71,7 @@ func (o *BaseEdgeLBPoolSpec) setDefaults() {
 	if *o.CloudProviderConfiguration != "" {
 		// If the target EdgeLB pool's name doesn't start with the prefix used for cloud-provider pools, we generate a new name using that prefix.
 		if !strings.HasPrefix(*o.Name, constants.EdgeLBCloudProviderPoolNamePrefix) {
-			o.Name = pointers.NewString(newRandomEdgeLBPoolName(constants.EdgeLBCloudProviderPoolNamePrefix))
+			o.Name = pointers.NewString(newRandomEdgeLBPoolName(constants.EdgeLBCloudProviderPoolNamePrefix, o.kubernetesClusterName))
 		}
 		// If the target EdgeLB pool's network is not the host network, we override it.
 		if *o.Network != constants.EdgeLBHostNetwork {
