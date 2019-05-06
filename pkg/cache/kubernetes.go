@@ -13,6 +13,8 @@ type KubernetesResourceCache interface {
 	GetIngress(string, string) (*extsv1beta1.Ingress, error)
 	// GetIngresses returns a list of all Ingress resources in the specified namespace.
 	GetIngresses(string) ([]*extsv1beta1.Ingress, error)
+	// GetSecret returns the Secret resource with the specified namespace and name.
+	GetSecret(namespace, name string) (*corev1.Secret, error)
 	// GetService returns the Service resource with the specified namespace and name.
 	GetService(string, string) (*corev1.Service, error)
 	// GetServices returns a list of all Service resources in the specified namespace.

@@ -19,10 +19,12 @@ func NewFakeSharedInformerFactory(res ...runtime.Object) kubeinformers.SharedInf
 	// Start all the required informers.
 	ingressInformer := kubeInformerFactory.Extensions().V1beta1().Ingresses()
 	serviceInformer := kubeInformerFactory.Core().V1().Services()
+	secretInformer := kubeInformerFactory.Core().V1().Secrets()
 	go ingressInformer.Informer().Run(wait.NeverStop)
 	go serviceInformer.Informer().Run(wait.NeverStop)
+	go secretInformer.Informer().Run(wait.NeverStop)
 	// Wait for the caches to be synced.
-	if !kubecache.WaitForCacheSync(wait.NeverStop, ingressInformer.Informer().HasSynced, serviceInformer.Informer().HasSynced) {
+	if !kubecache.WaitForCacheSync(wait.NeverStop, ingressInformer.Informer().HasSynced, serviceInformer.Informer().HasSynced, secretInformer.Informer().HasSynced) {
 		panic("failed to wait for caches to be synced")
 	}
 	// Return the shared informer factory.

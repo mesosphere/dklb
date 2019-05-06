@@ -21,4 +21,7 @@ const (
 	// It is used mostly to facilitate end-to-end testing, as it allows to simulate certain scenarios that would otherwise be very hard to simulate.
 	// It also allows for performing end-to-end testing on the admission webhook without the need for provisioning EdgeLB pools.
 	DklbPaused = annotationKeyPrefix + "dklb-paused"
+
+	// DklbSecretAnnotationKey is the key of the annotation that holds the MD5 hash of the base64 decoded certificate and private key.
+	DklbSecretAnnotationKey = annotationKeyPrefix + "dklb-hash"
 )

@@ -13,6 +13,7 @@ import (
 	dklbcache "github.com/mesosphere/dklb/pkg/cache"
 	cachetestutil "github.com/mesosphere/dklb/test/util/cache"
 	ingresstestutil "github.com/mesosphere/dklb/test/util/kubernetes/ingress"
+	secrettestutil "github.com/mesosphere/dklb/test/util/kubernetes/secret"
 	servicetestutil "github.com/mesosphere/dklb/test/util/kubernetes/service"
 )
 
@@ -31,6 +32,11 @@ var (
 				Port: 80,
 			},
 		}
+	})
+	// dummySecret1 represents a dummy Secret resource. the base64 data is 'hello world'
+	dummySecret1 = secrettestutil.DummySecretResource("namespace-1", "name-1", func(secret *corev1.Secret) {
+		secret.Data["tls.crt"] = []byte("aGVsbG8gd29ybGQK")
+		secret.Data["tls.key"] = []byte("aGVsbG8gd29ybGQK")
 	})
 )
 
@@ -105,6 +111,41 @@ func TestGetService(t *testing.T) {
 	for _, test := range tests {
 		t.Logf("test case: %s", test.description)
 		res, err := cache.GetService(test.namespace, test.name)
+		if test.expectedError != nil {
+			assert.Equal(t, test.expectedError, err)
+		} else {
+			assert.Equal(t, test.expectedResult, res)
+		}
+	}
+}
+
+func TestGetSecret(t *testing.T) {
+	cache := dklbcache.NewInformerBackedResourceCache(cachetestutil.NewFakeSharedInformerFactory(dummySecret1))
+	tests := []struct {
+		description    string
+		namespace      string
+		name           string
+		expectedResult *corev1.Secret
+		expectedError  error
+	}{
+		{
+			description:    "get an existing secret resource",
+			namespace:      dummySecret1.Namespace,
+			name:           dummySecret1.Name,
+			expectedResult: dummySecret1,
+			expectedError:  nil,
+		},
+		{
+			description:    "get an inexistent secret resource",
+			namespace:      "foo",
+			name:           "bar",
+			expectedResult: nil,
+			expectedError:  kubeerrors.NewNotFound(schema.GroupResource{Group: "", Resource: "secret"}, "bar"),
+		},
+	}
+	for _, test := range tests {
+		t.Logf("test case: %s", test.description)
+		res, err := cache.GetSecret(test.namespace, test.name)
 		if test.expectedError != nil {
 			assert.Equal(t, test.expectedError, err)
 		} else {

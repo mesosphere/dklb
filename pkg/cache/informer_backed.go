@@ -13,6 +13,8 @@ import (
 type informerBackedResourceCache struct {
 	// ingressInformer is an informer for Ingress resources.
 	ingressInformer extsv1beta1informers.IngressInformer
+	// secretInformer is an informer for Secret resources.
+	secretInformer corev1informers.SecretInformer
 	// serviceInformer is an informer for Service resources.
 	serviceInformer corev1informers.ServiceInformer
 }
@@ -21,6 +23,7 @@ type informerBackedResourceCache struct {
 func NewInformerBackedResourceCache(factory kubeinformers.SharedInformerFactory) KubernetesResourceCache {
 	return &informerBackedResourceCache{
 		ingressInformer: factory.Extensions().V1beta1().Ingresses(),
+		secretInformer:  factory.Core().V1().Secrets(),
 		serviceInformer: factory.Core().V1().Services(),
 	}
 }
@@ -38,6 +41,11 @@ func (c *informerBackedResourceCache) GetIngress(namespace, name string) (*extsv
 // GetIngresses returns a list of all Ingress resources in the specified namespace.
 func (c *informerBackedResourceCache) GetIngresses(namespace string) ([]*extsv1beta1.Ingress, error) {
 	return c.ingressInformer.Lister().Ingresses(namespace).List(labels.Everything())
+}
+
+// GetSecret returns the Secret resource with the specified namespace and name.
+func (c *informerBackedResourceCache) GetSecret(namespace, name string) (*corev1.Secret, error) {
+	return c.secretInformer.Lister().Secrets(namespace).Get(name)
 }
 
 // GetService returns the Service resource with the specified namespace and name.
