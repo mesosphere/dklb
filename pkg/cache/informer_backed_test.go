@@ -136,7 +136,7 @@ func TestGetSecret(t *testing.T) {
 			expectedError:  nil,
 		},
 		{
-			description:    "get an inexistent secret resource",
+			description:    "get an non-existent secret resource",
 			namespace:      "foo",
 			name:           "bar",
 			expectedResult: nil,

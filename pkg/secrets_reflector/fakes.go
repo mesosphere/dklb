@@ -7,34 +7,23 @@ import (
 	"github.com/dcos/client-go/dcos"
 )
 
-// fakeDCOSSecretsClient implements DCOSSecretsClient and is used for
-// testing
+// fakeDCOSSecretsClient implements DCOSSecretsClient and is used for testing.
 type fakeDCOSSecretsClient struct {
-	Err          error
-	Resp         *http.Response
-	ValidatePath func(pathToSecret string) error
+	OnCreate func(pathToSecret string) error
+	OnUpdate func(pathToSecret string) error
 }
 
 func newFakeDCOSSecretsClient() DCOSSecretsClient {
-	return &fakeDCOSSecretsClient{}
+	return &fakeDCOSSecretsClient{
+		OnCreate: func(string) error { return nil },
+		OnUpdate: func(string) error { return nil },
+	}
 }
 
 func (f *fakeDCOSSecretsClient) CreateSecret(ctx context.Context, store string, pathToSecret string, secretsV1Secret dcos.SecretsV1Secret) (*http.Response, error) {
-	if f.ValidatePath != nil {
-		err := f.ValidatePath(pathToSecret)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return f.Resp, f.Err
+	return nil, f.OnCreate(pathToSecret)
 }
 
-func (f *fakeDCOSSecretsClient) DeleteSecret(ctx context.Context, store string, pathToSecret string) (*http.Response, error) {
-	if f.ValidatePath != nil {
-		err := f.ValidatePath(pathToSecret)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return f.Resp, f.Err
+func (f *fakeDCOSSecretsClient) UpdateSecret(ctx context.Context, store string, pathToSecret string, secretsV1Secret dcos.SecretsV1Secret) (*http.Response, error) {
+	return nil, f.OnUpdate(pathToSecret)
 }

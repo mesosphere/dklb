@@ -10,8 +10,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	kubeerrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 
@@ -23,8 +21,8 @@ import (
 
 var (
 	defaultTestKubeSecret = secrettestutil.DummySecretResource("namespace-1", "name-1", func(secret *corev1.Secret) {
-		secret.Data["tls.crt"] = []byte("aGVsbG8gd29ybGQK")
-		secret.Data["tls.key"] = []byte("aGVsbG8gd29ybGQK")
+		secret.Data[corev1.TLSCertKey] = []byte("aGVsbG8K")       // hello
+		secret.Data[corev1.TLSPrivateKeyKey] = []byte("d29ybGQK") // world
 	})
 	defaultTestLogger, defaultTestLoggerHook = logtest.NewNullLogger()
 )
@@ -40,24 +38,24 @@ func TestSecretReflector_translate(t *testing.T) {
 			description:   "should translate a secret",
 			expectedError: nil,
 			expectedResult: &dcos.SecretsV1Secret{
-				Value: "hello world\nhello world\n",
+				Value: "hello\nworld\n",
 			},
 			secret: defaultTestKubeSecret.DeepCopy(),
 		},
 		{
 			description:    "should fail with missing tls.crt field",
-			expectedError:  errors.New("invalid secret: namespace-1/name-1 does not contain tls.crt field"),
+			expectedError:  errors.New("invalid secret: \"namespace-1/name-1\" does not contain tls.crt field"),
 			expectedResult: nil,
 			secret: secrettestutil.DummySecretResource("namespace-1", "name-1", func(secret *corev1.Secret) {
-				secret.Data["tls.key"] = []byte("aGVsbG8gd29ybGQK")
+				secret.Data[corev1.TLSPrivateKeyKey] = []byte("aGVsbG8g")
 			}),
 		},
 		{
 			description:    "should fail with missing tls.key field",
-			expectedError:  errors.New("invalid secret: namespace-1/name-1 does not contain tls.key field"),
+			expectedError:  errors.New("invalid secret: \"namespace-1/name-1\" does not contain tls.key field"),
 			expectedResult: nil,
 			secret: secrettestutil.DummySecretResource("namespace-1", "name-1", func(secret *corev1.Secret) {
-				secret.Data["tls.crt"] = []byte("aGVsbG8gd29ybGQK")
+				secret.Data[corev1.TLSCertKey] = []byte("d29ybGQK")
 			}),
 		},
 	}
@@ -65,9 +63,9 @@ func TestSecretReflector_translate(t *testing.T) {
 	for _, test := range tests {
 		t.Logf("test case: %s", test.description)
 
-		// these tests don't require kubecache and kubeclient
-		// because they only test the kubernetes secret to
-		// DCOS secret object translation
+		// these tests don't require kubeCache and kubeClient
+		// because they only test the Kubernetes secret to
+		// DC/OS secret object translation
 		sr := secretsReflector{
 			logger: defaultTestLogger,
 		}
@@ -89,13 +87,13 @@ func TestSecretReflector_reflect(t *testing.T) {
 		kubeSecret        *corev1.Secret
 	}{
 		{
-			description: "should reflect secret",
+			description: "should create DC/OS Secret",
 			clusterName: "cluster-1",
 			dcosSecret: &dcos.SecretsV1Secret{
-				Value: "hello world\nhello world\n",
+				Value: "hello\nworld\n",
 			},
 			dcosSecretsClient: &fakeDCOSSecretsClient{
-				ValidatePath: func(path string) error {
+				OnCreate: func(path string) error {
 					if path != "cluster-1__namespace-1__name-1" {
 						return fmt.Errorf("error expected 'cluster-1__namespace-1__name-1' got '%s'", path)
 					}
@@ -107,52 +105,89 @@ func TestSecretReflector_reflect(t *testing.T) {
 			kubeSecret:    defaultTestKubeSecret.DeepCopy(),
 		},
 		{
-			description: "should fail with invalid DCOS secret path",
+			description: "should update DC/OS Secret",
 			clusterName: "cluster-1",
 			dcosSecret: &dcos.SecretsV1Secret{
-				Value: "hello world\nhello world\n",
+				Value: "hello\nworld\n",
 			},
 			dcosSecretsClient: &fakeDCOSSecretsClient{
-				ValidatePath: func(path string) error {
-					if path == "cluster-1__namespace-1__name-1" {
-						return fmt.Errorf("error: expected 'cluster-1__namespace-1__name-1' got '%s'", path)
+				OnUpdate: func(path string) error {
+					if path != "cluster-1__namespace-1__name-1" {
+						return fmt.Errorf("error expected 'cluster-1__namespace-1__name-1' got '%s'", path)
 					}
 					return nil
 				},
 			},
-			expectedError: errors.New("error: expected 'cluster-1__namespace-1__name-1' got 'cluster-1__namespace-1__name-1'"),
+			expectedError: nil,
+			kubeClient:    fake.NewSimpleClientset(defaultTestKubeSecret),
+			kubeSecret: secrettestutil.DummySecretResource("namespace-1", "name-1", func(secret *corev1.Secret) {
+				secret.Data[corev1.TLSCertKey] = []byte("aGVsbG8g")
+				secret.Data[corev1.TLSPrivateKeyKey] = []byte("d29ybGQK")
+				secret.Annotations[constants.DklbSecretAnnotationKey] = "fake"
+			}),
+		},
+		{
+			description: "should fail with invalid DC/OS secret path",
+			clusterName: "cluster-1",
+			dcosSecret: &dcos.SecretsV1Secret{
+				Value: "hello\nworld\n",
+			},
+			dcosSecretsClient: &fakeDCOSSecretsClient{
+				OnCreate: func(path string) error {
+					if path == "cluster-1__namespace-1__name-1" {
+						return errors.New("fake error")
+					}
+					return nil
+				},
+			},
+			expectedError: errors.New("failed to create DC/OS secret cluster-1__namespace-1__name-1: fake error"),
 			kubeClient:    fake.NewSimpleClientset(defaultTestKubeSecret),
 			kubeSecret:    defaultTestKubeSecret.DeepCopy(),
 		},
 		{
 			description: "should not reflect secret because md5sum hash matches annotation",
 			dcosSecret: &dcos.SecretsV1Secret{
-				Value: "hello world\nhello world\n",
+				Value: "hello\nworld\n",
 			},
 			expectedError: nil,
 			kubeSecret: secrettestutil.DummySecretResource("namespace-1", "name-1", func(secret *corev1.Secret) {
-				secret.Data["tls.crt"] = []byte("aGVsbG8gd29ybGQK")
-				secret.Data["tls.key"] = []byte("aGVsbG8gd29ybGQK")
-				secret.Annotations[constants.DklbSecretAnnotationKey] = "cdb22973649bc8bb322a144796b42163"
+				secret.Data[corev1.TLSCertKey] = []byte("aGVsbG8g")
+				secret.Data[corev1.TLSPrivateKeyKey] = []byte("d29ybGQK")
+				secret.Annotations[constants.DklbSecretAnnotationKey] = "0f723ae7f9bf07744445e93ac5595156"
 			}),
 		},
 		{
-			description: "should fail to create DCOS secret",
+			description: "should fail to create DC/OS secret",
 			dcosSecret: &dcos.SecretsV1Secret{
-				Value: "hello world\nhello world\n",
+				Value: "hello\nworld\n",
 			},
-			expectedError: errors.New("fake"),
+			expectedError: errors.New("failed to create DC/OS secret __namespace-1__name-1: fake error"),
 			dcosSecretsClient: &fakeDCOSSecretsClient{
-				Err: errors.New("fake"),
+				OnCreate: func(path string) error { return errors.New("fake error") },
 			},
 			kubeSecret: defaultTestKubeSecret.DeepCopy(),
 		},
 		{
-			description: "should fail to update kubernetes secret dklb-hash annotation",
+			description: "should fail to update DC/OS secret",
 			dcosSecret: &dcos.SecretsV1Secret{
-				Value: "hello world\nhello world\n",
+				Value: "hello\nworld\n",
 			},
-			expectedError:     kubeerrors.NewNotFound(schema.GroupResource{Group: "", Resource: "secrets"}, defaultTestKubeSecret.Name),
+			expectedError: errors.New("failed to update DC/OS secret __namespace-1__name-1: fake error"),
+			dcosSecretsClient: &fakeDCOSSecretsClient{
+				OnUpdate: func(string) error { return errors.New("fake error") },
+			},
+			kubeSecret: secrettestutil.DummySecretResource("namespace-1", "name-1", func(secret *corev1.Secret) {
+				secret.Data[corev1.TLSCertKey] = []byte("aGVsbG8g")
+				secret.Data[corev1.TLSPrivateKeyKey] = []byte("d29ybGQK")
+				secret.Annotations[constants.DklbSecretAnnotationKey] = "fake"
+			}),
+		},
+		{
+			description: "should fail to update Kubernetes secret dklb-hash annotation",
+			dcosSecret: &dcos.SecretsV1Secret{
+				Value: "hello\nworld\n",
+			},
+			expectedError:     errors.New("failed to update Kubernetes secret \"namespace-1/name-1\": secrets \"name-1\" not found"),
 			dcosSecretsClient: newFakeDCOSSecretsClient(),
 			kubeClient:        fake.NewSimpleClientset(),
 			kubeSecret:        defaultTestKubeSecret.DeepCopy(),
@@ -201,7 +236,7 @@ func TestSecretReflector(t *testing.T) {
 			description:       "should fail to retrieve a secret from cache",
 			clusterName:       "cluster-1",
 			dcosSecretsClient: newFakeDCOSSecretsClient(),
-			expectedError:     kubeerrors.NewNotFound(schema.GroupResource{Group: "", Resource: "secret"}, defaultTestKubeSecret.Name),
+			expectedError:     errors.New("failed to get secret \"namespace-1/name-1\": secret \"name-1\" not found"),
 			kubeCache:         dklbcache.NewInformerBackedResourceCache(cachetestutil.NewFakeSharedInformerFactory()),
 			kubeSecret:        defaultTestKubeSecret.DeepCopy(),
 		},
@@ -209,7 +244,7 @@ func TestSecretReflector(t *testing.T) {
 			description:       "should fail to translate a secret",
 			clusterName:       "cluster-1",
 			dcosSecretsClient: newFakeDCOSSecretsClient(),
-			expectedError:     errors.New("invalid secret: namespace-1/name-1 does not contain tls.crt field"),
+			expectedError:     errors.New("failed to translate secret: invalid secret: \"namespace-1/name-1\" does not contain tls.crt field"),
 			kubeCache:         dklbcache.NewInformerBackedResourceCache(cachetestutil.NewFakeSharedInformerFactory(emptyKubeSecret)),
 			kubeClient:        fake.NewSimpleClientset(emptyKubeSecret),
 			kubeSecret:        emptyKubeSecret.DeepCopy(),

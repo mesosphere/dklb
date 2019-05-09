@@ -5,14 +5,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ResourceCustomizer represents a function that can be used to
-// customize a Secret resource.
-type ResourceCustomizer func(secret *corev1.Secret)
+// Customizer represents a function that can be used to customize a Secret resource.
+type Customizer func(secret *corev1.Secret)
 
-// DummySecretResource returns a dummy, minimal Secret resource with
-// the specified namespace and name.  If any customization functions
-// are specified, they are run before the resource is returned.
-func DummySecretResource(namespace, name string, opts ...ResourceCustomizer) *corev1.Secret {
+// DummySecretResource returns a dummy, minimal Secret resource with the specified namespace and name.
+// If any customization functions are specified, they are run before the resource is returned.
+func DummySecretResource(namespace, name string, opts ...Customizer) *corev1.Secret {
 	res := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:   namespace,

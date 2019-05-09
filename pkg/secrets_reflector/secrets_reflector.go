@@ -28,14 +28,13 @@ type SecretsReflector interface {
 	Reflect(namespace, name string) error
 }
 
-// DCOSSecretsAPI defines the interface required by the
-// SecretsReflector to manage DC/OS secrets.
+// DCOSSecretsAPI defines the interface required by the SecretsReflector to manage DC/OS secrets.
 type DCOSSecretsClient interface {
 	CreateSecret(ctx context.Context, store string, pathToSecret string, secretsV1Secret dcos.SecretsV1Secret) (*http.Response, error)
-	DeleteSecret(ctx context.Context, store string, pathToSecret string) (*http.Response, error)
+	UpdateSecret(ctx context.Context, store string, pathToSecret string, secretsV1Secret dcos.SecretsV1Secret) (*http.Response, error)
 }
 
-// secretsReflector implements SecretsReflector interface.
+// secretsReflector implements the SecretsReflector interface.
 type secretsReflector struct {
 	dcosSecretsClient     DCOSSecretsClient
 	kubeCache             dklbcache.KubernetesResourceCache
@@ -55,53 +54,50 @@ func New(kubernetesClusterName string, dcosSecretsClient DCOSSecretsClient, kube
 	}
 }
 
-// Reflect reads kubernetes secret with name from namespace,
-// translates it to a DCOS secret and checks to if it needs to
-// re-create it DC/OS.
+// Reflect reads Kubernetes secret with the provided namespace and name, translates it to a DC/OS secret
+// and checks if it needs to be recreated in DC/OS.
 func (s *secretsReflector) Reflect(namespace, name string) error {
-	// get secret from kubernetes
+	// Get the secret from Kubernetes
 	kubeSecret, err := s.kubeCache.GetSecret(namespace, name)
 	if err != nil {
-		s.logger.Errorf("failed to get secret %s/%s", namespace, name)
-		return err
+		return fmt.Errorf("failed to get secret \"%s/%s\": %s", namespace, name, err)
 	}
-	// translate kubernetes secret to a dcos secret
+	// Translate Kubernetes secret to a dcos secret
 	dcosSecret, err := s.translate(kubeSecret)
 	if err != nil {
-		s.logger.Errorf("failed to translate secret: %s", err)
-		return err
+		return fmt.Errorf("failed to translate secret: %s", err)
 	}
-	// check if we need to update/create the dcos secret
+	// Check if we need to update/create the dcos secret
 	return s.reflect(kubeSecret, dcosSecret)
 }
 
-// translate kubernetes secret kubeSecret to structure expected by
-// DCOS or an error if it failed.
+// translate Kubernetes secret kubeSecret to structure expected by DC/OS or an error if it failed.
 func (s *secretsReflector) translate(kubeSecret *corev1.Secret) (*dcos.SecretsV1Secret, error) {
-	// get base64 representation of kubernetes secret tls.crt and tls.pem fields
-	crt64, ok := kubeSecret.Data["tls.crt"]
+	// Tet the base64 representation of Kubernetes secret tls.crt
+	// and tls.key fields
+	crt64, ok := kubeSecret.Data[corev1.TLSCertKey]
 	if !ok {
-		err := fmt.Errorf("invalid secret: %s/%s does not contain tls.crt field", kubeSecret.Namespace, kubeSecret.Name)
+		err := fmt.Errorf("invalid secret: \"%s/%s\" does not contain %s field", kubeSecret.Namespace, kubeSecret.Name, corev1.TLSCertKey)
 		return nil, err
 	}
-	key64, ok := kubeSecret.Data["tls.key"]
+	key64, ok := kubeSecret.Data[corev1.TLSPrivateKeyKey]
 	if !ok {
-		err := fmt.Errorf("invalid secret: %s/%s does not contain tls.key field", kubeSecret.Namespace, kubeSecret.Name)
+		err := fmt.Errorf("invalid secret: \"%s/%s\" does not contain %s field", kubeSecret.Namespace, kubeSecret.Name, corev1.TLSPrivateKeyKey)
 		return nil, err
 	}
-	// base64 decode tls.crt and tls.pem fields
+	// Base64 decode tls.crt and tls.key fields
 	crt, err := base64.StdEncoding.DecodeString(string(crt64))
 	if err != nil {
-		err = fmt.Errorf("invalid secret: error decoding %s/%s tls.crt field: %v", kubeSecret.Namespace, kubeSecret.Name, err)
+		err = fmt.Errorf("invalid secret: error decoding \"%s/%s\"'s %s field: %v", kubeSecret.Namespace, kubeSecret.Name, corev1.TLSCertKey, err)
 		return nil, err
 	}
 	key, err := base64.StdEncoding.DecodeString(string(key64))
 	if err != nil {
-		err = fmt.Errorf("invalid secret: error decoding %s/%s tls.key field: %v", kubeSecret.Namespace, kubeSecret.Name, err)
+		err = fmt.Errorf("invalid secret: error decoding \"%s/%s\"'s %s field: %v", kubeSecret.Namespace, kubeSecret.Name, corev1.TLSPrivateKeyKey, err)
 		return nil, err
 	}
-	// concatenate crt and private key and put the result in an
-	// DCOS Secret
+	// Concatenate certificate and private key and put the result
+	// in an DC/OS Secret
 	var sb strings.Builder
 	sb.Write(crt)
 	sb.Write(key)
@@ -112,42 +108,41 @@ func (s *secretsReflector) translate(kubeSecret *corev1.Secret) (*dcos.SecretsV1
 	return dcosSecret, nil
 }
 
-// reflect checks if kubernetes secret was updated by verifying if the
-// MD5 hash of certificate and private key changed and if required
-// proceeds to re-create a DCOS secret to match it.
+// reflect checks if Kubernetes secret was updated by verifying if the MD5 hash of certificate
+// and private key changed, and, if required proceeds to re-create the DC/OS secret.
 func (s *secretsReflector) reflect(kubeSecret *corev1.Secret, dcosSecret *dcos.SecretsV1Secret) error {
 	hashRaw := md5.Sum([]byte(dcosSecret.Value))
 	hash := fmt.Sprintf("%x", hashRaw)
-	expectedHash := kubeSecret.Annotations[constants.DklbSecretAnnotationKey]
-	// hash did not change so we can exit now
-	if len(hash) > 0 && len(expectedHash) > 0 && hash == expectedHash {
-		s.logger.Infof("no changes to secret %s/%s detected, skipping update", kubeSecret.Namespace, kubeSecret.Name)
+	expectedHash, withPreviousAnnotation := kubeSecret.Annotations[constants.DklbSecretAnnotationKey]
+	// Hash did not change so we can exit now
+	if len(dcosSecret.Value) > 0 && withPreviousAnnotation && hash == expectedHash {
+		s.logger.Infof("no changes to secret \"%s/%s\" detected, skipping update", kubeSecret.Namespace, kubeSecret.Name)
 		return nil
 	}
-	// generate the DCOS secret name
+	// Generate the DC/OS secret name
 	dcosSecretName := fmt.Sprintf("%s__%s__%s", s.kubernetesClusterName, kubeSecret.Namespace, kubeSecret.Name)
-
-	ctx, fn := context.WithTimeout(context.Background(), defaultTimeout)
-	defer fn()
-	// delete the secret from DCOS secret store and ignore any
-	// errors (ex: AlreadyExists or NotFound)
-	s.logger.Infof("(re)creating DCOS secret %s", dcosSecretName)
-	s.dcosSecretsClient.DeleteSecret(ctx, defaultSecretStore, dcosSecretName)
-	// create the DCOS secret
-	_, err := s.dcosSecretsClient.CreateSecret(ctx, defaultSecretStore, dcosSecretName, *dcosSecret)
-	if err != nil {
-		s.logger.Errorf("failed to (re)create DCOS secret %s: %s", dcosSecretName, err)
-		return err
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	// Check if we need to update or create the DC/OS secret
+	if withPreviousAnnotation {
+		_, err := s.dcosSecretsClient.UpdateSecret(ctx, defaultSecretStore, dcosSecretName, *dcosSecret)
+		if err != nil {
+			return fmt.Errorf("failed to update DC/OS secret %s: %s", dcosSecretName, err)
+		}
+	} else {
+		_, err := s.dcosSecretsClient.CreateSecret(ctx, defaultSecretStore, dcosSecretName, *dcosSecret)
+		if err != nil {
+			return fmt.Errorf("failed to create DC/OS secret %s: %s", dcosSecretName, err)
+		}
 	}
-	// add the hash annotation to the kubernetes secret and update it
+	// Add the hash annotation to the Kubernetes secret and update it
 	if kubeSecret.Annotations == nil {
 		kubeSecret.Annotations = make(map[string]string)
 	}
 	kubeSecret.Annotations[constants.DklbSecretAnnotationKey] = hash
-	s.logger.Infof("detected changes to secret %s/%s: updating annotation", kubeSecret.Namespace, kubeSecret.Name)
+	s.logger.Infof("detected changes to secret \"%s/%s\": updating annotation", kubeSecret.Namespace, kubeSecret.Name)
 	if _, err := s.kubeClient.CoreV1().Secrets(kubeSecret.Namespace).Update(kubeSecret); err != nil {
-		s.logger.Errorf("failed to update secret %s/%s: %s", kubeSecret.Namespace, kubeSecret.Name, err)
-		return err
+		return fmt.Errorf("failed to update Kubernetes secret \"%s/%s\": %s", kubeSecret.Namespace, kubeSecret.Name, err)
 	}
 	return nil
 }
