@@ -5,7 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/util/kubernetes"
 	ingresstestutil "github.com/mesosphere/dklb/test/util/kubernetes/ingress"
 )
@@ -79,4 +81,46 @@ func TestForEachIngressBackend(t *testing.T) {
 	assert.Equal(t, "/foo", *visitedPaths["2"])
 	assert.Equal(t, "/bar", *visitedPaths["3"])
 	assert.Equal(t, "/baz", *visitedPaths["4"])
+}
+
+func TestIsEdgeLBIngress(t *testing.T) {
+	tests := []struct {
+		description    string
+		expectedResult bool
+		ingress        *extsv1beta1.Ingress
+	}{
+		{
+			description: "should detect ingress type dklb",
+			ingress: &extsv1beta1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						constants.EdgeLBIngressClassAnnotationKey: constants.EdgeLBIngressClassAnnotationValue,
+					},
+				},
+			},
+			expectedResult: true,
+		},
+		{
+			description:    "should not detect ingress type dklb with missing annotation",
+			ingress:        &extsv1beta1.Ingress{},
+			expectedResult: false,
+		},
+		{
+			description: "should not detect ingress type dklb with other ingress type",
+			ingress: &extsv1beta1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						constants.EdgeLBIngressClassAnnotationKey: "nginx",
+					},
+				},
+			},
+			expectedResult: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Logf("test case: %s", test.description)
+		res := kubernetes.IsEdgeLBIngress(test.ingress)
+		assert.Equal(t, test.expectedResult, res)
+	}
 }
