@@ -18,6 +18,16 @@ type Controller interface {
 	Run(ctx context.Context) error
 }
 
+type controller interface {
+	Controller
+	// enqueue takes a Kubernetes resource, computes its resource key and puts it as a work item onto the work queue.
+	enqueue(obj interface{})
+	// enqueueTombstone takes the tombstone of a Kubernetes resource that has been deleted, computes its resource key and puts it as a work item onto the work queue.
+	// Must only be used to handle cleanup in scenarios where the Kubernetes resource has been deleted.
+	// For all other usage scenarios, "enqueue" should be used instead.
+	enqueueTombstone(obj interface{})
+}
+
 // WorkItem represents an item that is placed onto the controller's work queue.
 // It is a pairing between the "namespace/name" key corresponding to a given Kubernetes resource and the resource's tombstone in case the resource has been deleted.
 type WorkItem struct {
@@ -74,14 +84,17 @@ func (c *genericController) Run(ctx context.Context) error {
 }
 
 // newGenericController returns a new generic controller.
-func newGenericController(name string, threadiness int) *genericController {
+func newGenericController(name string, threadiness int, syncFuncs []cache.InformerSynced, syncHandler func(workItem WorkItem) error, logger log.FieldLogger) *genericController {
 	// Return a new instance of a generic controller.
-	return &genericController{
-		logger:      log.WithField("controller", name),
-		workqueue:   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), name),
-		threadiness: threadiness,
-		name:        name,
+	gc := &genericController{
+		hasSyncedFuncs: syncFuncs,
+		logger:         logger,
+		name:           name,
+		syncHandler:    syncHandler,
+		workqueue:      workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), name),
+		threadiness:    threadiness,
 	}
+	return gc
 }
 
 // runWorker is a long-running function that will continually call the processNextWorkItem function in order to read and process an item from the work queue.

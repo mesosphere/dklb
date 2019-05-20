@@ -1,10 +1,12 @@
 package controllers
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -34,7 +36,7 @@ const (
 // IngressController is the controller for Ingress resources.
 type IngressController struct {
 	// IngressController is based-off of a generic controller.
-	*genericController
+	base controller
 	// kubeClient is a client to the Kubernetes core APIs.
 	kubeClient kubernetes.Interface
 	// er is an EventRecorder using which we can emit events associated with the Ingress resource being translated.
@@ -43,26 +45,34 @@ type IngressController struct {
 	kubeCache dklbcache.KubernetesResourceCache
 	// edgelbManager is the instance of the EdgeLB manager to use for materializing EdgeLB pools for Ingress resources.
 	edgelbManager manager.EdgeLBManager
+	// logger is the logger that the controller will use.
+	logger log.FieldLogger
 }
 
 // NewIngressController creates a new instance of the EdgeLB ingress controller.
 func NewIngressController(kubeClient kubernetes.Interface, er record.EventRecorder, ingressInformer extsv1beta1informers.IngressInformer, serviceInformer corev1informers.ServiceInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *IngressController {
 	// Create a new instance of the ingress controller with the specified name and threadiness.
 	c := &IngressController{
-		genericController: newGenericController(ingressControllerName, ingressControllerThreadiness),
-		kubeClient:        kubeClient,
-		er:                er,
-		kubeCache:         kubeCache,
-		edgelbManager:     edgelbManager,
+		kubeClient:    kubeClient,
+		er:            er,
+		kubeCache:     kubeCache,
+		edgelbManager: edgelbManager,
+		logger:        log.WithField("controller", ingressControllerName),
 	}
 	// Make the controller wait for the caches to sync.
-	c.hasSyncedFuncs = []cache.InformerSynced{
+	hasSyncedFuncs := []cache.InformerSynced{
 		ingressInformer.Informer().HasSynced,
 		kubeCache.HasSynced,
 	}
 	// Make processQueueItem the handler for items popped out of the work queue.
-	c.syncHandler = c.processQueueItem
+	c.base = newGenericController(ingressControllerName, ingressControllerThreadiness, hasSyncedFuncs, c.processQueueItem, c.logger)
 
+	c.initialize(ingressInformer, serviceInformer)
+
+	return c
+}
+
+func (c *IngressController) initialize(ingressInformer extsv1beta1informers.IngressInformer, serviceInformer corev1informers.ServiceInformer) {
 	// Setup an event handler to inform us when Ingress resources change.
 	// An Ingress resource is enqueued in the following scenarios:
 	// * It was listed ("ADDED") and has the required "kubernetes.io/ingress.class" annotation set to "edgelb".
@@ -75,7 +85,7 @@ func NewIngressController(kubeClient kubernetes.Interface, er record.EventRecord
 			if !kubernetesutil.IsEdgeLBIngress(ingress) {
 				return
 			}
-			c.enqueue(ingress)
+			c.base.enqueue(ingress)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			oldIngress := oldObj.(*extsv1beta1.Ingress)
@@ -83,14 +93,14 @@ func NewIngressController(kubeClient kubernetes.Interface, er record.EventRecord
 			if !kubernetesutil.IsEdgeLBIngress(oldIngress) && !kubernetesutil.IsEdgeLBIngress(newIngress) {
 				return
 			}
-			c.enqueue(newIngress)
+			c.base.enqueue(newIngress)
 		},
 		DeleteFunc: func(obj interface{}) {
 			ingress := obj.(*extsv1beta1.Ingress)
 			if !kubernetesutil.IsEdgeLBIngress(ingress) {
 				return
 			}
-			c.enqueueTombstone(ingress)
+			c.base.enqueueTombstone(ingress)
 		},
 	})
 	// Setup an event handler to inform us when Service resources change.
@@ -106,9 +116,10 @@ func NewIngressController(kubeClient kubernetes.Interface, er record.EventRecord
 			c.enqueueIngressesReferencingService(obj.(*corev1.Service))
 		},
 	})
+}
 
-	// Return the instance created above.
-	return c
+func (c *IngressController) Run(ctx context.Context) error {
+	return c.base.Run(ctx)
 }
 
 // processQueueItem attempts to reconcile the state of the Ingress resource pointed at by the specified key.
@@ -186,7 +197,7 @@ func (c *IngressController) enqueueIngressesReferencingService(service *corev1.S
 		obj := ingress
 		kubernetesutil.ForEachIngresBackend(obj, func(_, _ *string, backend extsv1beta1.IngressBackend) {
 			if backend.ServiceName == service.Name {
-				c.enqueue(obj)
+				c.base.enqueue(obj)
 			}
 		})
 	}

@@ -1,10 +1,12 @@
 package controllers
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,10 +31,9 @@ const (
 	serviceControllerThreadiness = 1
 )
 
-// ServiceController is the controller for Service resources.
 type ServiceController struct {
 	// ServiceController is based-off of a generic controller.
-	*genericController
+	base controller
 	// kubeClient is a client to the Kubernetes core APIs.
 	kubeClient kubernetes.Interface
 	// er is an EventRecorder using which we can emit events associated with the Service resource being translated.
@@ -41,25 +42,27 @@ type ServiceController struct {
 	kubeCache dklbcache.KubernetesResourceCache
 	// edgelbManager is the instance of the EdgeLB manager to use for materializing EdgeLB pools for Service resources.
 	edgelbManager manager.EdgeLBManager
+	// logger is the logger that the controller will use.
+	logger log.FieldLogger
 }
 
 // NewServiceController creates a new instance of the EdgeLB service controller.
 func NewServiceController(kubeClient kubernetes.Interface, er record.EventRecorder, serviceInformer corev1informers.ServiceInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *ServiceController {
 	// Create a new instance of the service controller with the specified name and threadiness.
 	c := &ServiceController{
-		genericController: newGenericController(serviceControllerName, serviceControllerThreadiness),
-		kubeClient:        kubeClient,
-		er:                er,
-		kubeCache:         kubeCache,
-		edgelbManager:     edgelbManager,
+		kubeClient:    kubeClient,
+		er:            er,
+		kubeCache:     kubeCache,
+		edgelbManager: edgelbManager,
+		logger:        log.WithField("controller", serviceControllerName),
 	}
-	// Make the controller wait for the caches to sync.
-	c.hasSyncedFuncs = []cache.InformerSynced{
+	// Create a new instance of the service controller with the specified name and threadiness.
+	hasSyncedFuncs := []cache.InformerSynced{
 		serviceInformer.Informer().HasSynced,
 		kubeCache.HasSynced,
 	}
 	// Make processQueueItem the handler for items popped out of the work queue.
-	c.syncHandler = c.processQueueItem
+	c.base = newGenericController(serviceControllerName, serviceControllerThreadiness, hasSyncedFuncs, c.processQueueItem, c.logger)
 
 	// Setup an event handler to inform us when Service resources change.
 	// A Service resource is enqueued in the following scenarios:
@@ -73,7 +76,7 @@ func NewServiceController(kubeClient kubernetes.Interface, er record.EventRecord
 			if svc.Spec.Type != corev1.ServiceTypeLoadBalancer {
 				return
 			}
-			c.enqueue(svc)
+			c.base.enqueue(svc)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			oldSvc := oldObj.(*corev1.Service)
@@ -81,19 +84,23 @@ func NewServiceController(kubeClient kubernetes.Interface, er record.EventRecord
 			if oldSvc.Spec.Type != corev1.ServiceTypeLoadBalancer && newSvc.Spec.Type != corev1.ServiceTypeLoadBalancer {
 				return
 			}
-			c.enqueue(newSvc)
+			c.base.enqueue(newSvc)
 		},
 		DeleteFunc: func(obj interface{}) {
 			svc := obj.(*corev1.Service)
 			if svc.Spec.Type != corev1.ServiceTypeLoadBalancer {
 				return
 			}
-			c.enqueueTombstone(svc)
+			c.base.enqueueTombstone(svc)
 		},
 	})
 
 	// Return the instance created above.
 	return c
+}
+
+func (c *ServiceController) Run(ctx context.Context) error {
+	return c.base.Run(ctx)
 }
 
 // processQueueItem attempts to reconcile the state of the Service resource pointed at by the specified key.
