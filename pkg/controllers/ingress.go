@@ -158,6 +158,11 @@ func (c *IngressController) processQueueItem(workItem WorkItem) error {
 		ingress.ObjectMeta.DeletionTimestamp = &deletionTimestamp
 	}
 
+	// check if ingress is annotated correctly
+	if !kubernetesutil.IsEdgeLBIngress(ingress) {
+		return nil
+	}
+
 	// Return immediately if translation is paused for the current Ingress resource.
 	if ingress.Annotations[constants.DklbPaused] == strconv.FormatBool(true) {
 		c.er.Eventf(ingress, corev1.EventTypeWarning, constants.ReasonTranslationPaused, "translation is paused for the resource")
@@ -195,10 +200,13 @@ func (c *IngressController) enqueueIngressesReferencingService(service *corev1.S
 	// Iterate over all Ingress resources in the same namespace, checking whether each one references this Service resource and enqueueing it if it does.
 	for _, ingress := range ingresses {
 		obj := ingress
-		kubernetesutil.ForEachIngresBackend(obj, func(_, _ *string, backend extsv1beta1.IngressBackend) {
-			if backend.ServiceName == service.Name {
-				c.base.enqueue(obj)
-			}
-		})
+		// check if ingress is annotated correctly
+		if kubernetesutil.IsEdgeLBIngress(obj) {
+			kubernetesutil.ForEachIngresBackend(obj, func(_, _ *string, backend extsv1beta1.IngressBackend) {
+				if backend.ServiceName == service.Name {
+					c.base.enqueue(obj)
+				}
+			})
+		}
 	}
 }
