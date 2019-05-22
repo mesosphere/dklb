@@ -41,20 +41,17 @@ type ServiceController struct {
 	kubeCache dklbcache.KubernetesResourceCache
 	// edgelbManager is the instance of the EdgeLB manager to use for materializing EdgeLB pools for Service resources.
 	edgelbManager manager.EdgeLBManager
-	// kubernetesClusterName is the name of the mesos framework that corresponds to the current kubernetes cluster.
-	kubernetesClusterName string
 }
 
 // NewServiceController creates a new instance of the EdgeLB service controller.
-func NewServiceController(kubeClient kubernetes.Interface, er record.EventRecorder, serviceInformer corev1informers.ServiceInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager, kubernetesClusterName string) *ServiceController {
+func NewServiceController(kubeClient kubernetes.Interface, er record.EventRecorder, serviceInformer corev1informers.ServiceInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *ServiceController {
 	// Create a new instance of the service controller with the specified name and threadiness.
 	c := &ServiceController{
-		genericController:     newGenericController(serviceControllerName, serviceControllerThreadiness),
-		kubeClient:            kubeClient,
-		er:                    er,
-		kubeCache:             kubeCache,
-		edgelbManager:         edgelbManager,
-		kubernetesClusterName: kubernetesClusterName,
+		genericController: newGenericController(serviceControllerName, serviceControllerThreadiness),
+		kubeClient:        kubeClient,
+		er:                er,
+		kubeCache:         kubeCache,
+		edgelbManager:     edgelbManager,
 	}
 	// Make the controller wait for the caches to sync.
 	c.hasSyncedFuncs = []cache.InformerSynced{
@@ -143,7 +140,7 @@ func (c *ServiceController) processQueueItem(workItem WorkItem) error {
 	}
 
 	// Perform translation of the Service resource into an EdgeLB pool.
-	status, err := translator.NewServiceTranslator(service, c.kubeCache, c.edgelbManager, c.kubernetesClusterName).Translate()
+	status, err := translator.NewServiceTranslator(service, c.kubeCache, c.edgelbManager).Translate()
 	if err != nil {
 		c.er.Eventf(service, corev1.EventTypeWarning, constants.ReasonTranslationError, "failed to translate service: %v", err)
 		c.logger.Errorf("failed to translate service %q: %v", workItem.Key, err)

@@ -33,19 +33,16 @@ type ServiceTranslator struct {
 	logger *log.Entry
 	// poolGroup is the DC/OS service group in which to create EdgeLB pools.
 	poolGroup string
-	// kubernetesClusterName is the name of the mesos framework that corresponds to the current kubernetes cluster.
-	kubernetesClusterName string
 }
 
 // NewServiceTranslator returns a service translator that can be used to translate the specified Service resource into an EdgeLB pool.
-func NewServiceTranslator(service *corev1.Service, kubeCache dklbcache.KubernetesResourceCache, manager manager.EdgeLBManager, kubernetesClusterName string) *ServiceTranslator {
+func NewServiceTranslator(service *corev1.Service, kubeCache dklbcache.KubernetesResourceCache, manager manager.EdgeLBManager) *ServiceTranslator {
 	return &ServiceTranslator{
-		service:               service,
-		kubeCache:             kubeCache,
-		manager:               manager,
-		logger:                log.WithField("service", kubernetesutil.Key(service)),
-		poolGroup:             manager.PoolGroup(),
-		kubernetesClusterName: kubernetesClusterName,
+		service:   service,
+		kubeCache: kubeCache,
+		manager:   manager,
+		logger:    log.WithField("service", kubernetesutil.Key(service)),
+		poolGroup: manager.PoolGroup(),
 	}
 }
 
@@ -108,7 +105,7 @@ func (st *ServiceTranslator) createEdgeLBPool() (*corev1.LoadBalancerStatus, err
 		return nil, err
 	}
 	// Compute and return the status of the load-balancer.
-	return computeLoadBalancerStatus(st.manager, pool.Name, st.service, st.kubernetesClusterName), nil
+	return computeLoadBalancerStatus(st.manager, pool.Name, st.service), nil
 }
 
 // updateOrDeleteEdgeLBPool makes a decision on whether the specified EdgeLB pool should be updated/deleted based on the current status of the associated Service resource.
@@ -129,7 +126,7 @@ func (st *ServiceTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool) (*cor
 	// If the pool doesn't need to be updated, we just compute and return an updated "LoadBalancerStatus" object.
 	if !wasChanged {
 		st.logger.Debugf("edgelb pool %q is synced", pool.Name)
-		return computeLoadBalancerStatus(st.manager, pool.Name, st.service, st.kubernetesClusterName), nil
+		return computeLoadBalancerStatus(st.manager, pool.Name, st.service), nil
 	}
 
 	// At this point we know that the pool must be either updated or deleted.
@@ -152,7 +149,7 @@ func (st *ServiceTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool) (*cor
 	if _, err := st.manager.UpdatePool(ctx, pool); err != nil {
 		return nil, err
 	}
-	return computeLoadBalancerStatus(st.manager, pool.Name, st.service, st.kubernetesClusterName), nil
+	return computeLoadBalancerStatus(st.manager, pool.Name, st.service), nil
 }
 
 // createEdgeLBPoolObject creates an EdgeLB pool object that satisfies the current Service resource.
@@ -163,7 +160,7 @@ func (st *ServiceTranslator) createEdgeLBPoolObject() (*models.V2Pool, error) {
 	// Iterate over port definitions and create the corresponding backend and frontend objects.
 	for _, port := range st.service.Spec.Ports {
 		// Compute the backend and frontend for the current service port.
-		backend, frontend := computeBackendForServicePort(st.service, port, st.kubernetesClusterName), computeFrontendForServicePort(st.service, *st.spec, port, st.kubernetesClusterName)
+		backend, frontend := computeBackendForServicePort(st.service, port), computeFrontendForServicePort(st.service, *st.spec, port)
 		// Append the backend to the slice of backends.
 		backends = append(backends, backend)
 		// Append the frontend to the slice of frontends.
@@ -225,8 +222,8 @@ func (st *ServiceTranslator) updateEdgeLBPoolObject(pool *models.V2Pool) (wasCha
 	if !serviceDeleted {
 		for _, port := range st.service.Spec.Ports {
 			desiredBackendFrontends[port.Port] = servicePortBackendFrontend{
-				Backend:  computeBackendForServicePort(st.service, port, st.kubernetesClusterName),
-				Frontend: computeFrontendForServicePort(st.service, *st.spec, port, st.kubernetesClusterName),
+				Backend:  computeBackendForServicePort(st.service, port),
+				Frontend: computeFrontendForServicePort(st.service, *st.spec, port),
 			}
 		}
 	}
@@ -245,7 +242,7 @@ func (st *ServiceTranslator) updateEdgeLBPoolObject(pool *models.V2Pool) (wasCha
 		// Parse the name of the backend in order to determine if the current service owns it.
 		// If the current backend isn't owned by the current service, it is left unchanged.
 		backendMetadata, err := computeServiceOwnedEdgeLBObjectMetadata(backend.Name)
-		if err != nil || !backendMetadata.IsOwnedBy(st.service, st.kubernetesClusterName) {
+		if err != nil || !backendMetadata.IsOwnedBy(st.service) {
 			updatedBackends = append(updatedBackends, backend)
 			report.Report("no changes required for backend %q (not owned by %s)", backend.Name, kubernetesutil.Key(st.service))
 			continue
@@ -292,7 +289,7 @@ func (st *ServiceTranslator) updateEdgeLBPoolObject(pool *models.V2Pool) (wasCha
 		// Parse the name of the frontend in order to determine if the current service owns it.
 		// If the current frontend isn't owned by the current service, it is left unchanged.
 		frontendMetadata, err := computeServiceOwnedEdgeLBObjectMetadata(frontend.Name)
-		if err != nil || !frontendMetadata.IsOwnedBy(st.service, st.kubernetesClusterName) {
+		if err != nil || !frontendMetadata.IsOwnedBy(st.service) {
 			updatedFrontends = append(updatedFrontends, frontend)
 			report.Report("no changes required for frontend %q (not owned by %s)", frontend.Name, kubernetesutil.Key(st.service))
 			continue

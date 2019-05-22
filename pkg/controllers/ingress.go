@@ -43,20 +43,17 @@ type IngressController struct {
 	kubeCache dklbcache.KubernetesResourceCache
 	// edgelbManager is the instance of the EdgeLB manager to use for materializing EdgeLB pools for Ingress resources.
 	edgelbManager manager.EdgeLBManager
-	// kubernetesClusterName is the name of the mesos framework that corresponds to the current kubernetes cluster.
-	kubernetesClusterName string
 }
 
 // NewIngressController creates a new instance of the EdgeLB ingress controller.
-func NewIngressController(kubeClient kubernetes.Interface, er record.EventRecorder, ingressInformer extsv1beta1informers.IngressInformer, serviceInformer corev1informers.ServiceInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager, kubernetesClusterName string) *IngressController {
+func NewIngressController(kubeClient kubernetes.Interface, er record.EventRecorder, ingressInformer extsv1beta1informers.IngressInformer, serviceInformer corev1informers.ServiceInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *IngressController {
 	// Create a new instance of the ingress controller with the specified name and threadiness.
 	c := &IngressController{
-		genericController:     newGenericController(ingressControllerName, ingressControllerThreadiness),
-		kubeClient:            kubeClient,
-		er:                    er,
-		kubeCache:             kubeCache,
-		edgelbManager:         edgelbManager,
-		kubernetesClusterName: kubernetesClusterName,
+		genericController: newGenericController(ingressControllerName, ingressControllerThreadiness),
+		kubeClient:        kubeClient,
+		er:                er,
+		kubeCache:         kubeCache,
+		edgelbManager:     edgelbManager,
 	}
 	// Make the controller wait for the caches to sync.
 	c.hasSyncedFuncs = []cache.InformerSynced{
@@ -158,7 +155,7 @@ func (c *IngressController) processQueueItem(workItem WorkItem) error {
 	}
 
 	// Perform translation of the Ingress resource into an EdgeLB pool.
-	status, err := translator.NewIngressTranslator(ingress, c.kubeCache, c.edgelbManager, c.er, c.kubernetesClusterName).Translate()
+	status, err := translator.NewIngressTranslator(ingress, c.kubeCache, c.edgelbManager, c.er).Translate()
 	if err != nil {
 		c.er.Eventf(ingress, corev1.EventTypeWarning, constants.ReasonTranslationError, "failed to translate ingress: %v", err)
 		c.logger.Errorf("failed to translate ingress %q: %v", workItem.Key, err)

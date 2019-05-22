@@ -17,7 +17,7 @@ import (
 // computeLoadBalancerStatus builds a "LoadBalancerStatus" object representing the status of the EdgeLB pool with the specified name.
 // If we're successful in reading the EdgeLB pool's metadata, the returned object contains all reported DNS names, private IPs and public IPs (in this order).
 // Otherwise, the returned object is nil.
-func computeLoadBalancerStatus(manager manager.EdgeLBManager, poolName string, obj runtime.Object, kubernetesClusterName string) *corev1.LoadBalancerStatus {
+func computeLoadBalancerStatus(manager manager.EdgeLBManager, poolName string, obj runtime.Object) *corev1.LoadBalancerStatus {
 	// Retrieve the pool's metadata from the EdgeLB API server.
 	ctx, fn := context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
 	defer fn()
@@ -47,10 +47,10 @@ func computeLoadBalancerStatus(manager manager.EdgeLBManager, poolName string, o
 				switch t := obj.(type) {
 				case *corev1.Service:
 					m, err := computeServiceOwnedEdgeLBObjectMetadata(*listener.LinkFrontend)
-					isOwnedByObj = err == nil && m.IsOwnedBy(t, kubernetesClusterName)
+					isOwnedByObj = err == nil && m.IsOwnedBy(t)
 				case *extsv1beta1.Ingress:
 					m, err := computeIngressOwnedEdgeLBObjectMetadata(*listener.LinkFrontend)
-					isOwnedByObj = err == nil && m.IsOwnedBy(t, kubernetesClusterName)
+					isOwnedByObj = err == nil && m.IsOwnedBy(t)
 				default:
 					return nil
 				}
@@ -70,10 +70,10 @@ func computeLoadBalancerStatus(manager manager.EdgeLBManager, poolName string, o
 		switch t := obj.(type) {
 		case *corev1.Service:
 			m, err := computeServiceOwnedEdgeLBObjectMetadata(frontend.Name)
-			isOwnedByObj = err == nil && m.IsOwnedBy(t, kubernetesClusterName)
+			isOwnedByObj = err == nil && m.IsOwnedBy(t)
 		case *extsv1beta1.Ingress:
 			m, err := computeIngressOwnedEdgeLBObjectMetadata(frontend.Name)
-			isOwnedByObj = err == nil && m.IsOwnedBy(t, kubernetesClusterName)
+			isOwnedByObj = err == nil && m.IsOwnedBy(t)
 		default:
 			return nil
 		}

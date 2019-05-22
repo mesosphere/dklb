@@ -11,6 +11,7 @@ import (
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"github.com/mesosphere/dklb/pkg/cluster"
 	"github.com/mesosphere/dklb/pkg/constants"
 	translatorapi "github.com/mesosphere/dklb/pkg/translator/api"
 	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
@@ -55,15 +56,15 @@ type prioritizedMatchingRule struct {
 }
 
 // IsOwnedBy indicates whether the current EdgeLB object is owned by the specified Ingress resource.
-func (m *ingressOwnedEdgeLBObjectMetadata) IsOwnedBy(ingress *extsv1beta1.Ingress, kubernetesClusterName string) bool {
-	return m.ClusterName == kubernetesClusterName && m.Namespace == ingress.Namespace && m.Name == ingress.Name
+func (m *ingressOwnedEdgeLBObjectMetadata) IsOwnedBy(ingress *extsv1beta1.Ingress) bool {
+	return m.ClusterName == cluster.Name && m.Namespace == ingress.Namespace && m.Name == ingress.Name
 }
 
 // computeEdgeLBBackendForIngressBackend computes the EdgeLB backend that corresponds to the specified Ingress backend.
-func computeEdgeLBBackendForIngressBackend(ingress *extsv1beta1.Ingress, backend extsv1beta1.IngressBackend, nodePort int32, kubernetesClusterName string) *models.V2Backend {
+func computeEdgeLBBackendForIngressBackend(ingress *extsv1beta1.Ingress, backend extsv1beta1.IngressBackend, nodePort int32) *models.V2Backend {
 	return &models.V2Backend{
 		Balance:  constants.EdgeLBBackendBalanceLeastConnections,
-		Name:     computeEdgeLBBackendNameForIngressBackend(ingress, backend, kubernetesClusterName),
+		Name:     computeEdgeLBBackendNameForIngressBackend(ingress, backend),
 		Protocol: models.V2ProtocolHTTP,
 		// At this point we would need to know if the target server is TLS-enabled or not so that we could configure HAProxy accordingly.
 		// This is so because when the target server is TLS-enabled, HAProxy **MUST** be configured with the "ssl verify none" option (so that it actually communicates over TLS **AND** skips certificate verification).
@@ -95,7 +96,7 @@ func computeEdgeLBBackendForIngressBackend(ingress *extsv1beta1.Ingress, backend
 					// We don't want to use any Marathon service as the backend.
 				},
 				Mesos: &models.V2ServiceMesos{
-					FrameworkName:   kubernetesClusterName,
+					FrameworkName:   cluster.Name,
 					TaskNamePattern: constants.KubeNodeTaskPattern,
 				},
 			},
@@ -112,7 +113,7 @@ func computeEdgeLBBackendForIngressBackend(ingress *extsv1beta1.Ingress, backend
 					// We don't want to use any Marathon service as the backend.
 				},
 				Mesos: &models.V2ServiceMesos{
-					FrameworkName:   kubernetesClusterName,
+					FrameworkName:   cluster.Name,
 					TaskNamePattern: constants.KubeNodeTaskPattern,
 				},
 			},
@@ -140,16 +141,16 @@ func computeEdgeLBBackendForIngressBackend(ingress *extsv1beta1.Ingress, backend
 }
 
 // computeEdgeLBBackendNameForIngressBackend computes the name of the EdgeLB backend that corresponds to the specified Ingress backend.
-func computeEdgeLBBackendNameForIngressBackend(ingress *extsv1beta1.Ingress, backend extsv1beta1.IngressBackend, kubernetesClusterName string) string {
-	return fmt.Sprintf(edgeLBIngressBackendNameFormatString, dklbstrings.ReplaceForwardSlashesWithDots(kubernetesClusterName), ingress.Namespace, ingress.Name, backend.ServiceName, backend.ServicePort.String())
+func computeEdgeLBBackendNameForIngressBackend(ingress *extsv1beta1.Ingress, backend extsv1beta1.IngressBackend) string {
+	return fmt.Sprintf(edgeLBIngressBackendNameFormatString, dklbstrings.ReplaceForwardSlashesWithDots(cluster.Name), ingress.Namespace, ingress.Name, backend.ServiceName, backend.ServicePort.String())
 }
 
 // computeEdgeLBFrontendForIngress computes the EdgeLB frontend that corresponds to the specified Ingress resource.
-func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translatorapi.IngressEdgeLBPoolSpec, kubernetesClusterName string) *models.V2Frontend {
+func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translatorapi.IngressEdgeLBPoolSpec) *models.V2Frontend {
 	// Compute the base frontend object.
 	frontend := &models.V2Frontend{
 		BindAddress: constants.EdgeLBFrontendBindAddress,
-		Name:        computeEdgeLBFrontendNameForIngress(ingress, kubernetesClusterName),
+		Name:        computeEdgeLBFrontendNameForIngress(ingress),
 		// TODO (@bcustodio) Split into HTTP/HTTPS port when TLS support is introduced.
 		Protocol:    models.V2ProtocolHTTP,
 		BindPort:    spec.Frontends.HTTP.Port,
@@ -163,11 +164,11 @@ func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translat
 	kubernetesutil.ForEachIngresBackend(ingress, func(host, path *string, backend extsv1beta1.IngressBackend) {
 		switch {
 		case host == nil && path == nil:
-			frontend.LinkBackend.DefaultBackend = computeEdgeLBBackendNameForIngressBackend(ingress, backend, kubernetesClusterName)
+			frontend.LinkBackend.DefaultBackend = computeEdgeLBBackendNameForIngressBackend(ingress, backend)
 		default:
 			rule := prioritizedMatchingRule{
 				item: &models.V2FrontendLinkBackendMapItems0{
-					Backend: computeEdgeLBBackendNameForIngressBackend(ingress, backend, kubernetesClusterName),
+					Backend: computeEdgeLBBackendNameForIngressBackend(ingress, backend),
 				},
 				priority: 0,
 			}
@@ -218,8 +219,8 @@ func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translat
 }
 
 // computeEdgeLBFrontendNameForIngress computes the name of the EdgeLB frontend that corresponds to the specified Ingress resource.
-func computeEdgeLBFrontendNameForIngress(ingress *extsv1beta1.Ingress, kubernetesClusterName string) string {
-	return fmt.Sprintf(edgeLBIngressFrontendNameFormatString, dklbstrings.ReplaceForwardSlashesWithDots(kubernetesClusterName), ingress.Namespace, ingress.Name)
+func computeEdgeLBFrontendNameForIngress(ingress *extsv1beta1.Ingress) string {
+	return fmt.Sprintf(edgeLBIngressFrontendNameFormatString, dklbstrings.ReplaceForwardSlashesWithDots(cluster.Name), ingress.Namespace, ingress.Name)
 }
 
 // computeEdgeLBBackendMiscStr computes the value to be used as "miscStr" on a given backend given the specified options.
