@@ -22,14 +22,17 @@ func (f *Framework) WithTemporaryNamespace(fn func(namespace *corev1.Namespace))
 	Expect(err).NotTo(HaveOccurred(), "failed to create temporary namespace")
 	// Output the name of the namespace.
 	log.Debugf("created namespace %q", ns.Name)
+	// Make sure to clean up regardless of test outcome.
+	defer func() {
+		// Delete the Kubernetes namespace and wait for it to disappear.
+		err = f.KubeClient.CoreV1().Namespaces().Delete(ns.Name, metav1.NewDeleteOptions(0))
+		Expect(err).NotTo(HaveOccurred(), "failed to delete namespace %q", ns.Name)
+		err = retry.WithTimeout(DefaultRetryTimeout, DefaultRetryInterval, func() (bool, error) {
+			_, err := f.KubeClient.CoreV1().Namespaces().Get(ns.Name, metav1.GetOptions{})
+			return kubeerrors.IsNotFound(err), nil
+		})
+		Expect(err).NotTo(HaveOccurred(), "timed out while waiting for namespace %q to be deleted", ns.Name)
+	}()
 	// Call the provided function with the namespace.
 	fn(ns)
-	// Delete the Kubernetes namespace and wait for it to disappear.
-	err = f.KubeClient.CoreV1().Namespaces().Delete(ns.Name, metav1.NewDeleteOptions(0))
-	Expect(err).NotTo(HaveOccurred(), "failed to delete namespace %q", ns.Name)
-	err = retry.WithTimeout(DefaultRetryTimeout, DefaultRetryInterval, func() (bool, error) {
-		_, err := f.KubeClient.CoreV1().Namespaces().Get(ns.Name, metav1.GetOptions{})
-		return kubeerrors.IsNotFound(err), nil
-	})
-	Expect(err).NotTo(HaveOccurred(), "timed out while waiting for namespace %q to be deleted", ns.Name)
 }

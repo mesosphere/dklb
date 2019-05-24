@@ -875,6 +875,11 @@ var _ = Describe("Ingress", func() {
 				}
 			})
 			Expect(err).NotTo(HaveOccurred(), "failed to create test ingress")
+			// Manually delete the Ingress resource regardless of test result.
+			defer func() {
+				err = f.KubeClient.ExtensionsV1beta1().Ingresses(ingress.Namespace).Delete(ingress.Name, metav1.NewDeleteOptions(0))
+				Expect(err).NotTo(HaveOccurred(), "failed to delete ingress %q", kubernetes.Key(ingress))
+			}()
 
 			// Wait for EdgeLB to acknowledge the pool's creation.
 			err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
@@ -914,10 +919,6 @@ var _ = Describe("Ingress", func() {
 			Expect(err).NotTo(HaveOccurred(), "failed to perform http request")
 			Expect(status).To(Equal(403), "the response's status code doesn't match the expectation")
 			Expect(body).To(MatchRegexp("anonymous"), "the response's body doesn't match the expectations")
-
-			// Manually delete the Ingress resource.
-			err = f.KubeClient.ExtensionsV1beta1().Ingresses(ingress.Namespace).Delete(ingress.Name, metav1.NewDeleteOptions(0))
-			Expect(err).NotTo(HaveOccurred(), "failed to delete ingress %q", kubernetes.Key(ingress))
 
 			// Undo the change made to the "default/kubernetes" service.
 			svc, err = f.KubeClient.CoreV1().Services(svc.Namespace).Get(svc.Name, metav1.GetOptions{})
