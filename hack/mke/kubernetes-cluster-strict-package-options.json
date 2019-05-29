@@ -1,0 +1,9 @@
+{
+  "service": {
+    "service_account": "kubernetes-cluster",
+    "service_account_secret": "kubernetes-cluster/sa"
+  },
+  "kubernetes": {
+    "authorization_mode": "RBAC"
+  }
+}

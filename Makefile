@@ -1,3 +1,5 @@
+SHELL=/bin/bash -o pipefail
+
 # ROOT_DIR holds the absolute path to the root of the dklb repository.
 ROOT_DIR := $(shell git rev-parse --show-toplevel)
 
@@ -9,6 +11,9 @@ export GO111MODULE := on
 
 include make/platform.mk
 include make/ci.mk
+include make/dcos-terraform.mk
+include make/mke.mk
+include make/edgelb.mk
 
 .DEFAULT_GOAL := build
 

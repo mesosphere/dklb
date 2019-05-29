@@ -1,0 +1,71 @@
+{
+  "id": "/__SERVICE_NAME__-kubernetes-haproxy",
+  "acceptedResourceRoles": [
+    "slave_public"
+  ],
+  "backoffFactor": 1.15,
+  "backoffSeconds": 1,
+  "cmd": "./haproxy -f haproxy-1d-timeout-custom-service-name-and-port.conf",
+  "container": {
+    "type": "MESOS",
+    "volumes": []
+  },
+  "env": {
+    "SERVICE_NAME": "__SERVICE_NAME__",
+    "PORT": "__PORT__"
+  },
+  "cpus": 1,
+  "disk": 0,
+  "fetch": [
+    {
+      "uri": "https://storage.googleapis.com/dcos-kubernetes-artifacts/kubernetes-haproxy/haproxy",
+      "extract": true,
+      "executable": true,
+      "cache": false
+    },
+    {
+      "uri": "https://storage.googleapis.com/dcos-kubernetes-artifacts/kubernetes-haproxy/haproxy-1d-timeout-custom-service-name-and-port.conf",
+      "extract": false,
+      "executable": false,
+      "cache": false
+    },
+    {
+      "uri": "https://storage.googleapis.com/dcos-kubernetes-artifacts/kubernetes-haproxy/haproxy.pem",
+      "extract": false,
+      "executable": false,
+      "cache": false
+    }
+  ],
+  "instances": 1,
+  "maxLaunchDelaySeconds": 3600,
+  "mem": 128,
+  "gpus": 0,
+  "networks": [
+    {
+      "mode": "host"
+    }
+  ],
+  "portDefinitions": [
+    {
+      "protocol": "tcp",
+      "port": __PORT__
+    }
+  ],
+  "requirePorts": true,
+  "upgradeStrategy": {
+    "maximumOverCapacity": 1,
+    "minimumHealthCapacity": 1
+  },
+  "killSelection": "YOUNGEST_FIRST",
+  "unreachableStrategy": {
+    "inactiveAfterSeconds": 0,
+    "expungeAfterSeconds": 0
+  },
+  "healthChecks": [],
+  "constraints": [
+    [
+      "hostname",
+      "UNIQUE"
+    ]
+  ]
+}

@@ -2,3 +2,6 @@
 .idea/
 build/
 vendor/
+/*.pem
+.dcos_superuser_password_hash
+/.vscode/

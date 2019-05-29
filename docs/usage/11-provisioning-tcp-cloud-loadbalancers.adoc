@@ -112,7 +112,7 @@ In the snippet above, placeholders must be replaced according to the following t
 |`<subnet-X>` |ID of a subnet which the NLB should join.
 |`<service-port-X>` |The service port that should be exposed via the NLB.
 |`<cluster-name>` |The name of the MKE cluster to which the current `Service` resource belongs, having any forward slashes replaced by dots.
-|`<service-namespace>`  |The name of the Kubernetes namespace in which the current `Service` resorce exists.
+|`<service-namespace>`  |The name of the Kubernetes namespace in which the current `Service` resource exists.
 |`<service-name>`|The name of the current `Service` resource.
 |===
 
