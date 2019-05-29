@@ -56,7 +56,7 @@ skaffold:
 
 # test.e2e runs the end-to-end test suite.
 .PHONY: test.e2e
-test.e2e: AWS_PUBLIC_SUBNET_ID ?=
+test.e2e: AWS_PUBLIC_SUBNET_IDS ?=
 test.e2e: FOCUS ?= .*
 test.e2e: KUBECONFIG ?= $(HOME)/.kube/config
 test.e2e: LOG_LEVEL := info
@@ -67,7 +67,7 @@ test.e2e: gitauth
 		-ginkgo.v \
 		-test.timeout="$(TIMEOUT)" \
 		-test.v \
-		-aws-public-subnet-id="$(AWS_PUBLIC_SUBNET_ID)" \
+		$(foreach subnet,$(AWS_PUBLIC_SUBNET_IDS),-aws-public-subnet-id="$(subnet)") \
 		-edgelb-bearer-token="$$(dcos config show core.dcos_acs_token)" \
 		-edgelb-host="$$(dcos config show core.dcos_url)" \
 		-edgelb-insecure-skip-tls-verify \

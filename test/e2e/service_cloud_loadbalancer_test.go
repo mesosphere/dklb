@@ -27,11 +27,6 @@ import (
 var _ = Describe("Service", func() {
 	Context("of type LoadBalancer and for which a cloud load-balancer has been requested", func() {
 		It("is correctly provisioned by EdgeLB [TCP] [Public] [Cloud]", func() {
-			// Skip the test if no AWS public subnet ID was specified.
-			if awsPublicSubnetID == "" {
-				Skip(fmt.Sprintf("a non-empty value for --%s must be specified", awsPublicSubnetIDFlagName))
-				return
-			}
 
 			f.WithTemporaryNamespace(func(namespace *corev1.Namespace) {
 				var (
@@ -127,11 +122,9 @@ var _ = Describe("Service", func() {
 										LinkFrontend: pointers.NewString(initialPool.Haproxy.Frontends[0].Name),
 									},
 								},
-								Name: pointers.NewString(redisSvcName),
-								Subnets: []string{
-									awsPublicSubnetID,
-								},
-								Type: pointers.NewString("NLB"),
+								Name:    pointers.NewString(redisSvcName),
+								Subnets: awsPublicSubnetIDs,
+								Type:    pointers.NewString("NLB"),
 							},
 						},
 					},
