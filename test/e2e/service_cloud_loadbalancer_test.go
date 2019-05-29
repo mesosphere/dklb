@@ -95,6 +95,11 @@ var _ = Describe("Service", func() {
 					svc.Spec.Selector = redisPod.ObjectMeta.Labels
 				})
 				Expect(err).NotTo(HaveOccurred(), "failed to create test service")
+				defer func() {
+					// Manually delete the Service resource now in order to prevent the EdgeLB pool from being re-created during namespace deletion.
+					err = f.KubeClient.CoreV1().Services(redisSvc.Namespace).Delete(redisSvc.Name, metav1.NewDeleteOptions(0))
+					Expect(err).NotTo(HaveOccurred(), "failed to delete service %q", kubernetes.Key(redisSvc))
+				}()
 
 				// Wait for EdgeLB to acknowledge the pool's creation.
 				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
@@ -104,6 +109,13 @@ var _ = Describe("Service", func() {
 					return err == nil, nil
 				})
 				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
+				defer func() {
+					// Manually delete the initial EdgeLB pool.
+					ctx, fn := context.WithTimeout(context.Background(), framework.DefaultEdgeLBOperationTimeout)
+					defer fn()
+					err = f.EdgeLBManager.DeletePool(ctx, *initialSpec.Name)
+					Expect(err).NotTo(HaveOccurred(), "failed to delete edgelb pool %q", initialSpec.Name)
+				}()
 
 				// Make sure that the initial EdgeLB pool has been deployed to a single, public DC/OS agent, and that the frontend's bind port is the expected one.
 				Expect(initialPool.Role).To(Equal(constants.EdgeLBRolePublic))
@@ -177,16 +189,6 @@ var _ = Describe("Service", func() {
 					return p == "PONG", nil
 				})
 				Expect(err).NotTo(HaveOccurred(), "timed out while attempting to connect to redis at %q", hostname)
-
-				// Manually delete the Service resource now in order to prevent the EdgeLB pool from being re-created during namespace deletion.
-				err = f.KubeClient.CoreV1().Services(redisSvc.Namespace).Delete(redisSvc.Name, metav1.NewDeleteOptions(0))
-				Expect(err).NotTo(HaveOccurred(), "failed to delete service %q", kubernetes.Key(redisSvc))
-
-				// Manually delete the initial EdgeLB pool.
-				ctx, fn := context.WithTimeout(context.Background(), framework.DefaultEdgeLBOperationTimeout)
-				defer fn()
-				err = f.EdgeLBManager.DeletePool(ctx, *initialSpec.Name)
-				Expect(err).NotTo(HaveOccurred(), "failed to delete edgelb pool %q", initialSpec.Name)
 			})
 		})
 	})

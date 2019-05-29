@@ -4,6 +4,7 @@ package e2e_test
 
 import (
 	"flag"
+	"fmt"
 	"testing"
 	"time"
 
