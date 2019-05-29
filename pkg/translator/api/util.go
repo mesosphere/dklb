@@ -21,7 +21,7 @@ const (
 	edgeLBPoolNameComponentSeparator = "--"
 	// edgeLBPoolNameMaxLength is the maximum number of characters that may comprise the name of an EdgeLB pool.
 	edgeLBPoolNameMaxLength = 63
-	// edgeLBPoolNameSufficLength is the length of the random suffix generated for EdgeLB pools.
+	// edgeLBPoolNameSuffixLength is the length of the random suffix generated for EdgeLB pools.
 	edgeLBPoolNameSuffixLength = 5
 )
 

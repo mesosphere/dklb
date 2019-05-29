@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	edgelbmodels "github.com/mesosphere/dcos-edge-lb/models"
+	edgelbmodels "github.com/mesosphere/dcos-edge-lb/pkg/apis/models"
 )
 
 type fakeEdgeLB struct {

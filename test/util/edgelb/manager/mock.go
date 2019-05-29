@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
-	edgelbmodels "github.com/mesosphere/dcos-edge-lb/models"
+	edgelbmodels "github.com/mesosphere/dcos-edge-lb/pkg/apis/models"
 )
 
 // MockEdgeLBManager is a mock implementation of the "EdgeLBManager" interface.

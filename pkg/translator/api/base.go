@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/mesosphere/dcos-edge-lb/models"
+	"github.com/mesosphere/dcos-edge-lb/pkg/apis/models"
 
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/util/pointers"

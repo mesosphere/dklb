@@ -3,7 +3,7 @@ package framework
 import (
 	"context"
 
-	"github.com/mesosphere/dcos-edge-lb/models"
+	"github.com/mesosphere/dcos-edge-lb/pkg/apis/models"
 	. "github.com/onsi/gomega" // nolint:golint
 
 	dklberrors "github.com/mesosphere/dklb/pkg/errors"

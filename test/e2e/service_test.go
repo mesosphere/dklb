@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis"
-	"github.com/mesosphere/dcos-edge-lb/models"
+	"github.com/mesosphere/dcos-edge-lb/pkg/apis/models"
 	"github.com/mongodb/mongo-go-driver/mongo"
 	"github.com/mongodb/mongo-go-driver/mongo/readpref"
 	. "github.com/onsi/ginkgo"

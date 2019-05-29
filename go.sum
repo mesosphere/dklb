@@ -112,6 +112,8 @@ github.com/matttproud/golang_protobuf_extensions v1.0.1 h1:4hp9jkHxhMHkqkrB3Ix0j
 github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
 github.com/mesosphere/dcos-edge-lb v1.2.4-0.20190201000604-f6426051b82e h1:dHu/nTnvJfkEGXo7JwLqNeZIakxG15pSpPoEaUE4Ojs=
 github.com/mesosphere/dcos-edge-lb v1.2.4-0.20190201000604-f6426051b82e/go.mod h1:+p1l5IpJ27w9tnm4MY1yOLHCtu2sh6EoLUPTsGEYrjo=
+github.com/mesosphere/dcos-edge-lb v1.3.2-0.20190524045551-0e0d955a0325 h1:gqlVF0H0zi2Uhply0nowMtiXUmPufOdl4MWSmEUrxkU=
+github.com/mesosphere/dcos-edge-lb v1.3.2-0.20190524045551-0e0d955a0325/go.mod h1:+p1l5IpJ27w9tnm4MY1yOLHCtu2sh6EoLUPTsGEYrjo=
 github.com/mitchellh/go-homedir v1.1.0 h1:lukF9ziXFxDFPkA1vsr5zpc1XuPDn/wFntq5mG+4E0Y=
 github.com/mitchellh/go-homedir v1.1.0/go.mod h1:SfyaCUpYCn1Vlf4IUYiD9fPX4A5wJrkLzIz1N1q0pr0=
 github.com/mitchellh/mapstructure v1.1.2 h1:fmNYVwqnSfB9mZU6OS2O6GsXM+wcskZDuKQzvN1EDeE=

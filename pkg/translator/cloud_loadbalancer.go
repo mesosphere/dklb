@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/mesosphere/dcos-edge-lb/models"
+	"github.com/mesosphere/dcos-edge-lb/pkg/apis/models"
 )
 
 // unmarshalCloudProviderObject unmarshals the provided string as a "V2CloudProvider" object.

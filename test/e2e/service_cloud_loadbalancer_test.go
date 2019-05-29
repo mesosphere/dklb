@@ -8,7 +8,7 @@ import (
 	"fmt"
 
 	"github.com/go-redis/redis"
-	"github.com/mesosphere/dcos-edge-lb/models"
+	"github.com/mesosphere/dcos-edge-lb/pkg/apis/models"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	log "github.com/sirupsen/logrus"
@@ -158,7 +158,7 @@ var _ = Describe("Service", func() {
 				Expect(*finalPool.Haproxy.Frontends[0].BindPort).To(Equal(int32(0)))
 
 				// Connect to Redis using the cloud load-balancer.
-				// Use a larget value for the retry timeout since provisioning of the cloud load-balancer may take a long time.
+				// Use a large value for the retry timeout since provisioning of the cloud load-balancer may take a long time.
 				log.Debugf("waiting for the hostname for %q to be reported", kubernetes.Key(redisSvc))
 				err = retry.WithTimeout(3*framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
 					// Wait for the cloud load-balancer's hostname to be reported.

@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mesosphere/dcos-edge-lb/models"
+	"github.com/mesosphere/dcos-edge-lb/pkg/apis/models"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/mesosphere/dklb/pkg/cluster"

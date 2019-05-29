@@ -7,9 +7,9 @@ import (
 
 	httptransport "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
-	edgelbclient "github.com/mesosphere/dcos-edge-lb/client"
-	edgelboperations "github.com/mesosphere/dcos-edge-lb/client/operations"
-	edgelbmodels "github.com/mesosphere/dcos-edge-lb/models"
+	edgelbclient "github.com/mesosphere/dcos-edge-lb/pkg/apis/client"
+	edgelboperations "github.com/mesosphere/dcos-edge-lb/pkg/apis/client/operations"
+	edgelbmodels "github.com/mesosphere/dcos-edge-lb/pkg/apis/models"
 
 	"github.com/mesosphere/dklb/pkg/errors"
 )
