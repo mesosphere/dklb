@@ -48,7 +48,7 @@ endif
 # skaffold deploys dklb to the Kubernetes repository targeted by the current context using skaffold.
 .PHONY: skaffold
 skaffold: MODE ?= dev
-skaffold:
+skaffold: gitauth dockerauth
 	@if [[ ! "$(MODE)" == "delete" ]]; then \
 		GOOS=linux GOARCH=amd64 $(MAKE) -C $(ROOT_DIR) build; \
 	fi

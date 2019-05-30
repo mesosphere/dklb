@@ -133,7 +133,6 @@ case "${DCOS_TERRAFORM_PLATFORM}" in
   "gcp")
     cat <<EOF >"${SCRIPT_DIR}/terraform.tfvars"
 cluster_name                    = "${DCOS_CLUSTER_NAME}"
-cluster_name_random_string      = ${DCOS_CLUSTER_NAME_RANDOM_STRING}
 dcos_variant                    = "${DCOS_VARIANT}"
 dcos_license_key_file           = "${DCOS_EE_LICENSE_PATH}"
 dcos_version                    = "${DCOS_VERSION}"
@@ -151,14 +150,13 @@ dcos_superuser_username         = "${DCOS_SUPERUSER_USERNAME}"
 dcos_superuser_password_hash    = "${DCOS_SUPERUSER_PASSWORD_HASH:-}"
 ssh_public_key_file             = "${SSH_PUBLIC_KEY_FILE}"
 admin_ips                       = "${DCOS_ADMIN_IPS:-}"
-public_agents_additional_ports  = ["6443"]
+public_agents_additional_ports  = ["6443", "18080", "16379"]
 dcos_config                     = $(echo -e ${DCOS_CONFIG})
 EOF
     ;;
   "aws")
     cat <<EOF >"${SCRIPT_DIR}/terraform.tfvars"
 cluster_name                    = "${DCOS_CLUSTER_NAME}"
-cluster_name_random_string      = ${DCOS_CLUSTER_NAME_RANDOM_STRING}
 dcos_variant                    = "${DCOS_VARIANT}"
 dcos_license_key_file           = "${DCOS_EE_LICENSE_PATH}"
 dcos_version                    = "${DCOS_VERSION}"
@@ -176,7 +174,7 @@ dcos_superuser_username         = "${DCOS_SUPERUSER_USERNAME}"
 dcos_superuser_password_hash    = "${DCOS_SUPERUSER_PASSWORD_HASH:-}"
 ssh_public_key_file             = "${SSH_PUBLIC_KEY_FILE}"
 admin_ips                       = "${DCOS_ADMIN_IPS:-}"
-public_agents_additional_ports  = ["6443"]
+public_agents_additional_ports  = ["6443", "18080", "16379"]
 dcos_config                     = $(echo -e ${DCOS_CONFIG:-\"\"})
 tags                            = {
                                     owner      = "${DCOS_CLUSTER_OWNER}"

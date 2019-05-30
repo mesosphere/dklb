@@ -35,7 +35,11 @@ kubernetes.package.uninstall:
 
 # NOTE: Kubernetes package normally takes approx. 1-2 minutes to be running and healthy.
 package.kubernetes.await-healthy:
-	for i in {1..8}; do dcos kubernetes manager plan status deploy --json 2> /dev/null | tail -n +2 | jq -e '.status == "COMPLETE"' &> /dev/null && break || (echo "Kubernetes installation isn't ready yet. Retrying in 15 seconds..." && sleep 15) ; done
+	@$(call retry,\
+		dcos kubernetes manager plan status deploy --json 2> /dev/null | jq -e '.status == "COMPLETE"' &> /dev/null,\
+		8,\
+		15,\
+		Kubernetes installation isn't ready yet. Retrying in 15 seconds...)
 	@echo "Kubernetes package is healthy!"
 
 .PHONY: dcos.setup-security
@@ -59,15 +63,25 @@ install: kubernetes.package.install package.install edgelb.package.install
 .PHONY: package.install
 package.install: dcos.setup-security.kubernetes-cluster
 ifeq ($(SECURITY), strict)
-	@dcos package install --yes $(KUBERNETES_CLUSTER_PACKAGE_NAME) --options=$(CURDIR)/hack/mke/kubernetes-cluster-strict-package-options.json
+	@$(call retry,\
+		dcos package install --yes $(KUBERNETES_CLUSTER_PACKAGE_NAME) --options=$(CURDIR)/hack/mke/kubernetes-cluster-strict-package-options.json,\
+		8,\
+		15)
 else
-	@dcos package install --yes $(KUBERNETES_CLUSTER_PACKAGE_NAME)
+	@$(call retry,\
+		dcos package install --yes $(KUBERNETES_CLUSTER_PACKAGE_NAME),\
+		8,\
+		15)
 endif
 	$(MAKE) package.kubernetes-cluster.await-healthy
 
 # NOTE: Kubernetes cluster package normally takes up 10. 10 minutes to be running and healthy.
 package.kubernetes-cluster.await-healthy:
-	for i in {1..40}; do dcos kubernetes cluster debug plan status deploy --cluster-name kubernetes-cluster --json 2> /dev/null | tail -n +2 | jq -e '.status == "COMPLETE"' &> /dev/null && break || (echo "Kubernetes cluster installation isn't ready yet. Retrying in 15 seconds..." && sleep 15) ; done
+	@$(call retry,\
+		dcos kubernetes cluster debug plan status deploy --cluster-name kubernetes-cluster --json 2> /dev/null | tail -n +2 | jq -e '.status == "COMPLETE"' &> /dev/null,\
+		40,\
+		15,\
+		Kubernetes cluster installation isn't ready yet. Retrying in 15 seconds...)
 	@echo "Kubernetes cluster package is healthy!"
 
 # haproxy deploys haproxy with a specific config to the public agents in the

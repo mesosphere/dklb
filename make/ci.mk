@@ -23,6 +23,11 @@ docker.ci.run: docker.ci.build
 		-w $(ROOT_DIR) \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		$(if $(GITHUB_TOKEN),-e GITHUB_TOKEN=$(GITHUB_TOKEN)) \
+		$(if $(DOCKER_USERNAME),-e DOCKER_USERNAME=$(DOCKER_USERNAME)) \
+		$(if $(DOCKER_PASSWORD),-e DOCKER_PASSWORD=$(DOCKER_PASSWORD)) \
+		$(if $(DCOS_KUBERNETES_CLUSTER_REGION),-e DCOS_KUBERNETES_CLUSTER_REGION=$(DCOS_KUBERNETES_CLUSTER_REGION)) \
+		$(if $(AWS_REGION),-e AWS_REGION=$(AWS_REGION)) \
+		-e SECURITY=$(SECURITY) \
 		"mesosphere/dklb-ci:$(DOCKER_CI_TAG)" \
 		$(RUN_WHAT)
 

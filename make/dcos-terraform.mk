@@ -104,7 +104,7 @@ NUM_MASTERS ?= 1
 
 # SECURITY is the security mode to use for dcos ee clusters launched by
 # dcos-terraform. valid values are permissive and strict
-SECURITY ?= permissive
+SECURITY ?= strict
 
 # DCOS_TERRAFORM_ENVIRONMENT_VARS_gcp is the necessary environment variables for GCP.
 DCOS_TERRAFORM_ENVIRONMENT_VARS_gcp := -e GOOGLE_APPLICATION_CREDENTIALS=$(GOOGLE_APPLICATION_CREDENTIALS) \
@@ -129,6 +129,9 @@ CUSTOM_DCOS_DOWNLOAD_PATH ?=
 # DCOS_CONFIG holds extra DC/OS configuration.
 DCOS_CONFIG ?=
 
+# DKLB_IAM_POLICY_NAME is the DKLB IAM policy name to use.
+DKLB_IAM_POLICY_NAME ?=
+
 # ----
 # dcos-terraform specific targets
 # ----
@@ -136,7 +139,7 @@ DCOS_CONFIG ?=
 # configures the dcos cli to point at the dc/os cluster
 .PHONY: setup-cli
 setup-cli: SSH_PRIVATE_KEY_FILE=
-setup-cli: dockerauth
+setup-cli: dockerauth dcos-cli
 	$(eval MASTER_IP := $(shell echo "$$($(call run_terraform,output -state $(TERRAFORM_STATE_FILE) cluster-address))"))
 ifeq ($(OPEN),yes)
 	python3 -m venv env && \
@@ -148,15 +151,15 @@ else
 	$(call retry,dcos cluster setup --insecure --username=$(DCOS_USERNAME) --password=$(DCOS_PASSWORD) https://$(MASTER_IP),12,5)
 # Wait until the cluster is really available. Strict mode requires some more time due to
 # asynchronous configuration happening after cluster is created.
-	$(call retry,[ "$$(curl -fsSLk $$(dcos config show core.dcos_url)/system/health/v1/units -H "Authorization: Bearer $$(dcos config show core.dcos_acs_token)" | jq '[.units[] | select(.health != 0)] | length')" == 0 ],12,5)
+	$(call retry,[ "$$(curl -fsSLk $$(dcos config show core.dcos_url)/system/health/v1/units -H "Authorization: Bearer $$(dcos config show core.dcos_acs_token)" | jq '[.units[] | select(.health != 0)] | length')" == 0 ],60,5)
 endif
 
-# launches a dc/os cluster
-launch-dcos: dockerauth $(TERRAFORM_VARS_FILE)
-	$(call run_terraform,plan -state $(TERRAFORM_STATE_FILE) -out $(TERRAFORM_PLAN_FILE))
-	$(call run_terraform,apply -state-out $(TERRAFORM_STATE_FILE) -auto-approve $(TERRAFORM_PLAN_FILE))
+.PHONY: dcos-cli
+dcos-cli:
+	@command -v dcos &> /dev/null || \
+		(curl -fsSLo /usr/local/bin/dcos https://downloads.dcos.io/binaries/cli/linux/x86-64/dcos-1.13/dcos && \
+			chmod +x /usr/local/bin/dcos)
 
-# generates the terraform.tfvars file that is later used by the launch-dcos target.
 # to understand whether we're running inside or outside of teamcity, we check
 # whether THIS_BUILD_NUM is set. when performing a build, teamcity automatically
 # sets it to the number of the current build, so it is a good way to check for
@@ -164,22 +167,85 @@ launch-dcos: dockerauth $(TERRAFORM_VARS_FILE)
 ifeq ($(THIS_BUILD_NUM),)
 # we're most probably running outside teamcity, so default the owner to
 # "mesosphere".
-$(TERRAFORM_VARS_FILE): DCOS_CLUSTER_EXPIRATION ?= 7d
-$(TERRAFORM_VARS_FILE): DCOS_CLUSTER_OWNER ?= $(HOST_USER)
-$(TERRAFORM_VARS_FILE): DCOS_CLUSTER_PREFIX ?= k8s
+DCOS_CLUSTER_EXPIRATION ?= 7d
+DCOS_CLUSTER_OWNER ?= $(HOST_USER)
+DCOS_CLUSTER_PREFIX ?= dklb
 else
 # we're most probably running inside teamcity, so default the owner to
 # "teamcity".
-$(TERRAFORM_VARS_FILE): DCOS_CLUSTER_EXPIRATION ?= 1d
-$(TERRAFORM_VARS_FILE): DCOS_CLUSTER_OWNER ?= teamcity
-$(TERRAFORM_VARS_FILE): DCOS_CLUSTER_PREFIX ?= k8s-ci
+DCOS_CLUSTER_EXPIRATION ?= 1d
+DCOS_CLUSTER_OWNER ?= teamcity
+DCOS_CLUSTER_PREFIX ?= dklb-ci
 endif
+
 ifeq ($(OPEN),yes)
 DCOS_VARIANT=open
 else
 DCOS_VARIANT=ee
 endif
-$(TERRAFORM_VARS_FILE): $(DCOS_SUPERUSER_PASSWORD_HASH_FILE)
+
+define dklb_instance_profile
+{
+	"Version": "2012-10-17",
+	"Statement": [{
+		"Action": [
+			"elasticloadbalancing:DescribeLoadBalancers",
+			"elasticloadbalancing:CreateLoadBalancer",
+			"elasticloadbalancing:DeleteLoadBalancer",
+			"elasticloadbalancing:DescribeListeners",
+			"elasticloadbalancing:CreateListener",
+			"elasticloadbalancing:DeleteListener",
+			"elasticloadbalancing:ModifyListener",
+			"elasticloadbalancing:CreateTargetGroup",
+			"elasticloadbalancing:DeleteTargetGroup",
+			"elasticloadbalancing:DescribeTargetGroups",
+			"elasticloadbalancing:ModifyTargetGroup",
+			"elasticloadbalancing:RegisterTargets",
+			"elasticloadbalancing:DeregisterTargets",
+			"elasticloadbalancing:DescribeTargetHealth",
+			"elasticloadbalancing:DescribeLoadBalancerAttributes",
+			"elasticloadbalancing:ModifyLoadBalancerAttributes",
+			"elasticloadbalancing:DescribeTags",
+			"elasticloadbalancing:AddTags",
+			"elasticloadbalancing:RemoveTags"
+		],
+		"Resource": "*",
+		"Effect": "Allow"
+	}]
+}
+endef
+
+# launches a dc/os cluster
+TMPFILE := $(shell mktemp)
+export dklb_instance_profile
+CLIENT_PUBLIC_IP ?= $(shell curl -fsSL https://checkip.amazonaws.com)
+export AWS_DEFAULT_REGION ?= $(DCOS_KUBERNETES_CLUSTER_REGION)
+launch-dcos: $(TERRAFORM_VARS_FILE)
+	$(call run_terraform,plan -state $(TERRAFORM_STATE_FILE) -out $(TERRAFORM_PLAN_FILE))
+	$(call run_terraform,apply -state-out $(TERRAFORM_STATE_FILE) -auto-approve $(TERRAFORM_PLAN_FILE))
+	@echo "$${dklb_instance_profile}" > $(TMPFILE)
+	@export DKLB_INSTANCE_POLICY_NAME="dcos-$(DCOS_CLUSTER_PREFIX)-$(shell cat .random_cluster_name_suffix)-dklb_instance_policy" && \
+		export DKLB_INSTANCE_POLICY_ARN=$$(aws iam list-policies | jq -r ".Policies[] | select(.PolicyName == \"$${DKLB_INSTANCE_POLICY_NAME}\") | .Arn") && \
+		( \
+			[ -z "$${DKLB_INSTANCE_POLICY_ARN}" ] || \
+			( \
+				aws iam detach-role-policy --role-name dcos-$(DCOS_CLUSTER_PREFIX)-$(shell cat .random_cluster_name_suffix)-instance_role \
+					--policy-arn $${DKLB_INSTANCE_POLICY_ARN} && \
+				aws iam delete-policy --policy-arn $${DKLB_INSTANCE_POLICY_ARN} \
+			) \
+		) && \
+		aws iam attach-role-policy --role-name dcos-$(DCOS_CLUSTER_PREFIX)-$(shell cat .random_cluster_name_suffix)-instance_role \
+			--policy-arn $$(aws iam create-policy --policy-name $${DKLB_INSTANCE_POLICY_NAME} --policy-document file://$(TMPFILE) | jq -r '.Policy.Arn')
+	@$(RM) $(TMPFILE)
+	@aws ec2 authorize-security-group-ingress \
+		--group-id $$(aws ec2 describe-security-groups | jq -r '.SecurityGroups[] | select(.GroupName == "dcos-$(DCOS_CLUSTER_PREFIX)-$(shell cat .random_cluster_name_suffix)-internal-firewall") | .GroupId') \
+		--protocol tcp --port 1025-65535 --cidr $(CLIENT_PUBLIC_IP)/32
+
+.random_cluster_name_suffix:
+	@openssl rand -base64 100 | tr -dc 'a-zA-Z0-9' | fold -w 6 | head -n 1 > $@
+
+# generates the terraform.tfvars file that is later used by the launch-dcos target.
+$(TERRAFORM_VARS_FILE): $(DCOS_SUPERUSER_PASSWORD_HASH_FILE) .random_cluster_name_suffix
 	@DCOS_VARIANT=$(DCOS_VARIANT) \
 	DCOS_VERSION=$(DCOS_VERSION) \
 	DCOS_SECURITY=$(SECURITY) \
@@ -187,7 +253,7 @@ $(TERRAFORM_VARS_FILE): $(DCOS_SUPERUSER_PASSWORD_HASH_FILE)
 	DCOS_VERSION=$(DCOS_VERSION) \
 	DCOS_CLUSTER_EXPIRATION=$(DCOS_CLUSTER_EXPIRATION) \
 	DCOS_CLUSTER_OWNER=$(DCOS_CLUSTER_OWNER) \
-	DCOS_CLUSTER_NAME=$(DCOS_CLUSTER_PREFIX) \
+	DCOS_CLUSTER_NAME=$(DCOS_CLUSTER_PREFIX)-$(shell cat .random_cluster_name_suffix) \
 	DCOS_EE_LICENSE_PATH=$(DCOS_EE_LICENSE_PATH) \
 	DCOS_MACHINE_TYPE=$(DCOS_MACHINE_TYPE) \
 	DCOS_BOOTSTRAP_MACHINE_TYPE=$(DCOS_BOOTSTRAP_MACHINE_TYPE) \
@@ -203,15 +269,28 @@ $(TERRAFORM_VARS_FILE): $(DCOS_SUPERUSER_PASSWORD_HASH_FILE)
 	DCOS_TERRAFORM_PLATFORM=$(DCOS_TERRAFORM_PLATFORM) \
 	CUSTOM_DCOS_DOWNLOAD_PATH=$(CUSTOM_DCOS_DOWNLOAD_PATH) \
 	DCOS_CONFIG="$(DCOS_CONFIG)" \
+	DKLB_IAM_POLICY_NAME="$(DKLB_IAM_POLICY_NAME)" \
 	$(CURDIR)/tools/dcos-terraform/init.sh
 
 $(DCOS_SUPERUSER_PASSWORD_HASH_FILE):
-	@echo '$(DCOS_PASSWORD)' | mkpasswd -m sha-512 -R 656000 -s > $(DCOS_SUPERUSER_PASSWORD_HASH_FILE)
+	@docker run bernadinm/sha512 '$(DCOS_PASSWORD)' > $(DCOS_SUPERUSER_PASSWORD_HASH_FILE)
 
 # destroys the dc/os cluster
-destroy-dcos: dockerauth $(TERRAFORM_VARS_FILE)
+export AWS_DEFAULT_REGION ?= $(DCOS_KUBERNETES_CLUSTER_REGION)
+destroy-dcos: $(TERRAFORM_VARS_FILE)
+	@export DKLB_INSTANCE_POLICY_NAME="dcos-$(DCOS_CLUSTER_PREFIX)-$(shell cat .random_cluster_name_suffix)-dklb_instance_policy" && \
+		export DKLB_INSTANCE_POLICY_ARN=$$(aws iam list-policies | jq -r ".Policies[] | select(.PolicyName == \"$${DKLB_INSTANCE_POLICY_NAME}\") | .Arn") && \
+		( \
+			[ -z "$${DKLB_INSTANCE_POLICY_ARN}" ] || \
+			( \
+				aws iam detach-role-policy --role-name dcos-$(DCOS_CLUSTER_PREFIX)-$(shell cat .random_cluster_name_suffix)-instance_role \
+					--policy-arn $${DKLB_INSTANCE_POLICY_ARN} && \
+				aws iam delete-policy --policy-arn $${DKLB_INSTANCE_POLICY_ARN} \
+			) \
+		)
 	$(call run_terraform,destroy -state $(TERRAFORM_STATE_FILE) -auto-approve)
 	@git clean -fdx $(CURDIR)/tools/dcos-terraform
+	@$(RM) .random_cluster_name_suffix
 
 # destroys the dc/os cluster and wipes build artifacts
 clean-all: destroy-dcos
@@ -233,7 +312,9 @@ docker run --rm -i \
 	-v $(CURDIR):$(CURDIR) \
 	$(if $(wildcard $(GOOGLE_APPLICATION_CREDENTIALS)),-v $(GOOGLE_APPLICATION_CREDENTIALS):$(GOOGLE_APPLICATION_CREDENTIALS)) \
 	$(if $(wildcard $(AWS_SHARED_CREDENTIALS_FILE)),-v $(AWS_SHARED_CREDENTIALS_FILE):$(AWS_SHARED_CREDENTIALS_FILE) -e AWS_SHARED_CREDENTIALS_FILE=$(AWS_SHARED_CREDENTIALS_FILE)) \
-	-e AWS_PROFILE=$(AWS_PROFILE) \
+	$(if $(AWS_PROFILE),-e AWS_PROFILE=$(AWS_PROFILE)) \
+	$(if $(AWS_SECRET_ACCESS_KEY),-e AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY)) \
+	$(if $(AWS_ACCESS_KEY_ID),-e AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID)) \
 	$(DCOS_TERRAFORM_ENVIRONMENT_VARS_$(DCOS_TERRAFORM_PLATFORM)) \
 	$(if $(DCOS_EE_LICENSE_PATH),-v $(DCOS_EE_LICENSE_PATH):$(DCOS_EE_LICENSE_PATH)) \
 	$(if $(SSH_PUBLIC_KEY_FILE),-v $(SSH_PUBLIC_KEY_FILE):$(SSH_PUBLIC_KEY_FILE)) \
@@ -250,6 +331,7 @@ endef
 define retry
 	ATTEMPTS=0; \
 	until $(1); do \
+		[ -n "$(4)" ] && echo "$(4)" || true; \
 		if [ $$(( ATTEMPTS++ )) -eq $(2) ]; then \
 			exit 1; \
 		fi; \

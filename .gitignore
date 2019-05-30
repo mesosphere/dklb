@@ -5,3 +5,4 @@ vendor/
 /*.pem
 .dcos_superuser_password_hash
 /.vscode/
+/.random_cluster_name_suffix
