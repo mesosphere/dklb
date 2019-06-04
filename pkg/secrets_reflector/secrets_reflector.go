@@ -116,9 +116,20 @@ func (s *secretsReflector) reflect(kubeSecret *corev1.Secret, dcosSecret *dcos.S
 			return fmt.Errorf("failed to update DC/OS secret %s: %s", dcosSecretName, err)
 		}
 	} else {
-		_, err := s.dcosSecretsClient.CreateSecret(ctx, defaultSecretStore, dcosSecretName, *dcosSecret)
+		resp, err := s.dcosSecretsClient.CreateSecret(ctx, defaultSecretStore, dcosSecretName, *dcosSecret)
 		if err != nil {
-			return fmt.Errorf("failed to create DC/OS secret %s: %s", dcosSecretName, err)
+			// if we get a 409 Conflict it means dklb was
+			// restarted/redeployed and the secret was
+			// already created previously, so we'll try to
+			// update it
+			if resp != nil && resp.StatusCode == http.StatusConflict {
+				_, err := s.dcosSecretsClient.UpdateSecret(ctx, defaultSecretStore, dcosSecretName, *dcosSecret)
+				if err != nil {
+					return fmt.Errorf("failed to update DC/OS secret %s: %s", dcosSecretName, err)
+				}
+			} else {
+				return fmt.Errorf("failed to create DC/OS secret %s: %s", dcosSecretName, err)
+			}
 		}
 	}
 	// Add the hash annotation to the Kubernetes secret and update it

@@ -3,6 +3,7 @@ package secretsreflector
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/dcos/client-go/dcos"
@@ -191,6 +192,34 @@ func TestSecretReflector_reflect(t *testing.T) {
 			dcosSecretsClient: newFakeDCOSSecretsClient(),
 			kubeClient:        fake.NewSimpleClientset(),
 			kubeSecret:        defaultTestKubeSecret.DeepCopy(),
+		},
+		{
+			description: "should succeed to update a secret already reflected",
+			dcosSecret: &dcos.SecretsV1Secret{
+				Value: "hello\nworld\n",
+			},
+			dcosSecretsClient: &fakeDCOSSecretsClient{
+				OnCreate: func(string) error { return fmt.Errorf("fake error") },
+				OnUpdate: func(string) error { return nil },
+				resp:     &http.Response{StatusCode: http.StatusConflict},
+			},
+			expectedError: nil,
+			kubeClient:    fake.NewSimpleClientset(defaultTestKubeSecret),
+			kubeSecret:    defaultTestKubeSecret.DeepCopy(),
+		},
+		{
+			description: "should fail to update a secret already reflected",
+			dcosSecret: &dcos.SecretsV1Secret{
+				Value: "hello\nworld\n",
+			},
+			dcosSecretsClient: &fakeDCOSSecretsClient{
+				OnCreate: func(string) error { return fmt.Errorf("fake create error") },
+				OnUpdate: func(string) error { return fmt.Errorf("fake update error") },
+				resp:     &http.Response{StatusCode: http.StatusConflict},
+			},
+			expectedError: fmt.Errorf("failed to update DC/OS secret dklb-test/__namespace-1__name-1: fake update error"),
+			kubeClient:    fake.NewSimpleClientset(defaultTestKubeSecret),
+			kubeSecret:    defaultTestKubeSecret.DeepCopy(),
 		},
 	}
 
