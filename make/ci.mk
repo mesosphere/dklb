@@ -43,4 +43,4 @@ endif
 ci.pre-commit: gitauth
 	@cd $$(mktemp -d) && go mod init tmp && go get mvdan.cc/sh/cmd/shfmt
 	@go mod download
-	@pre-commit run --all-files
+	@SKIP=no-commit-to-branch pre-commit run --all-files
