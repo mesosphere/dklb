@@ -38,7 +38,7 @@ func TestSecretReflector_translate(t *testing.T) {
 			description:   "should translate a secret",
 			expectedError: nil,
 			expectedResult: &dcos.SecretsV1Secret{
-				Value: "hello\nworld\n",
+				Value: "aGVsbG8Kd29ybGQK",
 			},
 			secret: defaultTestKubeSecret.DeepCopy(),
 		},

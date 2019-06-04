@@ -3,7 +3,6 @@ package secretsreflector
 import (
 	"context"
 	"crypto/md5"
-	"encoding/base64"
 	"fmt"
 	"net/http"
 	"strings"
@@ -73,27 +72,14 @@ func (s *secretsReflector) Reflect(namespace, name string) error {
 
 // translate Kubernetes secret kubeSecret to structure expected by DC/OS or an error if it failed.
 func (s *secretsReflector) translate(kubeSecret *corev1.Secret) (*dcos.SecretsV1Secret, error) {
-	// Tet the base64 representation of Kubernetes secret tls.crt
-	// and tls.key fields
-	crt64, ok := kubeSecret.Data[corev1.TLSCertKey]
+	crt, ok := kubeSecret.Data[corev1.TLSCertKey]
 	if !ok {
 		err := fmt.Errorf("invalid secret: \"%s/%s\" does not contain %s field", kubeSecret.Namespace, kubeSecret.Name, corev1.TLSCertKey)
 		return nil, err
 	}
-	key64, ok := kubeSecret.Data[corev1.TLSPrivateKeyKey]
+	key, ok := kubeSecret.Data[corev1.TLSPrivateKeyKey]
 	if !ok {
 		err := fmt.Errorf("invalid secret: \"%s/%s\" does not contain %s field", kubeSecret.Namespace, kubeSecret.Name, corev1.TLSPrivateKeyKey)
-		return nil, err
-	}
-	// Base64 decode tls.crt and tls.key fields
-	crt, err := base64.StdEncoding.DecodeString(string(crt64))
-	if err != nil {
-		err = fmt.Errorf("invalid secret: error decoding \"%s/%s\"'s %s field: %v", kubeSecret.Namespace, kubeSecret.Name, corev1.TLSCertKey, err)
-		return nil, err
-	}
-	key, err := base64.StdEncoding.DecodeString(string(key64))
-	if err != nil {
-		err = fmt.Errorf("invalid secret: error decoding \"%s/%s\"'s %s field: %v", kubeSecret.Namespace, kubeSecret.Name, corev1.TLSPrivateKeyKey, err)
 		return nil, err
 	}
 	// Concatenate certificate and private key and put the result
