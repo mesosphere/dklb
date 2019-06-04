@@ -69,6 +69,16 @@ rules:
   - create
   - get
   - update
+# Allow for listing/watching/getting Secrets resources.
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - update
+  - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
