@@ -13,7 +13,6 @@ import (
 
 	dklbcache "github.com/mesosphere/dklb/pkg/cache"
 	"github.com/mesosphere/dklb/pkg/constants"
-	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	cachetestutil "github.com/mesosphere/dklb/test/util/cache"
 )
 
@@ -76,7 +75,6 @@ func TestIngressController_enqueueIngressesReferecingService(t *testing.T) {
 		t.Logf("test case: %s", test.description)
 
 		eventRecorder := record.NewFakeRecorder(10)
-		fakeEdgeLB := manager.NewFakeEdgeLBManager()
 		sharedInformerFactory := cachetestutil.NewFakeSharedInformerFactory(test.ingress)
 		ingressInformer := sharedInformerFactory.Extensions().V1beta1().Ingresses()
 		serviceInformer := sharedInformerFactory.Core().V1().Services()
@@ -84,10 +82,9 @@ func TestIngressController_enqueueIngressesReferecingService(t *testing.T) {
 		kubeClient := fake.NewSimpleClientset(test.service, test.ingress)
 
 		ic := &IngressController{
-			kubeClient:    kubeClient,
-			er:            eventRecorder,
-			kubeCache:     kubeCache,
-			edgelbManager: fakeEdgeLB,
+			kubeClient: kubeClient,
+			er:         eventRecorder,
+			kubeCache:  kubeCache,
 		}
 
 		fake := newFakeGenericController()

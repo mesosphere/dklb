@@ -10,4 +10,6 @@ const (
 	ReasonTranslationError = "TranslationError"
 	// ReasonTranslationPaused is the reason used in Kubernetes events emitted while translation for a given Service/Ingress resource is paused.
 	ReasonTranslationPaused = "TranslationPaused"
+	// ReasonSecretReflectionError is the reason used in Kubernetes events emitted when an error occurs.
+	ReasonSecretReflectionError = "SecretReflectionError"
 )

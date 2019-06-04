@@ -15,6 +15,7 @@ import (
 
 	dklbcache "github.com/mesosphere/dklb/pkg/cache"
 	"github.com/mesosphere/dklb/pkg/constants"
+	dklbstrings "github.com/mesosphere/dklb/pkg/util/strings"
 )
 
 const (
@@ -40,16 +41,18 @@ type secretsReflector struct {
 	kubeClient            kubernetes.Interface
 	kubernetesClusterName string
 	logger                log.FieldLogger
+	secretsPath           string
 }
 
 // New returns an instance of SecretsReflector.
-func New(kubernetesClusterName string, dcosSecretsClient DCOSSecretsClient, kubeCache dklbcache.KubernetesResourceCache, kubeClient kubernetes.Interface) SecretsReflector {
+func New(kubernetesClusterName string, dcosSecretsClient DCOSSecretsClient, secretsPath string, kubeCache dklbcache.KubernetesResourceCache, kubeClient kubernetes.Interface) SecretsReflector {
 	return &secretsReflector{
 		dcosSecretsClient:     dcosSecretsClient,
 		kubeCache:             kubeCache,
 		kubeClient:            kubeClient,
 		kubernetesClusterName: kubernetesClusterName,
 		logger:                log.WithField("component", "secrets_reflector"),
+		secretsPath:           secretsPath,
 	}
 }
 
@@ -106,7 +109,7 @@ func (s *secretsReflector) reflect(kubeSecret *corev1.Secret, dcosSecret *dcos.S
 		return nil
 	}
 	// Generate the DC/OS secret name
-	dcosSecretName := fmt.Sprintf("%s__%s__%s", s.kubernetesClusterName, kubeSecret.Namespace, kubeSecret.Name)
+	dcosSecretName := s.computeDCOSSecretName(kubeSecret)
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 	// Check if we need to update or create the DC/OS secret
@@ -142,4 +145,8 @@ func (s *secretsReflector) reflect(kubeSecret *corev1.Secret, dcosSecret *dcos.S
 		return fmt.Errorf("failed to update Kubernetes secret \"%s/%s\": %s", kubeSecret.Namespace, kubeSecret.Name, err)
 	}
 	return nil
+}
+
+func (s *secretsReflector) computeDCOSSecretName(kubeSecret *corev1.Secret) string {
+	return fmt.Sprintf("%s/%s__%s__%s", s.secretsPath, dklbstrings.ReplaceForwardSlashesWithDots(s.kubernetesClusterName), kubeSecret.Namespace, kubeSecret.Name)
 }

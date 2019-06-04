@@ -3,12 +3,15 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"flag"
+	"fmt"
 	"math/rand"
 	"os"
 	"sync"
 	"time"
 
+	"github.com/dcos/client-go/dcos"
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	kubeinformers "k8s.io/client-go/informers"
@@ -30,6 +33,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	"github.com/mesosphere/dklb/pkg/features"
 	_ "github.com/mesosphere/dklb/pkg/metrics"
+	secretsreflector "github.com/mesosphere/dklb/pkg/secrets_reflector"
 	"github.com/mesosphere/dklb/pkg/signals"
 	translatorapi "github.com/mesosphere/dklb/pkg/translator/api"
 	"github.com/mesosphere/dklb/pkg/version"
@@ -166,6 +170,25 @@ func main() {
 		log.Fatalf("failed to build kubernetes client: %v", err)
 	}
 
+	// Create a shared informer factory for the base API types.
+	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, resyncPeriod)
+	// Create a cache for Kubernetes resources based on the shared informer factory.
+	kubeCache := dklbcache.NewInformerBackedResourceCache(kubeInformerFactory)
+
+	// Get the contents of the service account secret
+	serviceAccountSecret := []byte(os.Getenv("SERVICE_ACCOUNT_SECRET"))
+	// Parse secret contents into a service account login object
+	var saConfig dcos.ServiceAccountOptions
+	err = json.Unmarshal(serviceAccountSecret, &saConfig)
+	if err != nil {
+		log.Fatalf("invalid DC/OS service account secret: %v", err)
+	}
+	// Login with DC/OS
+	dcosClient, err := dcosLogin(saConfig)
+	if err != nil {
+		log.Fatalf("failed to built DC/OS client: %v", err)
+	}
+
 	// Launch the default backend.
 	srvWaitGroup.Add(1)
 	go func() {
@@ -245,7 +268,7 @@ func main() {
 					<-stopCh
 					runCancel()
 				}()
-				run(runCtx, kubeClient, er, edgelbManager)
+				run(runCtx, kubeClient, er, edgelbManager, kubeInformerFactory, kubeCache, dcosClient, saConfig)
 			},
 			OnStoppedLeading: func() {
 				// We've stopped leading, so we should exit immediately.
@@ -260,6 +283,7 @@ func main() {
 }
 
 // run starts the controllers and blocks until they stop.
+func run(ctx context.Context, kubeClient kubernetes.Interface, er record.EventRecorder, edgelbManager manager.EdgeLBManager, kubeInformerFactory kubeinformers.SharedInformerFactory, kubeCache dklbcache.KubernetesResourceCache, dcosClient *dcos.APIClient, saConfig dcos.ServiceAccountOptions) {
 	ingressInformer := kubeInformerFactory.Extensions().V1beta1().Ingresses()
 	serviceInformer := kubeInformerFactory.Core().V1().Services()
 	// we need to setup the secrets informer so that the kubeCache
@@ -269,9 +293,11 @@ func main() {
 	secretsReflector := secretsreflector.New(cluster.Name, dcosClient.Secrets, saConfig.UID, kubeCache, kubeClient)
 
 	// Create an instance of the ingress controller.
-	ingressController := controllers.NewIngressController(kubeClient, er, kubeInformerFactory.Extensions().V1beta1().Ingresses(), kubeInformerFactory.Core().V1().Services(), kubeCache, edgelbManager)
+	ingressController := controllers.NewIngressController(kubeClient, er, ingressInformer, serviceInformer, kubeCache, edgelbManager, secretsReflector)
+
 	// Create an instance of the service controller.
 	serviceController := controllers.NewServiceController(kubeClient, er, serviceInformer, kubeCache, edgelbManager)
+
 	// Start the shared informer factory.
 	go kubeInformerFactory.Start(ctx.Done())
 
@@ -282,6 +308,7 @@ func main() {
 		return
 	}
 	log.Debug("informer caches are synced")
+
 	// Start the ingress and service controllers.
 	var wg sync.WaitGroup
 	for _, c := range []controllers.Controller{ingressController, serviceController} {
@@ -303,4 +330,33 @@ func main() {
 	// There is a goroutine in the background trying to renew the leader election lock.
 	// Hence, we must manually exit now that we know controllers have been shutdown properly.
 	os.Exit(0)
+}
+
+// dcosLogin using a service account secret
+func dcosLogin(saConfig dcos.ServiceAccountOptions) (*dcos.APIClient, error) {
+	// Empty config, without auth token
+	config := dcos.NewConfig(nil)
+	config.SetURL("https://leader.mesos")
+
+	// Empty client
+	client, err := dcos.NewClientWithConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("error creating DC/OS client: %v", err)
+	}
+
+	// Login now
+	authToken, _, err := client.LoginWithServiceAccount(context.TODO(), saConfig)
+	if err != nil {
+		return nil, fmt.Errorf("login error: %v", err)
+	}
+
+	// we have an auth token so now we can create the client
+	// TODO ideally this should be setup by dcos/client-go lib
+	config.SetACSToken(authToken.Token)
+	authClient, err := dcos.NewClientWithConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("error configuring authenticated client: %v", err)
+	}
+
+	return authClient, nil
 }

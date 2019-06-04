@@ -22,6 +22,7 @@ import (
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	"github.com/mesosphere/dklb/pkg/metrics"
+	secretsreflector "github.com/mesosphere/dklb/pkg/secrets_reflector"
 	"github.com/mesosphere/dklb/pkg/translator"
 	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
 )
@@ -47,10 +48,12 @@ type IngressController struct {
 	edgelbManager manager.EdgeLBManager
 	// logger is the logger that the controller will use.
 	logger log.FieldLogger
+	// secretsReflector is the instance used to manage lifecycle of DC/OS secrets
+	secretsReflector secretsreflector.SecretsReflector
 }
 
 // NewIngressController creates a new instance of the EdgeLB ingress controller.
-func NewIngressController(kubeClient kubernetes.Interface, er record.EventRecorder, ingressInformer extsv1beta1informers.IngressInformer, serviceInformer corev1informers.ServiceInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *IngressController {
+func NewIngressController(kubeClient kubernetes.Interface, er record.EventRecorder, ingressInformer extsv1beta1informers.IngressInformer, serviceInformer corev1informers.ServiceInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager, secretsReflector secretsreflector.SecretsReflector) *IngressController {
 	// Create a new instance of the ingress controller with the specified name and threadiness.
 	c := &IngressController{
 		kubeClient:       kubeClient,
@@ -58,6 +61,7 @@ func NewIngressController(kubeClient kubernetes.Interface, er record.EventRecord
 		kubeCache:        kubeCache,
 		edgelbManager:    edgelbManager,
 		logger:           log.WithField("controller", ingressControllerName),
+		secretsReflector: secretsReflector,
 	}
 	// Make processQueueItem the handler for items popped out of the work queue.
 	c.base = newGenericController(ingressControllerName, ingressControllerThreadiness, c.processQueueItem, c.logger)
@@ -163,6 +167,16 @@ func (c *IngressController) processQueueItem(workItem WorkItem) error {
 		c.er.Eventf(ingress, corev1.EventTypeWarning, constants.ReasonTranslationPaused, "translation is paused for the resource")
 		c.logger.Warnf("skipping translation of %q as translation is paused for the resource", kubernetesutil.Key(ingress))
 		return nil
+	}
+
+	// Check if we need to reflect any secrets back to DC/OS.
+	for _, ingressTLS := range ingress.Spec.TLS {
+		c.logger.Debugf("reflecting ingress secret %s/%s", ingress.Namespace, ingressTLS.SecretName)
+		if err := c.secretsReflector.Reflect(ingress.Namespace, ingressTLS.SecretName); err != nil {
+			c.er.Eventf(ingress, corev1.EventTypeWarning, constants.ReasonSecretReflectionError, "failed to reflect ingress secret: %v", err)
+			c.logger.Errorf("failed to reflect ingress secret %q: %v", workItem.Key, err)
+			return err
+		}
 	}
 
 	// Perform translation of the Ingress resource into an EdgeLB pool.
