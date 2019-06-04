@@ -45,8 +45,6 @@ type genericController struct {
 	// It is used to queue work to be processed instead of performing it as soon as a change happens.
 	// This means we can ensure we only process a fixed amount of resources at a time, and makes it easy to ensure we are never processing the same resource simultaneously in two different worker goroutines.
 	workqueue workqueue.RateLimitingInterface
-	// hasSyncedFuncs are the functions used to determine if caches are synced.
-	hasSyncedFuncs []cache.InformerSynced
 	// syncHandler is a function that takes a work item and processes it.
 	syncHandler func(wi WorkItem) error
 	// threadiness is the number of workers to use for processing items from the work queue.
@@ -63,14 +61,6 @@ func (c *genericController) Run(ctx context.Context) error {
 
 	c.logger.Debugf("starting %q", c.name)
 
-	// Wait for the caches to be synced before starting workers.
-	c.logger.Debug("waiting for informer caches to be synced")
-	if ok := cache.WaitForCacheSync(ctx.Done(), c.hasSyncedFuncs...); !ok {
-		return fmt.Errorf("failed to wait for informer caches to be synced")
-	}
-
-	c.logger.Debug("starting workers")
-
 	// Launch "threadiness" workers to process items from the work queue.
 	for i := 0; i < c.threadiness; i++ {
 		go wait.Until(c.runWorker, time.Second, ctx.Done())
@@ -84,15 +74,14 @@ func (c *genericController) Run(ctx context.Context) error {
 }
 
 // newGenericController returns a new generic controller.
-func newGenericController(name string, threadiness int, syncFuncs []cache.InformerSynced, syncHandler func(workItem WorkItem) error, logger log.FieldLogger) *genericController {
+func newGenericController(name string, threadiness int, syncHandler func(workItem WorkItem) error, logger log.FieldLogger) *genericController {
 	// Return a new instance of a generic controller.
 	gc := &genericController{
-		hasSyncedFuncs: syncFuncs,
-		logger:         logger,
-		name:           name,
-		syncHandler:    syncHandler,
-		workqueue:      workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), name),
-		threadiness:    threadiness,
+		logger:      logger,
+		name:        name,
+		syncHandler: syncHandler,
+		workqueue:   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), name),
+		threadiness: threadiness,
 	}
 	return gc
 }

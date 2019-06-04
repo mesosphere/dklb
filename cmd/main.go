@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
@@ -22,7 +23,7 @@ import (
 
 	"github.com/mesosphere/dklb/pkg/admission"
 	"github.com/mesosphere/dklb/pkg/backends"
-	"github.com/mesosphere/dklb/pkg/cache"
+	dklbcache "github.com/mesosphere/dklb/pkg/cache"
 	"github.com/mesosphere/dklb/pkg/cluster"
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/controllers"
@@ -259,18 +260,28 @@ func main() {
 }
 
 // run starts the controllers and blocks until they stop.
-func run(ctx context.Context, kubeClient kubernetes.Interface, er record.EventRecorder, edgelbManager manager.EdgeLBManager) {
-	// Create a shared informer factory for the base API types.
-	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, resyncPeriod)
-	// Create a cache for Kubernetes resources based on the shared informer factory.
-	kubeCache := cache.NewInformerBackedResourceCache(kubeInformerFactory)
+	ingressInformer := kubeInformerFactory.Extensions().V1beta1().Ingresses()
+	serviceInformer := kubeInformerFactory.Core().V1().Services()
+	// we need to setup the secrets informer so that the kubeCache
+	// gets populated accordingly
+	secretsInformer := kubeInformerFactory.Core().V1().Secrets()
+	secretsInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{})
+	secretsReflector := secretsreflector.New(cluster.Name, dcosClient.Secrets, saConfig.UID, kubeCache, kubeClient)
+
 	// Create an instance of the ingress controller.
 	ingressController := controllers.NewIngressController(kubeClient, er, kubeInformerFactory.Extensions().V1beta1().Ingresses(), kubeInformerFactory.Core().V1().Services(), kubeCache, edgelbManager)
 	// Create an instance of the service controller.
-	serviceController := controllers.NewServiceController(kubeClient, er, kubeInformerFactory.Core().V1().Services(), kubeCache, edgelbManager)
+	serviceController := controllers.NewServiceController(kubeClient, er, serviceInformer, kubeCache, edgelbManager)
 	// Start the shared informer factory.
 	go kubeInformerFactory.Start(ctx.Done())
 
+	// Wait for the caches to be synced before starting workers.
+	log.Debug("waiting for informer caches to be synced")
+	if ok := cache.WaitForCacheSync(ctx.Done(), kubeCache.HasSynced, ingressInformer.Informer().HasSynced, serviceInformer.Informer().HasSynced, secretsInformer.Informer().HasSynced); !ok {
+		log.Error("failed to wait for informer caches to be synced")
+		return
+	}
+	log.Debug("informer caches are synced")
 	// Start the ingress and service controllers.
 	var wg sync.WaitGroup
 	for _, c := range []controllers.Controller{ingressController, serviceController} {

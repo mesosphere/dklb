@@ -57,12 +57,8 @@ func NewServiceController(kubeClient kubernetes.Interface, er record.EventRecord
 		logger:        log.WithField("controller", serviceControllerName),
 	}
 	// Create a new instance of the service controller with the specified name and threadiness.
-	hasSyncedFuncs := []cache.InformerSynced{
-		serviceInformer.Informer().HasSynced,
-		kubeCache.HasSynced,
-	}
 	// Make processQueueItem the handler for items popped out of the work queue.
-	c.base = newGenericController(serviceControllerName, serviceControllerThreadiness, hasSyncedFuncs, c.processQueueItem, c.logger)
+	c.base = newGenericController(serviceControllerName, serviceControllerThreadiness, c.processQueueItem, c.logger)
 
 	// Setup an event handler to inform us when Service resources change.
 	// A Service resource is enqueued in the following scenarios:

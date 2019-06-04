@@ -53,19 +53,14 @@ type IngressController struct {
 func NewIngressController(kubeClient kubernetes.Interface, er record.EventRecorder, ingressInformer extsv1beta1informers.IngressInformer, serviceInformer corev1informers.ServiceInformer, kubeCache dklbcache.KubernetesResourceCache, edgelbManager manager.EdgeLBManager) *IngressController {
 	// Create a new instance of the ingress controller with the specified name and threadiness.
 	c := &IngressController{
-		kubeClient:    kubeClient,
-		er:            er,
-		kubeCache:     kubeCache,
-		edgelbManager: edgelbManager,
-		logger:        log.WithField("controller", ingressControllerName),
-	}
-	// Make the controller wait for the caches to sync.
-	hasSyncedFuncs := []cache.InformerSynced{
-		ingressInformer.Informer().HasSynced,
-		kubeCache.HasSynced,
+		kubeClient:       kubeClient,
+		er:               er,
+		kubeCache:        kubeCache,
+		edgelbManager:    edgelbManager,
+		logger:           log.WithField("controller", ingressControllerName),
 	}
 	// Make processQueueItem the handler for items popped out of the work queue.
-	c.base = newGenericController(ingressControllerName, ingressControllerThreadiness, hasSyncedFuncs, c.processQueueItem, c.logger)
+	c.base = newGenericController(ingressControllerName, ingressControllerThreadiness, c.processQueueItem, c.logger)
 
 	c.initialize(ingressInformer, serviceInformer)
 
