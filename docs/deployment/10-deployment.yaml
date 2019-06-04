@@ -85,6 +85,11 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
+        - name: SERVICE_ACCOUNT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: dklb-dcos-config
+              key: serviceAccountSecret
         resources:
           requests:
             memory: "64Mi"

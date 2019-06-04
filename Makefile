@@ -48,11 +48,16 @@ endif
 # skaffold deploys dklb to the Kubernetes repository targeted by the current context using skaffold.
 .PHONY: skaffold
 skaffold: MODE ?= dev
-skaffold: gitauth dockerauth
+skaffold: gitauth dockerauth service-account
 	@if [[ ! "$(MODE)" == "delete" ]]; then \
 		GOOS=linux GOARCH=amd64 $(MAKE) -C $(ROOT_DIR) build; \
 	fi
 	@skaffold $(MODE) -f $(ROOT_DIR)/hack/skaffold/dklb/skaffold.yaml
+
+# service account creates the DC/OS service account and sets up the Kubernetes secret
+.PHONY: service-account
+service-account:
+	./hack/service-account.sh
 
 # test.e2e runs the end-to-end test suite.
 .PHONY: test.e2e
