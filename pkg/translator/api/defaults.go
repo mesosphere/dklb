@@ -11,9 +11,10 @@ var (
 	DefaultEdgeLBPoolCreationStrategy = EdgeLBPoolCreationStrategyIfNotPresent
 	// DefaultEdgeLBPoolMemory is the amount of memory to request for an EdgeLB pool when a value is not provided.
 	DefaultEdgeLBPoolMemory = int32(128)
-	// DefaultEdgeLBPoolPort is the port to use as the frontend bind port for an EdgeLB pool used to provision an Ingress resource when a value is not provided.
-	// TODO (@bcustodio) Split into HTTP/HTTPS port when TLS support is introduced.
-	DefaultEdgeLBPoolPort = int32(80)
+	// DefaultEdgeLBPoolHTTPPort is the HTTP port to use as the frontend bind port for an EdgeLB pool used to provision an Ingress resource when a value is not provided.
+	DefaultEdgeLBPoolHTTPPort = int32(80)
+	// DefaultEdgeLBPoolHTTPSPort is the HTTPS port to use as the frontend bind port for an EdgeLB pool used to provision an Ingress resource when a value is not provided.
+	DefaultEdgeLBPoolHTTPSPort = int32(443)
 	// DefaultEdgeLBPoolRole is the role to use for an EdgeLB pool when a value is not provided.
 	DefaultEdgeLBPoolRole = constants.EdgeLBRolePublic
 	// DefaultEdgeLBPoolSize is the size to use for an EdgeLB pool when a value is not provided.

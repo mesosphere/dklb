@@ -9,6 +9,14 @@ import (
 
 // IngressEdgeLBPoolHTTPFrontendSpec contains the specification of the HTTP EdgeLB frontend associated with a given Ingress resource.
 type IngressEdgeLBPoolHTTPFrontendSpec struct {
+	// Mode describes if this frontend is disabled, enabled or in redirect mode.
+	Mode string
+	// Port is the port to use as the frontend bind port for HTTP traffic.
+	Port *int32 `yaml:"port"`
+}
+
+// IngressEdgeLBPoolHTTPSFrontendSpec contains the specification of the HTTP EdgeLB frontend associated with a given Ingress resource.
+type IngressEdgeLBPoolHTTPSFrontendSpec struct {
 	// Port is the port to use as the frontend bind port for HTTP traffic.
 	Port *int32 `yaml:"port"`
 }
@@ -16,7 +24,8 @@ type IngressEdgeLBPoolHTTPFrontendSpec struct {
 // IngressEdgeLBPoolFrontendsSpec contains the specification of the EdgeLB frontends associated with a given Ingress resource.
 type IngressEdgeLBPoolFrontendsSpec struct {
 	// HTTP contains the specification of the HTTP EdgeLB frontend associated with the Ingress resource.
-	HTTP *IngressEdgeLBPoolHTTPFrontendSpec `yaml:"http"`
+	HTTP  *IngressEdgeLBPoolHTTPFrontendSpec  `yaml:"http"`
+	HTTPS *IngressEdgeLBPoolHTTPSFrontendSpec `yaml:"https"`
 }
 
 // IngressEdgeLBPoolSpec contains the specification of the target EdgeLB pool for a given Ingress resource.
@@ -34,7 +43,7 @@ func NewDefaultIngressEdgeLBPoolSpecForIngress(ingress *extsv1beta1.Ingress) *In
 }
 
 // SetDefaults sets default values whenever a value hasn't been specifically provided.
-func (o *IngressEdgeLBPoolSpec) SetDefaults(_ *extsv1beta1.Ingress) {
+func (o *IngressEdgeLBPoolSpec) SetDefaults(ingress *extsv1beta1.Ingress) {
 	// Set defaults on the base object.
 	o.BaseEdgeLBPoolSpec.setDefaults()
 
@@ -46,7 +55,16 @@ func (o *IngressEdgeLBPoolSpec) SetDefaults(_ *extsv1beta1.Ingress) {
 		o.Frontends.HTTP = &IngressEdgeLBPoolHTTPFrontendSpec{}
 	}
 	if o.Frontends.HTTP.Port == nil {
-		o.Frontends.HTTP.Port = &DefaultEdgeLBPoolPort
+		o.Frontends.HTTP.Port = &DefaultEdgeLBPoolHTTPPort
+	}
+
+	if IsIngressTLSEnabled(ingress) {
+		if o.Frontends.HTTPS == nil {
+			o.Frontends.HTTPS = &IngressEdgeLBPoolHTTPSFrontendSpec{}
+		}
+		if o.Frontends.HTTPS.Port == nil {
+			o.Frontends.HTTPS.Port = &DefaultEdgeLBPoolHTTPSPort
+		}
 	}
 }
 

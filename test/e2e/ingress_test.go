@@ -89,7 +89,7 @@ var _ = Describe("Ingress", func() {
 				Expect(*objSpec.CPUs).To(Equal(translatorapi.DefaultEdgeLBPoolCpus))
 				Expect(*objSpec.Memory).To(Equal(translatorapi.DefaultEdgeLBPoolMemory))
 				Expect(*objSpec.Size).To(Equal(translatorapi.DefaultEdgeLBPoolSize))
-				Expect(*objSpec.Frontends.HTTP.Port).To(Equal(translatorapi.DefaultEdgeLBPoolPort))
+				Expect(*objSpec.Frontends.HTTP.Port).To(Equal(translatorapi.DefaultEdgeLBPoolHTTPPort))
 			})
 		})
 
@@ -927,6 +927,50 @@ var _ = Describe("Ingress", func() {
 			svc.Spec.Ports[0].NodePort = 0
 			svc, err = f.KubeClient.CoreV1().Services(svc.Namespace).Update(svc)
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("supports HTTPS frontend [HTTPS] [Public]", func() {
+			// Create a temporary namespace for the test.
+			f.WithTemporaryNamespace(func(namespace *corev1.Namespace) {
+				var (
+					err     error
+					objSpec translatorapi.IngressEdgeLBPoolSpec
+					rawSpec string
+					ing     *extsv1beta1.Ingress
+				)
+
+				// Create an Ingress resource annotated for provisioning with EdgeLB but without the "kubernetes.dcos.io/dklb-config" annotation.
+				ing, err = f.CreateEdgeLBIngress(namespace.Name, "tls-ingress", func(ingress *extsv1beta1.Ingress) {
+					ingress.Annotations = map[string]string{
+						constants.DklbPaused: strconv.FormatBool(true),
+					}
+					ingress.Spec.TLS = []extsv1beta1.IngressTLS{
+						{SecretName: "foo"},
+					}
+					ingress.Spec.Backend = &extsv1beta1.IngressBackend{
+						ServiceName: "foo",
+						ServicePort: intstr.FromString("bar"),
+					}
+				})
+				Expect(err).NotTo(HaveOccurred(), "failed to create test ingress")
+
+				// Make sure that the Ingress resource has been mutated with a non-empty value for the "kubernetes.dcos.io/dklb-config" annotation.
+				rawSpec = ing.Annotations[constants.DklbConfigAnnotationKey]
+				Expect(rawSpec).NotTo(BeEmpty(), "the \"kubernetes.dcos.io/dklb-config\" annotation is absent or empty")
+				// Make sure that the value of the "kubernetes.dcos.io/dklb-config" annotation can be unmarshaled into an IngressEdgeLBPoolSpec object.
+				err = yaml.UnmarshalStrict([]byte(rawSpec), &objSpec)
+				Expect(err).NotTo(HaveOccurred(), "failed to unmarshal the value of the \"kubernetes.dcos.io/dklb-config\" annotation")
+				// Make sure that the default values are set on the ServiceEdgeLBPoolSpec.
+				Expect(*objSpec.Name).To(MatchRegexp(constants.EdgeLBPoolNameRegex))
+				Expect(*objSpec.Name).To(MatchRegexp("^.*--[a-z0-9]{5}$"))
+				Expect(*objSpec.Role).To(Equal(translatorapi.DefaultEdgeLBPoolRole))
+				Expect(*objSpec.Network).To(Equal(constants.EdgeLBHostNetwork))
+				Expect(*objSpec.CPUs).To(Equal(translatorapi.DefaultEdgeLBPoolCpus))
+				Expect(*objSpec.Memory).To(Equal(translatorapi.DefaultEdgeLBPoolMemory))
+				Expect(*objSpec.Size).To(Equal(translatorapi.DefaultEdgeLBPoolSize))
+				Expect(*objSpec.Frontends.HTTP.Port).To(Equal(translatorapi.DefaultEdgeLBPoolHTTPPort))
+				Expect(*objSpec.Frontends.HTTPS.Port).To(Equal(translatorapi.DefaultEdgeLBPoolHTTPSPort))
+			})
 		})
 	})
 })

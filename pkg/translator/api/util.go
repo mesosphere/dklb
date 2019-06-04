@@ -123,3 +123,8 @@ func SetServiceEdgeLBPoolSpec(service *corev1.Service, obj *ServiceEdgeLBPoolSpe
 	service.GetAnnotations()[constants.DklbConfigAnnotationKey] = string(b)
 	return nil
 }
+
+// IsIngressTLSEnabled checks if ingress has TLS spec defined.
+func IsIngressTLSEnabled(ingress *extsv1beta1.Ingress) bool {
+	return len(ingress.Spec.TLS) > 0
+}
