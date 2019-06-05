@@ -12,7 +12,7 @@ DCOS_TERRAFORM_PLATFORM ?= aws
 TERRAFORM_DCOS_VERSION_gcp := 0.1.5
 
 # TERRAFORM_DCOS_VERSION_aws is the version of DC/OS Terraform AWS to run
-TERRAFORM_DCOS_VERSION_aws := 0.2.1
+TERRAFORM_DCOS_VERSION_aws := 0.2.2
 
 # TERRAFORM_VARS_FILE points to the dcos-terraform variables file that we'll use
 # to bootstrap a cluster
@@ -40,7 +40,7 @@ DCOS_PASSWORD ?= deleteme
 DCOS_SUPERUSER_PASSWORD_HASH_FILE := .dcos_superuser_password_hash
 
 # DCOS_VERSION contains the version of DC/OS to install
-DCOS_VERSION ?= 1.12.3
+DCOS_VERSION ?= 1.13.1
 
 # DCOS_EE_LICENSE_PATH contains the path to the dcos ee license file.
 DCOS_EE_LICENSE_PATH ?= $(CURDIR)dcos-ee-license.txt
@@ -237,6 +237,10 @@ launch-dcos: $(TERRAFORM_VARS_FILE)
 		aws iam attach-role-policy --role-name dcos-$(DCOS_CLUSTER_PREFIX)-$(shell cat .random_cluster_name_suffix)-instance_role \
 			--policy-arn $$(aws iam create-policy --policy-name $${DKLB_INSTANCE_POLICY_NAME} --policy-document file://$(TMPFILE) | jq -r '.Policy.Arn')
 	@$(RM) $(TMPFILE)
+	@aws ec2 revoke-security-group-ingress \
+		--group-id $$(aws ec2 describe-security-groups | jq -r '.SecurityGroups[] | select(.GroupName == "dcos-$(DCOS_CLUSTER_PREFIX)-$(shell cat .random_cluster_name_suffix)-internal-firewall") | .GroupId') \
+		--protocol tcp --port 1025-65535 --cidr $(CLIENT_PUBLIC_IP)/32 &> /dev/null \
+		|| true
 	@aws ec2 authorize-security-group-ingress \
 		--group-id $$(aws ec2 describe-security-groups | jq -r '.SecurityGroups[] | select(.GroupName == "dcos-$(DCOS_CLUSTER_PREFIX)-$(shell cat .random_cluster_name_suffix)-internal-firewall") | .GroupId') \
 		--protocol tcp --port 1025-65535 --cidr $(CLIENT_PUBLIC_IP)/32

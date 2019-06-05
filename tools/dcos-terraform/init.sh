@@ -18,8 +18,8 @@ DCOS_TERRAFORM_PLATFORM=${DCOS_TERRAFORM_PLATFORM:-aws}
 # - DCOS_VARIANT (default: ee)
 #   - valid values are open and ee
 DCOS_VARIANT=${DCOS_VARIANT:-ee}
-# - DCOS_VERSION (default: 1.12.3)
-DCOS_VERSION=${DCOS_VERSION:-1.12.3}
+# - DCOS_VERSION (default: 1.13.1)
+DCOS_VERSION=${DCOS_VERSION:-1.13.1}
 # - DCOS_SECURITY (default: strict)
 #   - valid values are strict, permissive, disabled
 DCOS_SECURITY=${DCOS_SECURITY:-strict}
