@@ -10,7 +10,7 @@ import (
 // IngressEdgeLBPoolHTTPFrontendSpec contains the specification of the HTTP EdgeLB frontend associated with a given Ingress resource.
 type IngressEdgeLBPoolHTTPFrontendSpec struct {
 	// Mode describes if this frontend is disabled, enabled or in redirect mode.
-	Mode string
+	Mode *string `yaml:"mode"`
 	// Port is the port to use as the frontend bind port for HTTP traffic.
 	Port *int32 `yaml:"port"`
 }
@@ -57,7 +57,9 @@ func (o *IngressEdgeLBPoolSpec) SetDefaults(ingress *extsv1beta1.Ingress) {
 	if o.Frontends.HTTP.Port == nil {
 		o.Frontends.HTTP.Port = &DefaultEdgeLBPoolHTTPPort
 	}
-
+	if o.Frontends.HTTP.Mode == nil || *o.Frontends.HTTP.Mode == "" {
+		o.Frontends.HTTP.Mode = &IngressEdgeLBHTTPModeEnabled
+	}
 	if IsIngressTLSEnabled(ingress) {
 		if o.Frontends.HTTPS == nil {
 			o.Frontends.HTTPS = &IngressEdgeLBPoolHTTPSFrontendSpec{}
