@@ -3,6 +3,8 @@ package translator
 import (
 	"testing"
 
+	"github.com/mesosphere/dcos-edge-lb/pkg/apis/models"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	corev1 "k8s.io/api/core/v1"
@@ -13,7 +15,9 @@ import (
 	edgelbmodels "github.com/mesosphere/dcos-edge-lb/pkg/apis/models"
 
 	dklbcache "github.com/mesosphere/dklb/pkg/cache"
+	"github.com/mesosphere/dklb/pkg/constants"
 	edgelbmanager "github.com/mesosphere/dklb/pkg/edgelb/manager"
+	translatorapi "github.com/mesosphere/dklb/pkg/translator/api"
 	cachetestutil "github.com/mesosphere/dklb/test/util/cache"
 	mockedgelb "github.com/mesosphere/dklb/test/util/edgelb/manager"
 	servicetestutil "github.com/mesosphere/dklb/test/util/kubernetes/service"
@@ -75,5 +79,104 @@ func TestTranslate(t *testing.T) {
 		status, err := NewIngressTranslator(test.ingress, test.kubeCache, test.edgelbManager(), test.eventRecorder).Translate()
 		assert.Equal(t, test.expectedError, err)
 		assert.Equal(t, test.expectedLBStatus, status)
+	}
+}
+
+func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
+	// dummyService represents a dummy Service resource.
+	defaultService := servicetestutil.DummyServiceResource("kube-system", "dklb", func(service *corev1.Service) {
+		service.Spec.Type = corev1.ServiceTypeLoadBalancer
+		service.Spec.Ports = []corev1.ServicePort{
+			{
+				Port:     80,
+				NodePort: 31789,
+			},
+			{
+				Port:     443,
+				NodePort: 32789,
+			},
+		}
+	})
+	defaultCount := int32(0)
+	tests := []struct {
+		description    string
+		edgelbManager  func() edgelbmanager.EdgeLBManager
+		eventRecorder  record.EventRecorder
+		expectedChange bool
+		ingress        *extsv1beta1.Ingress
+		pool           *models.V2Pool
+		kubeCache      dklbcache.KubernetesResourceCache
+	}{
+		{
+			description: "should not update empty pool object",
+			edgelbManager: func() edgelbmanager.EdgeLBManager {
+				edgelbManager := new(mockedgelb.MockEdgeLBManager)
+				edgelbManager.On("PoolGroup").Return("test-pool-group", nil)
+				return edgelbManager
+			},
+			eventRecorder:  record.NewFakeRecorder(10),
+			expectedChange: false,
+			ingress: &extsv1beta1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test-namespace",
+					Name:      "test-ingress",
+				},
+				Spec: extsv1beta1.IngressSpec{
+					TLS: []extsv1beta1.IngressTLS{
+						{SecretName: "test-secret"},
+					},
+				},
+			},
+			pool: &models.V2Pool{
+				Haproxy: &models.V2Haproxy{
+					Backends:  []*models.V2Backend{},
+					Frontends: []*models.V2Frontend{},
+				},
+			},
+			kubeCache: dklbcache.NewInformerBackedResourceCache(cachetestutil.NewFakeSharedInformerFactory(defaultService)),
+		},
+		{
+			description: "should update edgelb cpu requirement",
+			edgelbManager: func() edgelbmanager.EdgeLBManager {
+				edgelbManager := new(mockedgelb.MockEdgeLBManager)
+				edgelbManager.On("PoolGroup").Return("test-pool-group", nil)
+				return edgelbManager
+			},
+			eventRecorder:  record.NewFakeRecorder(10),
+			expectedChange: true,
+			ingress: &extsv1beta1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test-namespace",
+					Name:      "test-ingress",
+					Annotations: map[string]string{
+						constants.EdgeLBIngressClassAnnotationKey: constants.EdgeLBIngressClassAnnotationValue,
+						constants.DklbConfigAnnotationKey: `
+  cpus: 2
+`,
+					},
+				},
+				Spec: extsv1beta1.IngressSpec{
+					TLS: []extsv1beta1.IngressTLS{
+						{SecretName: "test-secret"},
+					},
+				},
+			},
+			pool: &models.V2Pool{
+				Count: &defaultCount,
+				Haproxy: &models.V2Haproxy{
+					Backends:  []*models.V2Backend{},
+					Frontends: []*models.V2Frontend{},
+				},
+			},
+			kubeCache: dklbcache.NewInformerBackedResourceCache(cachetestutil.NewFakeSharedInformerFactory(defaultService)),
+		},
+	}
+
+	for _, test := range tests {
+		it := NewIngressTranslator(test.ingress, test.kubeCache, test.edgelbManager(), test.eventRecorder)
+		it.spec = translatorapi.NewDefaultIngressEdgeLBPoolSpecForIngress(test.ingress)
+		changed, _ := it.updateEdgeLBPoolObject(test.pool, IngressBackendNodePortMap{})
+		assert.Equal(t, test.expectedChange, changed)
+		log.Printf("%+v\n", test.pool)
 	}
 }
