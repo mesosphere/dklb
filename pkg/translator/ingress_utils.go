@@ -13,6 +13,7 @@ import (
 
 	"github.com/mesosphere/dklb/pkg/cluster"
 	"github.com/mesosphere/dklb/pkg/constants"
+	secretsreflector "github.com/mesosphere/dklb/pkg/secrets_reflector"
 	translatorapi "github.com/mesosphere/dklb/pkg/translator/api"
 	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
 	"github.com/mesosphere/dklb/pkg/util/pointers"
@@ -26,8 +27,8 @@ const (
 	// The resulting name is of the form "<cluster-name>:<ingress-namespace>:<ingress-name>:<service-name>:<service-port>".
 	edgeLBIngressBackendNameFormatString = "%s" + separator + "%s" + separator + "%s" + separator + "%s" + separator + "%s"
 	// edgeLBIngressFrontendNameFormatString is the format string used to compute the name for an EdgeLB frontend corresponding to a given Ingress resource.
-	// The resulting name is of the form "<cluster-name>:<ingress-namespace>:<ingress-name>".
-	edgeLBIngressFrontendNameFormatString = "%s" + separator + "%s" + separator + "%s"
+	// The resulting name is of the form "<cluster-name>:<ingress-namespace>:<ingress-name>:<protocol>".
+	edgeLBIngressFrontendNameFormatString = "%s" + separator + "%s" + separator + "%s" + separator + "%s"
 	// edgeLBPathCatchAllRegex is the regular expression used by EdgeLB to match all paths.
 	edgeLBPathCatchAllRegex = "^.*$"
 	// edgeLBPathRegexFormatString is the format string used to compute the regular expression used by EdgeLB to match a given path.
@@ -47,6 +48,8 @@ type ingressOwnedEdgeLBObjectMetadata struct {
 	Namespace string
 	// IngressBackend is the reconstructed IngressBackend object represented by the current EdgeLB object (in case said object is an EdgeLB backend).
 	IngressBackend *extsv1beta1.IngressBackend
+	// Protocol is either http or https
+	Protocol string
 }
 
 // prioritizedMatchingRule is a helper struct used to associate a priority with an EdgeLB "V2FrontendLinkBackendMapItems0".
@@ -146,15 +149,35 @@ func computeEdgeLBBackendNameForIngressBackend(ingress *extsv1beta1.Ingress, bac
 }
 
 // computeEdgeLBFrontendForIngress computes the EdgeLB frontend that corresponds to the specified Ingress resource.
-func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translatorapi.IngressEdgeLBPoolSpec) *models.V2Frontend {
+func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translatorapi.IngressEdgeLBPoolSpec) []*models.V2Frontend {
 	// Compute the base frontend object.
-	frontend := &models.V2Frontend{
-		BindAddress: constants.EdgeLBFrontendBindAddress,
-		Name:        computeEdgeLBFrontendNameForIngress(ingress),
-		// TODO (@bcustodio) Split into HTTP/HTTPS port when TLS support is introduced.
-		Protocol:    models.V2ProtocolHTTP,
-		BindPort:    spec.Frontends.HTTP.Port,
-		LinkBackend: &models.V2FrontendLinkBackend{},
+	frontends := make([]*models.V2Frontend, 0)
+	// check if HTTP frontend is enabled
+	if spec.Frontends.HTTP != nil && *spec.Frontends.HTTP.Mode != translatorapi.IngressEdgeLBHTTPModeDisabled {
+		httpFrontend := &models.V2Frontend{
+			BindAddress: constants.EdgeLBFrontendBindAddress,
+			Name:        computeEdgeLBFrontendNameForIngress(ingress, string(models.V2ProtocolHTTP)),
+			Protocol:    models.V2ProtocolHTTP,
+			BindPort:    spec.Frontends.HTTP.Port,
+			LinkBackend: &models.V2FrontendLinkBackend{},
+		}
+		frontends = append(frontends, httpFrontend)
+	}
+	// check if HTTPS frontend is enabled
+	if spec.Frontends.HTTPS != nil {
+		certificates := make([]string, 0)
+		for _, ingressTLS := range ingress.Spec.TLS {
+			certificates = append(certificates, ingressTLS.SecretName)
+		}
+		httpsFrontend := &models.V2Frontend{
+			BindAddress:  constants.EdgeLBFrontendBindAddress,
+			Name:         computeEdgeLBFrontendNameForIngress(ingress, string(models.V2ProtocolHTTPS)),
+			Protocol:     models.V2ProtocolHTTPS,
+			BindPort:     spec.Frontends.HTTPS.Port,
+			LinkBackend:  &models.V2FrontendLinkBackend{},
+			Certificates: certificates,
+		}
+		frontends = append(frontends, httpsFrontend)
 	}
 
 	// Create the slice that will hold the set of matching rules.
@@ -164,7 +187,10 @@ func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translat
 	kubernetesutil.ForEachIngresBackend(ingress, func(host, path *string, backend extsv1beta1.IngressBackend) {
 		switch {
 		case host == nil && path == nil:
-			frontend.LinkBackend.DefaultBackend = computeEdgeLBBackendNameForIngressBackend(ingress, backend)
+			// link frontends and backends
+			for _, frontend := range frontends {
+				frontend.LinkBackend.DefaultBackend = computeEdgeLBBackendNameForIngressBackend(ingress, backend)
+			}
 		default:
 			rule := prioritizedMatchingRule{
 				item: &models.V2FrontendLinkBackendMapItems0{
@@ -212,15 +238,17 @@ func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translat
 	})
 	// Add each rule to the final slice of rules.
 	for _, rule := range rules {
-		frontend.LinkBackend.Map = append(frontend.LinkBackend.Map, rule.item)
+		for _, frontend := range frontends {
+			frontend.LinkBackend.Map = append(frontend.LinkBackend.Map, rule.item)
+		}
 	}
-	// Return the computed EdgeLB frontend object.
-	return frontend
+	// Return the computed EdgeLB frontend objects.
+	return frontends
 }
 
 // computeEdgeLBFrontendNameForIngress computes the name of the EdgeLB frontend that corresponds to the specified Ingress resource.
-func computeEdgeLBFrontendNameForIngress(ingress *extsv1beta1.Ingress) string {
-	return fmt.Sprintf(edgeLBIngressFrontendNameFormatString, dklbstrings.ReplaceForwardSlashesWithDots(cluster.Name), ingress.Namespace, ingress.Name)
+func computeEdgeLBFrontendNameForIngress(ingress *extsv1beta1.Ingress, protocol string) string {
+	return fmt.Sprintf(edgeLBIngressFrontendNameFormatString, dklbstrings.ReplaceForwardSlashesWithDots(cluster.Name), ingress.Namespace, ingress.Name, strings.ToLower(protocol))
 }
 
 // computeEdgeLBBackendMiscStr computes the value to be used as "miscStr" on a given backend given the specified options.
@@ -247,7 +275,7 @@ func computeIngressOwnedEdgeLBObjectMetadata(name string) (*ingressOwnedEdgeLBOb
 				ServicePort: intstr.Parse(parts[4]),
 			},
 		}, nil
-	case 3:
+	case 4:
 		// The provided name is composed of 3 parts separated by "separator".
 		// Hence, it most likely corresponds to an EdgeLB frontend owned by an Ingress resource.
 		return &ingressOwnedEdgeLBObjectMetadata{
@@ -255,10 +283,36 @@ func computeIngressOwnedEdgeLBObjectMetadata(name string) (*ingressOwnedEdgeLBOb
 			Namespace:      parts[1],
 			Name:           parts[2],
 			IngressBackend: nil,
+			Protocol:       parts[3],
 		}, nil
 	default:
 		// The provided name is composed of a different number of parts.
 		// Hence, it does not correspond to an Ingress-owned EdgeLB object.
 		return nil, errors.New("invalid backend/frontend name for ingress")
 	}
+}
+
+// computeEdgeLBSecretsForIngress generates the list of DC/OS secrets
+// required for the given ingress. Returns nil if TLS is disabled.
+// edgelb models.V2PoolSecretsItems0
+// https://github.com/mesosphere/dcos-edge-lb/blob/master/pkg/apis/models/v2_pool.go#L346-L356
+// we use the dcos secret name with forward slashes replaces by dots
+// as the filename for the edgelb V2PoolSecretsItems0.File parameter
+func computeEdgeLBSecretsForIngress(ingress *extsv1beta1.Ingress) []*models.V2PoolSecretsItems0 {
+	if !translatorapi.IsIngressTLSEnabled(ingress) {
+		return nil
+	}
+
+	secrets := make([]*models.V2PoolSecretsItems0, 0)
+
+	for _, ingressTLS := range ingress.Spec.TLS {
+		dcosSecretName := secretsreflector.ComputeDCOSSecretName(ingress.Namespace, ingressTLS.SecretName)
+		secret := &models.V2PoolSecretsItems0{
+			Secret: dcosSecretName,
+			File:   dklbstrings.ReplaceForwardSlashesWithDots(dcosSecretName),
+		}
+		secrets = append(secrets, secret)
+	}
+
+	return secrets
 }
