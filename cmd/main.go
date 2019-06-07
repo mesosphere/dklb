@@ -290,7 +290,7 @@ func run(ctx context.Context, kubeClient kubernetes.Interface, er record.EventRe
 	// gets populated accordingly
 	secretsInformer := kubeInformerFactory.Core().V1().Secrets()
 	secretsInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{})
-	secretsReflector := secretsreflector.New(cluster.Name, dcosClient.Secrets, saConfig.UID, kubeCache, kubeClient)
+	secretsReflector := secretsreflector.New(dcosClient.Secrets, saConfig.UID, kubeCache, kubeClient)
 
 	// Create an instance of the ingress controller.
 	ingressController := controllers.NewIngressController(kubeClient, er, ingressInformer, serviceInformer, kubeCache, edgelbManager, secretsReflector)

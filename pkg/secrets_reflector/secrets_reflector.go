@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	dklbcache "github.com/mesosphere/dklb/pkg/cache"
+	"github.com/mesosphere/dklb/pkg/cluster"
 	"github.com/mesosphere/dklb/pkg/constants"
 	dklbstrings "github.com/mesosphere/dklb/pkg/util/strings"
 )
@@ -22,6 +23,13 @@ const (
 	defaultSecretStore = "default"
 	defaultTimeout     = 5 * time.Second
 )
+
+// SecretsPath stores the path where DC/OS secrets are created by dklb
+// and read by edgelb. It's a package global because of how the rest
+// of the code was layed out initially. This should be safe because
+// each dklb instance will have only one SecretsReflector
+// instance. This variable should ideally be setup by New function.
+var SecretsPath string
 
 // SecretsReflector defines the interface exposed by this package.
 type SecretsReflector interface {
@@ -36,23 +44,20 @@ type DCOSSecretsClient interface {
 
 // secretsReflector implements the SecretsReflector interface.
 type secretsReflector struct {
-	dcosSecretsClient     DCOSSecretsClient
-	kubeCache             dklbcache.KubernetesResourceCache
-	kubeClient            kubernetes.Interface
-	kubernetesClusterName string
-	logger                log.FieldLogger
-	secretsPath           string
+	dcosSecretsClient DCOSSecretsClient
+	kubeCache         dklbcache.KubernetesResourceCache
+	kubeClient        kubernetes.Interface
+	logger            log.FieldLogger
 }
 
 // New returns an instance of SecretsReflector.
-func New(kubernetesClusterName string, dcosSecretsClient DCOSSecretsClient, secretsPath string, kubeCache dklbcache.KubernetesResourceCache, kubeClient kubernetes.Interface) SecretsReflector {
+func New(dcosSecretsClient DCOSSecretsClient, secretsPath string, kubeCache dklbcache.KubernetesResourceCache, kubeClient kubernetes.Interface) SecretsReflector {
+	SecretsPath = secretsPath
 	return &secretsReflector{
-		dcosSecretsClient:     dcosSecretsClient,
-		kubeCache:             kubeCache,
-		kubeClient:            kubeClient,
-		kubernetesClusterName: kubernetesClusterName,
-		logger:                log.WithField("component", "secrets_reflector"),
-		secretsPath:           secretsPath,
+		dcosSecretsClient: dcosSecretsClient,
+		kubeCache:         kubeCache,
+		kubeClient:        kubeClient,
+		logger:            log.WithField("component", "secrets_reflector"),
 	}
 }
 
@@ -109,7 +114,7 @@ func (s *secretsReflector) reflect(kubeSecret *corev1.Secret, dcosSecret *dcos.S
 		return nil
 	}
 	// Generate the DC/OS secret name
-	dcosSecretName := s.computeDCOSSecretName(kubeSecret)
+	dcosSecretName := ComputeDCOSSecretName(kubeSecret.Namespace, kubeSecret.Name)
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 	// Check if we need to update or create the DC/OS secret
@@ -147,6 +152,6 @@ func (s *secretsReflector) reflect(kubeSecret *corev1.Secret, dcosSecret *dcos.S
 	return nil
 }
 
-func (s *secretsReflector) computeDCOSSecretName(kubeSecret *corev1.Secret) string {
-	return fmt.Sprintf("%s/%s__%s__%s", s.secretsPath, dklbstrings.ReplaceForwardSlashesWithDots(s.kubernetesClusterName), kubeSecret.Namespace, kubeSecret.Name)
+func ComputeDCOSSecretName(namespace, kubeSecretName string) string {
+	return fmt.Sprintf("%s/%s__%s__%s", SecretsPath, dklbstrings.ReplaceForwardSlashesWithDots(cluster.Name), namespace, kubeSecretName)
 }
