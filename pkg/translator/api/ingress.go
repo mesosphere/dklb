@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"strings"
 
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -81,7 +82,17 @@ func (o *IngressEdgeLBPoolSpec) Validate(obj *extsv1beta1.Ingress) error {
 	}
 	// Validate that the HTTP port is valid.
 	if err := validation.IsValidPortNum(int(*o.Frontends.HTTP.Port)); err != nil {
-		return fmt.Errorf("%d is not a valid port number", *o.Frontends.HTTP.Port)
+		return fmt.Errorf("%d is not a valid HTTP port number", *o.Frontends.HTTP.Port)
+	}
+	// Validate that the HTTP mode is valid.
+	if err := isValidHTTPMode(*o.Frontends.HTTP.Mode); err != nil {
+		return fmt.Errorf("%s is not a valid HTTP mode", *o.Frontends.HTTP.Mode)
+	}
+	// Validate that the HTTPS port is valid.
+	if o.Frontends.HTTPS != nil {
+		if err := validation.IsValidPortNum(int(*o.Frontends.HTTPS.Port)); err != nil {
+			return fmt.Errorf("%d is not a valid HTTPS port number", *o.Frontends.HTTPS.Port)
+		}
 	}
 	return nil
 }
@@ -89,4 +100,14 @@ func (o *IngressEdgeLBPoolSpec) Validate(obj *extsv1beta1.Ingress) error {
 // ValidateTransition validates the transition between "previous" and the current object.
 func (o *IngressEdgeLBPoolSpec) ValidateTransition(previous *IngressEdgeLBPoolSpec) error {
 	return o.BaseEdgeLBPoolSpec.ValidateTransition(&previous.BaseEdgeLBPoolSpec)
+}
+
+// isValidHTTPMode returns an error if mode is not one of: enabled, disabled or
+// redirect.
+func isValidHTTPMode(mode string) error {
+	switch strings.ToLower(mode) {
+	case IngressEdgeLBHTTPModeDisabled, IngressEdgeLBHTTPModeEnabled, IngressEdgeLBHTTPModeRedirect:
+		return nil
+	}
+	return fmt.Errorf("invalid mode")
 }

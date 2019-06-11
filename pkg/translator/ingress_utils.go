@@ -161,6 +161,12 @@ func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translat
 			BindPort:    spec.Frontends.HTTP.Port,
 			LinkBackend: &models.V2FrontendLinkBackend{},
 		}
+		if *spec.Frontends.HTTP.Mode == translatorapi.IngressEdgeLBHTTPModeRedirect {
+			// Setting this to the empty object is enough to redirect all
+			// traffic from HTTP (this frontend) to HTTPS (port 443).
+			// https://docs.mesosphere.com/services/edge-lb/1.3/pool-configuration/v2-reference/#redirect-https-prop
+			httpFrontend.RedirectToHTTPS = &models.V2FrontendRedirectToHTTPS{}
+		}
 		frontends = append(frontends, httpFrontend)
 	}
 	// check if HTTPS frontend is enabled

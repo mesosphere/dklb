@@ -177,7 +177,7 @@ var _ = Describe("Ingress", func() {
 						expectedErrorMessageRegex: "failed to parse \"InvalidStrategy\" as an edgelb pool creation strategy",
 					},
 					{
-						description: "\"kubernetes.dcos.io/dklb-config\" specifies an invalid edgelb frontend port",
+						description: "\"kubernetes.dcos.io/dklb-config\" specifies an invalid edgelb frontend HTTP port",
 						fn: func(ingress *extsv1beta1.Ingress) {
 							_ = translatorapi.SetIngressEdgeLBPoolSpec(ingress, &translatorapi.IngressEdgeLBPoolSpec{
 								Frontends: &translatorapi.IngressEdgeLBPoolFrontendsSpec{
@@ -187,7 +187,33 @@ var _ = Describe("Ingress", func() {
 								},
 							})
 						},
-						expectedErrorMessageRegex: "123456 is not a valid port number",
+						expectedErrorMessageRegex: "123456 is not a valid HTTP port number",
+					},
+					{
+						description: "\"kubernetes.dcos.io/dklb-config\" specifies an invalid frontend http mode",
+						fn: func(ingress *extsv1beta1.Ingress) {
+							_ = translatorapi.SetIngressEdgeLBPoolSpec(ingress, &translatorapi.IngressEdgeLBPoolSpec{
+								Frontends: &translatorapi.IngressEdgeLBPoolFrontendsSpec{
+									HTTP: &translatorapi.IngressEdgeLBPoolHTTPFrontendSpec{
+										Mode: pointers.NewString("invalid"),
+									},
+								},
+							})
+						},
+						expectedErrorMessageRegex: "invalid is not a valid HTTP mode",
+					},
+					{
+						description: "\"kubernetes.dcos.io/dklb-config\" specifies an invalid edgelb frontend HTTPS port",
+						fn: func(ingress *extsv1beta1.Ingress) {
+							_ = translatorapi.SetIngressEdgeLBPoolSpec(ingress, &translatorapi.IngressEdgeLBPoolSpec{
+								Frontends: &translatorapi.IngressEdgeLBPoolFrontendsSpec{
+									HTTPS: &translatorapi.IngressEdgeLBPoolHTTPSFrontendSpec{
+										Port: pointers.NewInt32(123456),
+									},
+								},
+							})
+						},
+						expectedErrorMessageRegex: "123456 is not a valid HTTPS port number",
 					},
 				}
 				for _, test := range tests {
