@@ -17,7 +17,6 @@ import (
 	"github.com/mesosphere/dklb/pkg/cluster"
 	"github.com/mesosphere/dklb/pkg/constants"
 	edgelbmanager "github.com/mesosphere/dklb/pkg/edgelb/manager"
-	secretsreflector "github.com/mesosphere/dklb/pkg/secrets_reflector"
 	translatorapi "github.com/mesosphere/dklb/pkg/translator/api"
 	"github.com/mesosphere/dklb/pkg/util/pointers"
 	cachetestutil "github.com/mesosphere/dklb/test/util/cache"
@@ -86,7 +85,6 @@ func TestTranslate(t *testing.T) {
 
 func TestTranslate_createEdgeLBPoolObject(t *testing.T) {
 	cluster.Name = "test-cluster"
-	secretsreflector.SecretsPath = "dklb-principal"
 	tests := []struct {
 		description    string
 		expectedChange bool
@@ -184,7 +182,7 @@ func TestTranslate_createEdgeLBPoolObject(t *testing.T) {
 							},
 							Name:         "test-cluster:test-namespace:test-ingress:https",
 							Protocol:     "HTTPS",
-							Certificates: []string{"test-secret"},
+							Certificates: []string{"$SECRETS/test-cluster__test-namespace__test-secret"},
 						},
 					},
 					Stats: &models.V2Stats{
@@ -193,8 +191,8 @@ func TestTranslate_createEdgeLBPoolObject(t *testing.T) {
 				},
 				Secrets: []*models.V2PoolSecretsItems0{
 					{
-						File:   "dklb-principal.test-cluster__test-namespace__test-secret",
-						Secret: "dklb-principal/test-cluster__test-namespace__test-secret",
+						File:   "test-cluster__test-namespace__test-secret",
+						Secret: "test-cluster__test-namespace__test-secret",
 					},
 				},
 			},
@@ -256,7 +254,7 @@ func TestTranslate_createEdgeLBPoolObject(t *testing.T) {
 							},
 							Name:         "test-cluster:test-namespace:test-ingress:https",
 							Protocol:     "HTTPS",
-							Certificates: []string{"test-secret"},
+							Certificates: []string{"$SECRETS/test-cluster__test-namespace__test-secret"},
 						},
 					},
 					Stats: &models.V2Stats{
@@ -265,8 +263,8 @@ func TestTranslate_createEdgeLBPoolObject(t *testing.T) {
 				},
 				Secrets: []*models.V2PoolSecretsItems0{
 					{
-						File:   "dklb-principal.test-cluster__test-namespace__test-secret",
-						Secret: "dklb-principal/test-cluster__test-namespace__test-secret",
+						File:   "test-cluster__test-namespace__test-secret",
+						Secret: "test-cluster__test-namespace__test-secret",
 					},
 				},
 			},
@@ -318,7 +316,6 @@ func TestTranslate_createEdgeLBPoolObject(t *testing.T) {
 func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 
 	cluster.Name = "test-cluster"
-	secretsreflector.SecretsPath = "dklb-principal"
 
 	// returns an IngressTranslator, the mutator function can be used to
 	// customize the object
@@ -384,7 +381,7 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 						},
 						Name:         "test-cluster:test-namespace:test-ingress:https",
 						Protocol:     "HTTPS",
-						Certificates: []string{"test-secret"},
+						Certificates: []string{"$SECRETS/test-cluster__test-namespace__test-secret"},
 					},
 				},
 				Stats: &models.V2Stats{
@@ -393,8 +390,8 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			},
 			Secrets: []*models.V2PoolSecretsItems0{
 				{
-					File:   "dklb-principal.test-cluster__test-namespace__test-secret",
-					Secret: "dklb-principal/test-cluster__test-namespace__test-secret",
+					File:   "test-cluster__test-namespace__test-secret",
+					Secret: "test-cluster__test-namespace__test-secret",
 				},
 			},
 		}
@@ -436,11 +433,11 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			pool: newPool(func(*models.V2Pool) {
 			}),
 			expectedPool: newPool(func(expectedPool *models.V2Pool) {
-				expectedPool.Haproxy.Frontends[0].Certificates = []string{"test-secret-1"}
+				expectedPool.Haproxy.Frontends[0].Certificates = []string{"$SECRETS/test-cluster__test-namespace__test-secret-1"}
 				expectedPool.Secrets = []*models.V2PoolSecretsItems0{
 					{
-						File:   "dklb-principal.test-cluster__test-namespace__test-secret-1",
-						Secret: "dklb-principal/test-cluster__test-namespace__test-secret-1",
+						File:   "test-cluster__test-namespace__test-secret-1",
+						Secret: "test-cluster__test-namespace__test-secret-1",
 					},
 				}
 			}),
@@ -462,8 +459,8 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			expectedPool: newPool(func(expectedPool *models.V2Pool) {
 				expectedPool.Secrets = []*models.V2PoolSecretsItems0{
 					{
-						File:   "dklb-principal.test-cluster__test-namespace__test-secret",
-						Secret: "dklb-principal/test-cluster__test-namespace__test-secret",
+						File:   "test-cluster__test-namespace__test-secret",
+						Secret: "test-cluster__test-namespace__test-secret",
 					},
 					{
 						File:   "foobar",
@@ -501,7 +498,7 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 						},
 						Name:         "test-cluster:test-namespace:test-ingress:https",
 						Protocol:     "HTTPS",
-						Certificates: []string{"test-secret"},
+						Certificates: []string{"$SECRETS/test-cluster__test-namespace__test-secret"},
 					},
 				}
 			}),
@@ -587,7 +584,7 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 						},
 						Name:         "test-cluster:test-namespace:test-ingress:https",
 						Protocol:     "HTTPS",
-						Certificates: []string{"test-secret"},
+						Certificates: []string{"$SECRETS/test-cluster__test-namespace__test-secret"},
 					},
 					{
 						BindAddress: "0.0.0.0",

@@ -173,7 +173,11 @@ func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translat
 	if spec.Frontends.HTTPS != nil {
 		certificates := make([]string, 0)
 		for _, ingressTLS := range ingress.Spec.TLS {
-			certificates = append(certificates, ingressTLS.SecretName)
+			// Compute the filename for the given secret
+			dcosSecretName := secretsreflector.ComputeDCOSSecretName(ingress.Namespace, ingressTLS.SecretName)
+			filename := secretsreflector.ComputeDCOSSecretFileName(dcosSecretName)
+			cert := fmt.Sprintf("$SECRETS/%s", filename)
+			certificates = append(certificates, cert)
 		}
 		httpsFrontend := &models.V2Frontend{
 			BindAddress:  constants.EdgeLBFrontendBindAddress,
@@ -313,9 +317,10 @@ func computeEdgeLBSecretsForIngress(ingress *extsv1beta1.Ingress) []*models.V2Po
 
 	for _, ingressTLS := range ingress.Spec.TLS {
 		dcosSecretName := secretsreflector.ComputeDCOSSecretName(ingress.Namespace, ingressTLS.SecretName)
+		filename := secretsreflector.ComputeDCOSSecretFileName(dcosSecretName)
 		secret := &models.V2PoolSecretsItems0{
 			Secret: dcosSecretName,
-			File:   dklbstrings.ReplaceForwardSlashesWithDots(dcosSecretName),
+			File:   filename,
 		}
 		secrets = append(secrets, secret)
 	}
