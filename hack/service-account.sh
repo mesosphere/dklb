@@ -4,6 +4,12 @@ set -eof pipefail
 
 SERVICE_ACCOUNT_NAME=${1:-dklb-principal}
 
+BASE64_ARGS="-w 0"
+# base64 on macosx doesn't require any command line parameters
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  BASE64_ARGS=
+fi
+
 if ! dcos security org service-accounts show "${SERVICE_ACCOUNT_NAME}" &>/dev/null; then
   # create service account
   dcos security org service-accounts keypair dklb-private-key.pem dklb-public-key.pem
@@ -18,7 +24,7 @@ fi
 
 if ! kubectl -n kube-system get secret dklb-dcos-config &>/dev/null; then
   # extract the service account secret from the json response
-  SERVICE_ACCOUNT_SECRET=$(dcos security secrets get /${SERVICE_ACCOUNT_NAME}/sa --json | jq -r .value | base64 -w 0)
+  SERVICE_ACCOUNT_SECRET=$(dcos security secrets get /${SERVICE_ACCOUNT_NAME}/sa --json | jq -r .value | base64 ${BASE64_ARGS} -)
 
   # create a kubernetes secret with the dcos service account secret
   kubectl create -f - <<EOF
