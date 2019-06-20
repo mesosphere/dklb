@@ -8,8 +8,8 @@ EDGELB_SERVICE_ACCOUNT_NAME := edgelb-principal
 edgelb.package.install: dcos.setup-security.edgelb
 	@dcos package repo remove edgelb-pool-aws || true
 	@dcos package repo remove edgelb-aws || true
-	@dcos package repo add --index=0 edgelb-aws https://edge-lb-infinity-artifacts.s3.amazonaws.com/saved/v1.3.0-262-g01fbea7/edgelb/stub-universe-edgelb.json
-	@dcos package repo add --index=0 edgelb-pool-aws https://edge-lb-infinity-artifacts.s3.amazonaws.com/saved/v1.3.0-262-g01fbea7/edgelb-pool/stub-universe-edgelb-pool.json
+	@dcos package repo add --index=0 edgelb-aws https://edge-lb-infinity-artifacts.s3.amazonaws.com/saved/v1.3.1-235-g50a400a/edgelb/stub-universe-edgelb.json
+	@dcos package repo add --index=0 edgelb-pool-aws https://edge-lb-infinity-artifacts.s3.amazonaws.com/saved/v1.3.1-235-g50a400a/edgelb-pool/stub-universe-edgelb-pool.json
 ifeq ($(SECURITY), strict)
 	@dcos package install --yes $(EDGELB_PACKAGE_NAME) --options=$(CURDIR)/hack/edgelb/package-options.json
 else
