@@ -79,7 +79,6 @@ func TestSecretReflector_translate(t *testing.T) {
 }
 
 func TestSecretReflector_reflect(t *testing.T) {
-	SecretsPath = "dklb-test"
 	cluster.Name = "kubernetes/cluster-1"
 	tests := []struct {
 		description       string
@@ -96,8 +95,8 @@ func TestSecretReflector_reflect(t *testing.T) {
 			},
 			dcosSecretsClient: &fakeDCOSSecretsClient{
 				OnCreate: func(path string) error {
-					if path != "dklb-test/kubernetes.cluster-1__namespace-1__name-1" {
-						return fmt.Errorf("error expected 'dklb-test/kubernetes.cluster-1__namespace-1__name-1' got '%s'", path)
+					if path != "kubernetes.cluster-1__namespace-1__name-1" {
+						return fmt.Errorf("error expected 'kubernetes.cluster-1__namespace-1__name-1' got '%s'", path)
 					}
 					return nil
 				},
@@ -113,8 +112,8 @@ func TestSecretReflector_reflect(t *testing.T) {
 			},
 			dcosSecretsClient: &fakeDCOSSecretsClient{
 				OnUpdate: func(path string) error {
-					if path != "dklb-test/kubernetes.cluster-1__namespace-1__name-1" {
-						return fmt.Errorf("error expected 'dklb-test/kubernetes.cluster-1__namespace-1__name-1' got '%s'", path)
+					if path != "kubernetes.cluster-1__namespace-1__name-1" {
+						return fmt.Errorf("error expected 'kubernetes.cluster-1__namespace-1__name-1' got '%s'", path)
 					}
 					return nil
 				},
@@ -134,13 +133,13 @@ func TestSecretReflector_reflect(t *testing.T) {
 			},
 			dcosSecretsClient: &fakeDCOSSecretsClient{
 				OnCreate: func(path string) error {
-					if path == "dklb-test/kubernetes.cluster-1__namespace-1__name-1" {
+					if path == "kubernetes.cluster-1__namespace-1__name-1" {
 						return errors.New("fake error")
 					}
 					return nil
 				},
 			},
-			expectedError: errors.New("failed to create DC/OS secret dklb-test/kubernetes.cluster-1__namespace-1__name-1: fake error"),
+			expectedError: errors.New("failed to create DC/OS secret kubernetes.cluster-1__namespace-1__name-1: fake error"),
 			kubeClient:    fake.NewSimpleClientset(defaultTestKubeSecret),
 			kubeSecret:    defaultTestKubeSecret.DeepCopy(),
 		},
@@ -161,7 +160,7 @@ func TestSecretReflector_reflect(t *testing.T) {
 			dcosSecret: &dcos.SecretsV1Secret{
 				Value: "hello\nworld\n",
 			},
-			expectedError: errors.New("failed to create DC/OS secret dklb-test/kubernetes.cluster-1__namespace-1__name-1: fake error"),
+			expectedError: errors.New("failed to create DC/OS secret kubernetes.cluster-1__namespace-1__name-1: fake error"),
 			dcosSecretsClient: &fakeDCOSSecretsClient{
 				OnCreate: func(path string) error { return errors.New("fake error") },
 			},
@@ -172,7 +171,7 @@ func TestSecretReflector_reflect(t *testing.T) {
 			dcosSecret: &dcos.SecretsV1Secret{
 				Value: "hello\nworld\n",
 			},
-			expectedError: errors.New("failed to update DC/OS secret dklb-test/kubernetes.cluster-1__namespace-1__name-1: fake error"),
+			expectedError: errors.New("failed to update DC/OS secret kubernetes.cluster-1__namespace-1__name-1: fake error"),
 			dcosSecretsClient: &fakeDCOSSecretsClient{
 				OnUpdate: func(string) error { return errors.New("fake error") },
 			},
@@ -216,7 +215,7 @@ func TestSecretReflector_reflect(t *testing.T) {
 				OnUpdate: func(string) error { return fmt.Errorf("fake update error") },
 				resp:     &http.Response{StatusCode: http.StatusConflict},
 			},
-			expectedError: fmt.Errorf("failed to update DC/OS secret dklb-test/kubernetes.cluster-1__namespace-1__name-1: fake update error"),
+			expectedError: fmt.Errorf("failed to update DC/OS secret kubernetes.cluster-1__namespace-1__name-1: fake update error"),
 			kubeClient:    fake.NewSimpleClientset(defaultTestKubeSecret),
 			kubeSecret:    defaultTestKubeSecret.DeepCopy(),
 		},
@@ -296,8 +295,7 @@ func TestSecretReflectorNew(t *testing.T) {
 	dcosSecretsClient := newFakeDCOSSecretsClient()
 	kubeCache := dklbcache.NewInformerBackedResourceCache(cachetestutil.NewFakeSharedInformerFactory(defaultTestKubeSecret))
 	kubeClient := fake.NewSimpleClientset(defaultTestKubeSecret)
-	secretsPath := "dklb-test"
 
-	sr := New(dcosSecretsClient, secretsPath, kubeCache, kubeClient)
+	sr := New(dcosSecretsClient, kubeCache, kubeClient)
 	assert.NotNil(t, sr)
 }

@@ -24,13 +24,6 @@ const (
 	defaultTimeout     = 5 * time.Second
 )
 
-// SecretsPath stores the path where DC/OS secrets are created by dklb
-// and read by edgelb. It's a package global because of how the rest
-// of the code was layed out initially. This should be safe because
-// each dklb instance will have only one SecretsReflector
-// instance. This variable should ideally be setup by New function.
-var SecretsPath string
-
 // SecretsReflector defines the interface exposed by this package.
 type SecretsReflector interface {
 	Reflect(namespace, name string) error
@@ -51,8 +44,7 @@ type secretsReflector struct {
 }
 
 // New returns an instance of SecretsReflector.
-func New(dcosSecretsClient DCOSSecretsClient, secretsPath string, kubeCache dklbcache.KubernetesResourceCache, kubeClient kubernetes.Interface) SecretsReflector {
-	SecretsPath = secretsPath
+func New(dcosSecretsClient DCOSSecretsClient, kubeCache dklbcache.KubernetesResourceCache, kubeClient kubernetes.Interface) SecretsReflector {
 	return &secretsReflector{
 		dcosSecretsClient: dcosSecretsClient,
 		kubeCache:         kubeCache,
