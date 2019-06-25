@@ -9,7 +9,7 @@
 DCOS_TERRAFORM_PLATFORM ?= aws
 
 # TERRAFORM_DCOS_VERSION_gcp is the version of DC/OS Terraform GCP to run
-TERRAFORM_DCOS_VERSION_gcp := 0.1.5
+TERRAFORM_DCOS_VERSION_gcp := 0.2.0
 
 # TERRAFORM_DCOS_VERSION_aws is the version of DC/OS Terraform AWS to run
 TERRAFORM_DCOS_VERSION_aws := 0.2.2
@@ -59,7 +59,7 @@ DCOS_INSTANCE_OS ?= centos_7.5
 DEFAULT_DCOS_MACHINE_TYPE_gcp := n1-standard-8
 
 # DEFAULT_DCOS_BOOTSTRAP_MACHINE_TYPE_gcp is the default bootstrap machine type on GCP.
-DEFAULT_DCOS_BOOTSTRAP_MACHINE_TYPE_gcp := n1-standard-2
+DEFAULT_DCOS_BOOTSTRAP_MACHINE_TYPE_gcp := n1-standard-4
 
 # DEFAULT_DCOS_MACHINE_TYPE_aws is the default machine type on AWS.
 DEFAULT_DCOS_MACHINE_TYPE_aws := m5.2xlarge
