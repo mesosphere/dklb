@@ -17,7 +17,7 @@ if ! dcos security org service-accounts show "${SERVICE_ACCOUNT_NAME}" &>/dev/nu
   dcos security secrets create-sa-secret dklb-private-key.pem ${SERVICE_ACCOUNT_NAME} ${SERVICE_ACCOUNT_NAME}/sa
 
   # grant the possibility to manage and list the secrets
-  dcos security org users grant dklb-principal dcos:secrets:default:/ create
+  dcos security org users grant dklb-principal dcos:secrets:default:/* create
   dcos security org users grant dklb-principal dcos:secrets:default:/${SERVICE_ACCOUNT_NAME}/* full
   dcos security org users grant dklb-principal dcos:secrets:list:default:/${SERVICE_ACCOUNT_NAME} read
 fi
