@@ -23,9 +23,57 @@ toc::[]
 
 === Using `dklb` to provision a Kubernetes Ingress with TLS enabled
 
-Please read <<20-provisioning-ingresses.adoc#,Provisioning Kubernetes Ingress(es)>> first, before continuing.
+Please read <<20-provisioning-ingresses.adoc#,Provisioning Kubernetes
+Ingress(es)>> first, before continuing.
 
-To expose an HTTP application running on MKE with a TLS certificate to either inside or outside the DC/OS cluster, a Kubernetes https://kubernetes.io/docs/concepts/services-networking/ingress/[`Ingress`] resource must be created.
+To expose an HTTP application running on MKE with a TLS certificate to either
+inside or outside the DC/OS cluster, a Kubernetes
+https://kubernetes.io/docs/concepts/services-networking/ingress/[`Ingress`]
+resource must be created.
+
+=== Enabling TLS
+
+The need to enable TLS for a given Ingress resource is signaled by the presence
+of a non-empty `.spec.tls` field. The presence of that field will cause dklb to
+enable HTTPS for the Ingress resource. The user is responsible for making sure
+that the specified secrets contain certificates for all hosts specified in it.
+EdgeLB will know how to pick the best certificate for a given host.
+
+=== Customizing the target EdgeLB pool
+
+You can use the same options to customize you EdgeLB pool as described
+<<20-provisioning-ingresses.adoc#,here>>.
+
+=== Customizing HTTP and HTTPS frontend bind ports
+
+By default `dklb` will use port 80 for the HTTP frontend port and 443 for the
+HTTPS frontend port. You can define custom ports via the `.frontends.http.port`
+and `.frontends.https.port` fields.
+
+[source,yaml]
+----
+kubernetes.dcos.io/dklb-config: |
+  frontends:
+    http:
+      mode: [disabled|enabled|redirect]
+      port: <frontend-http-bind-port>
+    https:
+      port: <frontend-https-bind-port>
+----
+
+The `.frontends.http.mode` field has the following semantics:
+
+[frame="topbot",options="header"]
+|================================
+| Value    | Description
+| disabled | Plain HTTP serving will be disabled altogether (i.e. the <cluster-name>:<namespace>:<name>:http EdgeLB frontend will be removed from the target EdgeLB pool).
+| enabled  | Default. Plain HTTP serving will be enabled., and traffic will be sent to the intended backends.
+| redirect | The plain HTTP frontend will respond with 307 TEMPORARY REDIRECT to all requests.
+|================================
+
+WARNING: Changing the value of this field after the `Ingress` resource is created is supported, but may cause disruption (as the target EdgeLB pool will most likely be re-deployed).
+
+== Example
 
 === Exposing an HTTPS "echo" application
 
@@ -37,7 +85,8 @@ $ kubectl run --restart=Never --image hashicorp/http-echo --labels app=http-echo
 $ kubectl expose pod http-echo-1 --port 80 --target-port 80 --type NodePort --name "http-echo-1"
 ----
 
-Create a self-signed certificate for dummy domain foo.bar.com and store it in a Kubernetes secret. The Kubernetes secret is called `foo-secret`.
+Create a self-signed certificate for dummy domain foo.bar.com and store it in a
+Kubernetes secret. The Kubernetes secret is called `foo-secret`.
 
 [source,console]
 ----
@@ -45,7 +94,9 @@ $ openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout tls.key -out tls.c
 $ kubectl create secret tls foo-secret --key tls.key --cert tls.crt
 ----
 
-Create a Kubernetes ingress with TLS enabled. The TLS Secret was stored in `foo-secret` in the previous step. The EdgeLB pool is configured to disable HTTP port and setup HTTPS on port 8443.
+Create a Kubernetes ingress with TLS enabled. The TLS Secret was stored in
+`foo-secret` in the previous step. The EdgeLB pool is configured to disable HTTP
+port and setup HTTPS on port 8443.
 
 [source,console]
 ----
@@ -64,6 +115,8 @@ metadata:
               mode: disabled
             https:
               port: 8443
+  labels:
+    owner: dklb
 spec:
   tls:
   - hosts:
@@ -101,7 +154,8 @@ $ dcos edgelb status foo
   edgelb-pool-0-server  dcos-edgelb.pools.foo__edgelb-pool-0-server__<RANDOM UUID>                         TASK_RUNNING
 ----
 
-Check EdgeLB is using the self-signed certificate to serve on port 8443. Notice the CN is `foo.bar.com`.
+Check EdgeLB is using the self-signed certificate to serve on port 8443. Notice
+the CN is `foo.bar.com`.
 
 [source,console]
 ----
@@ -118,7 +172,8 @@ Certificate chain
    i:/CN=foo.bar.com
 ----
 
-Check you can access the Kubernetes service via the EdgeLB pool with TLS enabled and validate the self-signed certificate.
+Check you can access the Kubernetes service via the EdgeLB pool with TLS enabled
+and validate the self-signed certificate.
 
 [source,console]
 ----
@@ -128,10 +183,14 @@ Hello from http-echo-1!
 
 === Cleaning up
 
-After testing finishes, cleanup of the Kubernetes pods, services and ingresses and of the target EdgeLB pool can be done by running the following commands:
+After testing finishes, cleanup of the Kubernetes pods, services and ingresses
+and of the target EdgeLB pool can be done by running the following commands:
 
+[source,console]
+----
 $ kubectl delete ingress --selector "owner=dklb"
 $ kubectl delete svc --selector "owner=dklb"
 $ kubectl delete pod --selector "owner=dklb"
+----
 
 The `dklb-foo` EdgeLB pool will be automatically deleted.
