@@ -1,0 +1,133 @@
+:sectnums:
+:numbered:
+:toc: macro
+:toc-title:
+:toclevels: 3
+:numbered!:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+= Provisioning Kubernetes Ingress(es) with TLS
+:icons: font
+
+[discrete]
+== Table of Contents
+toc::[]
+
+== Instructions
+
+=== Using `dklb` to provision a Kubernetes Ingress with TLS enabled
+
+To expose an HTTP application running on MKE with a TLS certificate to either inside or outside the DC/OS cluster, a Kubernetes https://kubernetes.io/docs/concepts/services-networking/ingress/[`Ingress`] resource must be created.
+
+Create an HTTP "echo" application and a service of type NodePort
+
+[source,console]
+----
+$ kubectl run --restart=Never --image hashicorp/http-echo --labels app=http-echo-1,owner=dklb --port 80 http-echo-1 -- -listen=:80 --text='Hello from http-echo-1!'
+$ kubectl expose pod http-echo-1 --port 80 --target-port 80 --type NodePort --name "http-echo-1"
+----
+
+Create a self-signed certificate for dummy domain foo.bar.com and store it in a Kubernetes secret. The Kubernetes secret is called `foo-secret`.
+
+[source,console]
+----
+$ openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout tls.key -out tls.crt -subj "/CN=foo.bar.com"
+$ kubectl create secret tls foo-secret --key tls.key --cert tls.crt
+----
+
+Create a Kubernetes ingress with TLS enabled. The TLS Secret was stored in `foo-secret` in the previous step. The EdgeLB pool is configured to disable HTTP port and setup HTTPS on port 8443.
+
+[source,console]
+----
+$ kubectl create -f - <<EOF
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: foo
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: edgelb
+    kubernetes.dcos.io/dklb-config: |
+          name: foo
+          frontends:
+            http:
+              mode: disabled
+            https:
+              port: 8443
+spec:
+  tls:
+  - hosts:
+    - foo.bar.com
+    secretName: foo-secret
+  rules:
+    - host: "foo.bar.com"
+      http:
+        paths:
+        - backend:
+            serviceName: http-echo-1
+            servicePort: 80
+EOF
+----
+
+Wait for ingress to have an IP address assigned.
+
+[source,console]
+----
+$ kubectl get ingress foo
+NAME   HOSTS         ADDRESS                            PORTS     AGE
+foo    foo.bar.com   <AWS PRIVATE IP>,<AWS PUBLIC IP>   80, 443   57s
+----
+
+Confirm EdgeLB created the pool and that it's running.
+
+[source,console]
+----
+$ dcos edgelb list
+  NAME  APIVERSION  COUNT  ROLE          PORTS
+  foo   V2          1      slave_public
+
+$ dcos edgelb status foo
+  NAME                  TASK ID                                                                            STATE
+  edgelb-pool-0-server  dcos-edgelb.pools.foo__edgelb-pool-0-server__<RANDOM UUID>                         TASK_RUNNING
+----
+
+Check EdgeLB is using the self-signed certificate to serve on port 8443. Notice the CN is `foo.bar.com`.
+
+[source,console]
+----
+$ openssl s_client -showcerts -servername server -connect <AWS PUBLIC IP ADDRESS>:8443
+CONNECTED(00000003)
+depth=0 CN = foo.bar.com
+verify error:num=18:self signed certificate
+verify return:1
+depth=0 CN = foo.bar.com
+verify return:1
+---
+Certificate chain
+ 0 s:/CN=foo.bar.com
+   i:/CN=foo.bar.com
+----
+
+Check you can access the Kubernetes service via the EdgeLB pool with TLS enabled and validate the self-signed certificate.
+
+[source,console]
+----
+$ curl --cacert tls.crt --resolve foo.bar.com:8443:<AWS_PUBLIC_IP_ADDRESS> https://foo.bar.com:8443/
+Hello from http-echo-1!
+----
+
+=== Cleaning up
+
+After testing finishes, cleanup of the Kubernetes pods, services and ingresses and of the target EdgeLB pool can be done by running the following commands:
+
+$ kubectl delete ingress --selector "owner=dklb"
+$ kubectl delete svc --selector "owner=dklb"
+$ kubectl delete pod --selector "owner=dklb"
+
+The `dklb-foo` EdgeLB pool will be automatically deleted.
