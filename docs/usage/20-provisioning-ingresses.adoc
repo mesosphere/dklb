@@ -171,11 +171,6 @@ IMPORTANT: This field cannot be changed or removed after the `Service` resource 
 In certain scenarios, it may be desirable to use a pre-existing EdgeLB pool to expose a Kubernetes ingress (instead of having `dklb` creating one).
 This can easily be achieved by providing the name of the pre-existing EdgeLB pool as the value of the `.name` field of the configuration object.
 
-[[limitations]]
-== Limitations
-
-* HTTPS is not supported at the moment.
-
 == Example
 
 === Exposing two HTTP "echo" applications
