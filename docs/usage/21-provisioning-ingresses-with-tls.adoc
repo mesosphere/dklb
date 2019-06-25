@@ -27,6 +27,8 @@ Please read <<20-provisioning-ingresses.adoc#,Provisioning Kubernetes Ingress(es
 
 To expose an HTTP application running on MKE with a TLS certificate to either inside or outside the DC/OS cluster, a Kubernetes https://kubernetes.io/docs/concepts/services-networking/ingress/[`Ingress`] resource must be created.
 
+=== Exposing an HTTPS "echo" application
+
 Create an HTTP "echo" application and a service of type NodePort
 
 [source,console]
