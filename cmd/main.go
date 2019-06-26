@@ -186,7 +186,7 @@ func main() {
 	// Login with DC/OS
 	dcosClient, err := dcosLogin(saConfig)
 	if err != nil {
-		log.Fatalf("failed to built DC/OS client: %v", err)
+		log.Fatalf("failed login with DC/OS: %v", err)
 	}
 
 	// Launch the default backend.
