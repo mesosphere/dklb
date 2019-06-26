@@ -1,5 +1,7 @@
 package api
 
-var IngressEdgeLBHTTPModeDisabled = "disabled"
-var IngressEdgeLBHTTPModeEnabled = "enabled"
-var IngressEdgeLBHTTPModeRedirect = "redirect"
+const (
+	IngressEdgeLBHTTPModeDisabled = "disabled"
+	IngressEdgeLBHTTPModeEnabled  = "enabled"
+	IngressEdgeLBHTTPModeRedirect = "redirect"
+)

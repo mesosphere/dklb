@@ -25,10 +25,10 @@ const (
 	edgeLBHostCatchAllRegex = "^.*$"
 	// edgeLBIngressBackendNameFormatString is the format string used to compute the name for an EdgeLB backend corresponding to a given Ingress backend.
 	// The resulting name is of the form "<cluster-name>:<ingress-namespace>:<ingress-name>:<service-name>:<service-port>".
-	edgeLBIngressBackendNameFormatString = "%s" + separator + "%s" + separator + "%s" + separator + "%s" + separator + "%s"
+	edgeLBIngressBackendNameFormatString = "%s:%s:%s:%s:%s"
 	// edgeLBIngressFrontendNameFormatString is the format string used to compute the name for an EdgeLB frontend corresponding to a given Ingress resource.
 	// The resulting name is of the form "<cluster-name>:<ingress-namespace>:<ingress-name>:<protocol>".
-	edgeLBIngressFrontendNameFormatString = "%s" + separator + "%s" + separator + "%s" + separator + "%s"
+	edgeLBIngressFrontendNameFormatString = "%s:%s:%s:%s"
 	// edgeLBPathCatchAllRegex is the regular expression used by EdgeLB to match all paths.
 	edgeLBPathCatchAllRegex = "^.*$"
 	// edgeLBPathRegexFormatString is the format string used to compute the regular expression used by EdgeLB to match a given path.

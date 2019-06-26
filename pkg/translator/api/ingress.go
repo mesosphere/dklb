@@ -6,6 +6,8 @@ import (
 
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/util/validation"
+
+	"github.com/mesosphere/dklb/pkg/util/pointers"
 )
 
 // IngressEdgeLBPoolHTTPFrontendSpec contains the specification of the HTTP EdgeLB frontend associated with a given Ingress resource.
@@ -59,7 +61,7 @@ func (o *IngressEdgeLBPoolSpec) SetDefaults(ingress *extsv1beta1.Ingress) {
 		o.Frontends.HTTP.Port = &DefaultEdgeLBPoolHTTPPort
 	}
 	if o.Frontends.HTTP.Mode == nil || *o.Frontends.HTTP.Mode == "" {
-		o.Frontends.HTTP.Mode = &IngressEdgeLBHTTPModeEnabled
+		o.Frontends.HTTP.Mode = pointers.NewString(IngressEdgeLBHTTPModeEnabled)
 	}
 	if IsIngressTLSEnabled(ingress) {
 		if o.Frontends.HTTPS == nil {
@@ -82,16 +84,16 @@ func (o *IngressEdgeLBPoolSpec) Validate(obj *extsv1beta1.Ingress) error {
 	}
 	// Validate that the HTTP port is valid.
 	if err := validation.IsValidPortNum(int(*o.Frontends.HTTP.Port)); err != nil {
-		return fmt.Errorf("%d is not a valid HTTP port number", *o.Frontends.HTTP.Port)
+		return fmt.Errorf(".frontends.http.port %d is not a valid HTTP port number (valid range is between 1 and 65535)", *o.Frontends.HTTP.Port)
 	}
 	// Validate that the HTTP mode is valid.
 	if err := isValidHTTPMode(*o.Frontends.HTTP.Mode); err != nil {
-		return fmt.Errorf("%s is not a valid HTTP mode", *o.Frontends.HTTP.Mode)
+		return fmt.Errorf(".frontends.http.mode %s is not a valid HTTP mode", *o.Frontends.HTTP.Mode)
 	}
 	// Validate that the HTTPS port is valid.
 	if o.Frontends.HTTPS != nil {
 		if err := validation.IsValidPortNum(int(*o.Frontends.HTTPS.Port)); err != nil {
-			return fmt.Errorf("%d is not a valid HTTPS port number", *o.Frontends.HTTPS.Port)
+			return fmt.Errorf(".frontends.https.port %d is not a valid HTTPS port number (valid range is between 1 and 65535)", *o.Frontends.HTTPS.Port)
 		}
 	}
 	return nil

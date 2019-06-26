@@ -143,7 +143,7 @@ func TestTranslate_createEdgeLBPoolObject(t *testing.T) {
 					},
 					Frontends: &translatorapi.IngressEdgeLBPoolFrontendsSpec{
 						HTTP: &translatorapi.IngressEdgeLBPoolHTTPFrontendSpec{
-							Mode: &translatorapi.IngressEdgeLBHTTPModeEnabled,
+							Mode: pointers.NewString(translatorapi.IngressEdgeLBHTTPModeEnabled),
 							Port: pointers.NewInt32(80),
 						},
 					},
@@ -221,7 +221,7 @@ func TestTranslate_createEdgeLBPoolObject(t *testing.T) {
 					},
 					Frontends: &translatorapi.IngressEdgeLBPoolFrontendsSpec{
 						HTTP: &translatorapi.IngressEdgeLBPoolHTTPFrontendSpec{
-							Mode: &translatorapi.IngressEdgeLBHTTPModeEnabled,
+							Mode: pointers.NewString(translatorapi.IngressEdgeLBHTTPModeEnabled),
 							Port: pointers.NewInt32(80),
 						},
 						HTTPS: &translatorapi.IngressEdgeLBPoolHTTPSFrontendSpec{
@@ -293,7 +293,7 @@ func TestTranslate_createEdgeLBPoolObject(t *testing.T) {
 					},
 					Frontends: &translatorapi.IngressEdgeLBPoolFrontendsSpec{
 						HTTP: &translatorapi.IngressEdgeLBPoolHTTPFrontendSpec{
-							Mode: &translatorapi.IngressEdgeLBHTTPModeDisabled,
+							Mode: pointers.NewString(translatorapi.IngressEdgeLBHTTPModeDisabled),
 						},
 						HTTPS: &translatorapi.IngressEdgeLBPoolHTTPSFrontendSpec{
 							Port: pointers.NewInt32(443),
@@ -346,7 +346,7 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 				},
 				Frontends: &translatorapi.IngressEdgeLBPoolFrontendsSpec{
 					HTTP: &translatorapi.IngressEdgeLBPoolHTTPFrontendSpec{
-						Mode: &translatorapi.IngressEdgeLBHTTPModeDisabled,
+						Mode: pointers.NewString(translatorapi.IngressEdgeLBHTTPModeDisabled),
 					},
 					HTTPS: &translatorapi.IngressEdgeLBPoolHTTPSFrontendSpec{
 						Port: pointers.NewInt32(443),
@@ -474,7 +474,7 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			backendMap:     IngressBackendNodePortMap{},
 			expectedChange: true,
 			it: newIngressTranslator(func(it *IngressTranslator) {
-				it.spec.Frontends.HTTP.Mode = &translatorapi.IngressEdgeLBHTTPModeEnabled
+				it.spec.Frontends.HTTP.Mode = pointers.NewString(translatorapi.IngressEdgeLBHTTPModeEnabled)
 				it.spec.Frontends.HTTP.Port = pointers.NewInt32(80)
 			}),
 			pool: newPool(func(pool *models.V2Pool) {
@@ -539,7 +539,7 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			backendMap:     IngressBackendNodePortMap{},
 			expectedChange: true,
 			it: newIngressTranslator(func(it *IngressTranslator) {
-				it.spec.Frontends.HTTP.Mode = &translatorapi.IngressEdgeLBHTTPModeEnabled
+				it.spec.Frontends.HTTP.Mode = pointers.NewString(translatorapi.IngressEdgeLBHTTPModeEnabled)
 				it.spec.Frontends.HTTP.Port = pointers.NewInt32(80)
 			}),
 			pool: newPool(func(pool *models.V2Pool) {
