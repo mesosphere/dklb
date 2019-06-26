@@ -42,7 +42,7 @@ $ kubectl create -f docs/deployment/00-prereqs.yaml
 $ kubectl create -f docs/deployment/10-deployment.yaml
 ----
 
-This will create DC/OS service account for dklb, a Kubernetes secret named `dklb-dcos-config` and `dklb` deployment in the `kube-system` namespace having two replicas:
+This will create a DC/OS service account for dklb, a Kubernetes secret named `dklb-dcos-config` and `dklb` deployment in the `kube-system` namespace having two replicas:
 
 [source,console]
 ----

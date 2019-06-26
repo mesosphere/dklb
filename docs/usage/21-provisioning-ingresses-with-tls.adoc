@@ -41,7 +41,7 @@ EdgeLB will know how to pick the best certificate for a given host.
 
 === Customizing the target EdgeLB pool
 
-You can use the same options to customize you EdgeLB pool as described
+You can use the same options to customize your EdgeLB pool as described
 <<20-provisioning-ingresses.adoc#,here>>.
 
 === Customizing HTTP and HTTPS frontend bind ports
@@ -67,7 +67,7 @@ The `.frontends.http.mode` field has the following semantics:
 |================================
 | Value    | Description
 | disabled | Plain HTTP serving will be disabled altogether (i.e. the <cluster-name>:<namespace>:<name>:http EdgeLB frontend will be removed from the target EdgeLB pool).
-| enabled  | Default. Plain HTTP serving will be enabled., and traffic will be sent to the intended backends.
+| enabled  | Default. Plain HTTP serving will be enabled, and traffic will be sent to the intended backends.
 | redirect | The plain HTTP frontend will respond with 307 TEMPORARY REDIRECT to all requests.
 |================================
 
@@ -183,7 +183,7 @@ Hello from http-echo-1!
 
 === Cleaning up
 
-After testing finishes, cleanup of the Kubernetes pods, services and ingresses
+Cleanup of the Kubernetes pods, services and ingresses
 and of the target EdgeLB pool can be done by running the following commands:
 
 [source,console]
