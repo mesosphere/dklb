@@ -1014,7 +1014,7 @@ var _ = Describe("Ingress", func() {
 					_ = translatorapi.SetIngressEdgeLBPoolSpec(ingress, &translatorapi.IngressEdgeLBPoolSpec{
 						Frontends: &translatorapi.IngressEdgeLBPoolFrontendsSpec{
 							HTTP: &translatorapi.IngressEdgeLBPoolHTTPFrontendSpec{
-								Mode: &translatorapi.IngressEdgeLBHTTPModeDisabled,
+								Mode: pointers.NewString(translatorapi.IngressEdgeLBHTTPModeDisabled),
 							},
 						},
 					})
