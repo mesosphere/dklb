@@ -336,7 +336,7 @@ func run(ctx context.Context, kubeClient kubernetes.Interface, er record.EventRe
 func dcosLogin(saConfig dcos.ServiceAccountOptions) (*dcos.APIClient, error) {
 	// Empty config, without auth token
 	config := dcos.NewConfig(nil)
-	config.SetURL("https://leader.mesos")
+	config.SetURL("https://master.mesos")
 
 	// Empty client
 	client, err := dcos.NewClientWithConfig(config)
