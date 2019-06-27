@@ -1,0 +1,65 @@
+:sectnums:
+:numbered:
+:toc: macro
+:toc-title:
+:toclevels: 3
+:numbered!:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+= Cutting a `dklb` release
+:icons: font
+
+[discrete]
+== Table of Contents
+toc::[]
+
+== Prerequisites
+
+To cut a `dklb` release, the following software is required:
+
+* https://git-scm.com/[`git`].
+* https://www.gnu.org/software/make/[`make`].
+* https://www.docker.com/[`docker`].
+* https://golang.org/[Go] 1.12.4+.
+** `dklb` makes use of the https://github.com/golang/go/wiki/Modules[Go modules] experiment present in Go 1.11+ only.
+** Go 1.11.3 and earlier were found to have issues computing the checksum of certain modules.
+* https://pre-commit.com/[`pre-commit`] installed according to https://pre-commit.com/#install[these instructions] and configured according to https://github.com/mesosphere/eng-tag/blob/master/style-guide.md#style-validation[these instructions].
+
+A Docker Hub account with read/write access to the https://hub.docker.com/r/mesosphere/dklb[`mesosphere/dklb`] image repository.
+
+== Release
+
+First, update <<./../../RELEASE-NOTES.adoc,RELEASE-NOTES.adoc>>, the <<./../deployment/10-deployment.yaml,deployment file>> to use the `dklb` Docker image you're about to create and open a PR.
+
+To push the `dklb` docker image, it is required to login to Docker Hub with adequate credentials:
+[source,console]
+----
+$ docker login
+----
+
+To build the image you need access to EdgeLB private github repo. This is done with a https://github.com/settings/tokens[`Github token`].
+----
+$ export GITHUB_TOKEN=<YOUR GITHUB TOKEN>
+----
+
+To cut a release run these steps on a terminal:
+[source,console]
+----
+$ VERSION=<TARGET_VERSION> make docker
+$ docker push mesosphere/dklb:<TARGET_VERSION>
+----
+
+After merging the PR don't forget to tag and push.
+[souce,console]
+----
+$ git checkout master
+$ git pull --rebase
+$ git tag <TARGET_VERSION>
+$ git push --tags
+----
