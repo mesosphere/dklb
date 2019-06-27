@@ -19,6 +19,24 @@ endif::[]
 == Table of Contents
 toc::[]
 
+== v0.1.0-alpha.10
+
+=== Breaking changes
+
+* The EdgeLB frontend created for the HTTP listener and currently named according to the <cluster-name>:<namespace>:<name> format will be renamed to match <cluster-name>:<namespace>:<name>:<http or https>.
+
+=== Improvements
+
+* TLS for Ingress
+
+=== Bug fixes
+
+* Fix a bug which caused `dklb` to pick up Ingresses without the required annotation (https://github.com/mesosphere/dklb/pull/32[#32]).
+
+=== Documentation
+
+* Add example to show how to deploy an Ingress with TLS enabled https://github.com/mesosphere/dklb/pull/32[#32]).
+
 == v0.1.0-alpha.9
 
 === Breaking changes
