@@ -145,7 +145,7 @@ func (s *secretsReflector) reflect(kubeSecret *corev1.Secret, dcosSecret *dcos.S
 }
 
 func ComputeDCOSSecretName(namespace, kubeSecretName string) string {
-	return fmt.Sprintf("%s__%s__%s", dklbstrings.ReplaceForwardSlashesWithDots(cluster.Name), namespace, kubeSecretName)
+	return fmt.Sprintf("%s__%s__%s", dklbstrings.ReplaceForwardSlashesWithUnderscores(cluster.Name), namespace, kubeSecretName)
 }
 
 func ComputeDCOSSecretFileName(dcosSecretName string) string {

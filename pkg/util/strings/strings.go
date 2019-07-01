@@ -32,3 +32,8 @@ func ReplaceForwardSlashes(v, r string) string {
 func ReplaceForwardSlashesWithDots(v string) string {
 	return ReplaceForwardSlashes(v, ".")
 }
+
+// ReplaceForwardSlashesWithUnderscores returns a string built from the specified one by replacing all forward slashes ("/") with underscores ("_").
+func ReplaceForwardSlashesWithUnderscores(v string) string {
+	return ReplaceForwardSlashes(v, "_")
+}

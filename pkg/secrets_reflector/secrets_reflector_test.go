@@ -95,8 +95,8 @@ func TestSecretReflector_reflect(t *testing.T) {
 			},
 			dcosSecretsClient: &fakeDCOSSecretsClient{
 				OnCreate: func(path string) error {
-					if path != "kubernetes.cluster-1__namespace-1__name-1" {
-						return fmt.Errorf("error expected 'kubernetes.cluster-1__namespace-1__name-1' got '%s'", path)
+					if path != "kubernetes_cluster-1__namespace-1__name-1" {
+						return fmt.Errorf("error expected 'kubernetes_cluster-1__namespace-1__name-1' got '%s'", path)
 					}
 					return nil
 				},
@@ -112,8 +112,8 @@ func TestSecretReflector_reflect(t *testing.T) {
 			},
 			dcosSecretsClient: &fakeDCOSSecretsClient{
 				OnUpdate: func(path string) error {
-					if path != "kubernetes.cluster-1__namespace-1__name-1" {
-						return fmt.Errorf("error expected 'kubernetes.cluster-1__namespace-1__name-1' got '%s'", path)
+					if path != "kubernetes_cluster-1__namespace-1__name-1" {
+						return fmt.Errorf("error expected 'kubernetes_cluster-1__namespace-1__name-1' got '%s'", path)
 					}
 					return nil
 				},
@@ -133,13 +133,13 @@ func TestSecretReflector_reflect(t *testing.T) {
 			},
 			dcosSecretsClient: &fakeDCOSSecretsClient{
 				OnCreate: func(path string) error {
-					if path == "kubernetes.cluster-1__namespace-1__name-1" {
+					if path == "kubernetes_cluster-1__namespace-1__name-1" {
 						return errors.New("fake error")
 					}
 					return nil
 				},
 			},
-			expectedError: errors.New("failed to create DC/OS secret kubernetes.cluster-1__namespace-1__name-1: fake error"),
+			expectedError: errors.New("failed to create DC/OS secret kubernetes_cluster-1__namespace-1__name-1: fake error"),
 			kubeClient:    fake.NewSimpleClientset(defaultTestKubeSecret),
 			kubeSecret:    defaultTestKubeSecret.DeepCopy(),
 		},
@@ -160,7 +160,7 @@ func TestSecretReflector_reflect(t *testing.T) {
 			dcosSecret: &dcos.SecretsV1Secret{
 				Value: "hello\nworld\n",
 			},
-			expectedError: errors.New("failed to create DC/OS secret kubernetes.cluster-1__namespace-1__name-1: fake error"),
+			expectedError: errors.New("failed to create DC/OS secret kubernetes_cluster-1__namespace-1__name-1: fake error"),
 			dcosSecretsClient: &fakeDCOSSecretsClient{
 				OnCreate: func(path string) error { return errors.New("fake error") },
 			},
@@ -171,7 +171,7 @@ func TestSecretReflector_reflect(t *testing.T) {
 			dcosSecret: &dcos.SecretsV1Secret{
 				Value: "hello\nworld\n",
 			},
-			expectedError: errors.New("failed to update DC/OS secret kubernetes.cluster-1__namespace-1__name-1: fake error"),
+			expectedError: errors.New("failed to update DC/OS secret kubernetes_cluster-1__namespace-1__name-1: fake error"),
 			dcosSecretsClient: &fakeDCOSSecretsClient{
 				OnUpdate: func(string) error { return errors.New("fake error") },
 			},
@@ -215,7 +215,7 @@ func TestSecretReflector_reflect(t *testing.T) {
 				OnUpdate: func(string) error { return fmt.Errorf("fake update error") },
 				resp:     &http.Response{StatusCode: http.StatusConflict},
 			},
-			expectedError: fmt.Errorf("failed to update DC/OS secret kubernetes.cluster-1__namespace-1__name-1: fake update error"),
+			expectedError: fmt.Errorf("failed to update DC/OS secret kubernetes_cluster-1__namespace-1__name-1: fake update error"),
 			kubeClient:    fake.NewSimpleClientset(defaultTestKubeSecret),
 			kubeSecret:    defaultTestKubeSecret.DeepCopy(),
 		},
