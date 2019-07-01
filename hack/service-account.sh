@@ -18,6 +18,9 @@ if ! dcos security org service-accounts show "${SERVICE_ACCOUNT_NAME}" &>/dev/nu
 
   # grant the possibility to manage and list the secrets
   dcos security org users grant dklb-principal dcos:secrets:default:/* create
+  # required in case the Kubernetes secret changes and dklb needs to update the
+  # corresponding DC/OS secret
+  dcos security org users grant dklb-principal dcos:secrets:default:/* update
   dcos security org users grant dklb-principal dcos:secrets:default:/${SERVICE_ACCOUNT_NAME}/* full
   dcos security org users grant dklb-principal dcos:secrets:list:default:/${SERVICE_ACCOUNT_NAME} read
 fi
