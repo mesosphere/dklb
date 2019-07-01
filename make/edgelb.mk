@@ -5,7 +5,7 @@ EDGELB_PACKAGE_NAME := edgelb
 EDGELB_SERVICE_ACCOUNT_NAME := edgelb-principal
 
 # EDGELB_PACKAGE_VERSION sets the required package version
-EDGELB_PACKAGE_VERSION := v1.3.1-235-g50a400a
+EDGELB_PACKAGE_VERSION := v1.3.1-269-g316af7d
 
 .PHONY: edgelb.package.install
 edgelb.package.install: dcos.setup-security.edgelb

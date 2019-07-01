@@ -34,29 +34,31 @@ func computeLoadBalancerStatus(manager manager.EdgeLBManager, poolName string, o
 		publicIPs  = make(map[string]bool)
 	)
 	// Add all reported DNS names to the set of DNS names.
-	for _, elb := range m.Elb {
-		if elb.DNS != "" {
-			for _, listener := range elb.Listeners {
-				// Check whether the target frontend belongs to the Service/Ingress resource being processed.
-				if listener.LinkFrontend == nil {
-					continue
-				}
-				var (
-					isOwnedByObj bool
-				)
-				switch t := obj.(type) {
-				case *corev1.Service:
-					m, err := computeServiceOwnedEdgeLBObjectMetadata(*listener.LinkFrontend)
-					isOwnedByObj = err == nil && m.IsOwnedBy(t)
-				case *extsv1beta1.Ingress:
-					m, err := computeIngressOwnedEdgeLBObjectMetadata(*listener.LinkFrontend)
-					isOwnedByObj = err == nil && m.IsOwnedBy(t)
-				default:
-					return nil
-				}
-				// If the target frontend belongs to the Service/Ingress resource being processed, we add the DNS name of the ELB being processed.
-				if isOwnedByObj {
-					dnsNames[strings.ToLower(elb.DNS)] = true
+	if m.Aws != nil {
+		for _, elb := range m.Aws.Elbs {
+			if elb.DNS != "" {
+				for _, listener := range elb.Listeners {
+					// Check whether the target frontend belongs to the Service/Ingress resource being processed.
+					if listener.LinkFrontend == nil {
+						continue
+					}
+					var (
+						isOwnedByObj bool
+					)
+					switch t := obj.(type) {
+					case *corev1.Service:
+						m, err := computeServiceOwnedEdgeLBObjectMetadata(*listener.LinkFrontend)
+						isOwnedByObj = err == nil && m.IsOwnedBy(t)
+					case *extsv1beta1.Ingress:
+						m, err := computeIngressOwnedEdgeLBObjectMetadata(*listener.LinkFrontend)
+						isOwnedByObj = err == nil && m.IsOwnedBy(t)
+					default:
+						return nil
+					}
+					// If the target frontend belongs to the Service/Ingress resource being processed, we add the DNS name of the ELB being processed.
+					if isOwnedByObj {
+						dnsNames[strings.ToLower(elb.DNS)] = true
+					}
 				}
 			}
 		}

@@ -125,7 +125,7 @@ var _ = Describe("Service", func() {
 				// Create the desired cloud-provider configuration.
 				redisCfgBytes, _ := json.Marshal(&models.V2CloudProvider{
 					Aws: &models.V2CloudProviderAws{
-						Elb: []*models.V2CloudProviderAwsElb{
+						Elbs: []*models.V2CloudProviderAwsElb{
 							{
 								Internal: pointers.NewBool(false),
 								Listeners: []*models.V2CloudProviderAwsElbListener{

@@ -73,7 +73,7 @@ To configure an AWS NLB, the value of the `.cloudProviderConfiguration` field mu
 ----
 {
   "aws": {
-    "elb": [{
+    "elbs": [{
       "type": "NLB",
       "name": "<name>",
       "internal": <internal>,
