@@ -191,6 +191,7 @@ and of the target EdgeLB pool can be done by running the following commands:
 $ kubectl delete ingress --selector "owner=dklb"
 $ kubectl delete svc --selector "owner=dklb"
 $ kubectl delete pod --selector "owner=dklb"
+$ kubectl delete secret foo-secret
 ----
 
 The `dklb-foo` EdgeLB pool will be automatically deleted.
