@@ -1189,6 +1189,12 @@ hBHIkVstxMO9c4ZCA60QbQ==
 					}
 				})
 				Expect(err).NotTo(HaveOccurred(), "failed to create ingress")
+				// Manually delete the Ingress resource regardless of test result.
+				defer func() {
+					err = f.KubeClient.ExtensionsV1beta1().Ingresses(ingress.Namespace).Delete(ingress.Name, metav1.NewDeleteOptions(0))
+					Expect(err).NotTo(HaveOccurred(), "failed to delete ingress %q", kubernetes.Key(ingress))
+					f.WaitEdgeLBPoolDelete(pool)
+				}()
 
 				// Wait for EdgeLB to acknowledge the EdgeLB pool's creation.
 				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
@@ -1246,10 +1252,6 @@ hBHIkVstxMO9c4ZCA60QbQ==
 					return r.StatusCode == 200, nil
 				})
 				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the ingress to be reachable")
-
-				// Manually delete the Ingress resource now so that the target EdgeLB pool isn't left dangling after namespace deletion.
-				err = f.KubeClient.ExtensionsV1beta1().Ingresses(ingress.Namespace).Delete(ingress.Name, metav1.NewDeleteOptions(0))
-				Expect(err).NotTo(HaveOccurred(), "failed to delete ingress %q", kubernetes.Key(ingress))
 			})
 		})
 	})

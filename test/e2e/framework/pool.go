@@ -17,10 +17,15 @@ func (f *Framework) DeleteEdgeLBPool(pool *models.V2Pool) {
 	defer fn()
 	err := f.EdgeLBManager.DeletePool(ctx, pool.Name)
 	Expect(err).NotTo(HaveOccurred(), "failed to delete edgelb pool %q", pool.Name)
-	// Wait for the EdgeLB API server to stop reporting the EdgeLB pool as existing.
-	err = retry.WithTimeout(DefaultRetryTimeout, DefaultRetryInterval, func() (b bool, e error) {
-		ctx, fn := context.WithTimeout(context.Background(), DefaultEdgeLBOperationTimeout)
-		defer fn()
+	f.WaitEdgeLBPoolDelete(pool)
+}
+
+// WaitEdgeLBPoolDelete waits for the EdgeLB API server to stop reporting the
+// EdgeLB pool as existing.
+func (f *Framework) WaitEdgeLBPoolDelete(pool *models.V2Pool) {
+	err := retry.WithTimeout(DefaultRetryTimeout, DefaultRetryInterval, func() (b bool, e error) {
+		ctx, cancel := context.WithTimeout(context.Background(), DefaultEdgeLBOperationTimeout)
+		defer cancel()
 		_, err := f.EdgeLBManager.GetPool(ctx, pool.Name)
 		return dklberrors.IsNotFound(err), nil
 	})
