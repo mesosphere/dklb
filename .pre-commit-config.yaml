@@ -11,6 +11,7 @@ repos:
         args: ["-m", "--unsafe"]
         stages: [commit,push]
       - id: detect-private-key
+        exclude: "test/e2e/ingress_test.go"
         stages: [commit,push]
       - id: end-of-file-fixer
         stages: [commit,push]

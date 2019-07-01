@@ -4,7 +4,11 @@ package e2e_test
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"net"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -1047,6 +1051,205 @@ var _ = Describe("Ingress", func() {
 				//
 				Expect(*objSpec.Frontends.HTTP.Mode).To(Equal(translatorapi.IngressEdgeLBHTTPModeDisabled))
 				Expect(*objSpec.Frontends.HTTPS.Port).To(Equal(translatorapi.DefaultEdgeLBPoolHTTPSPort))
+			})
+		})
+
+		It("is correctly provisioned by EdgeLB [HTTPS] [Public]", func() {
+			f.WithTemporaryNamespace(func(namespace *corev1.Namespace) {
+				var (
+					echoPod1     *corev1.Pod
+					echoSvc1     *corev1.Service
+					err          error
+					httpEchoSpec translatorapi.IngressEdgeLBPoolSpec
+					ingress      *extsv1beta1.Ingress
+					pool         *models.V2Pool
+					publicIP     string
+				)
+
+				host := "foo.bar.com"
+
+				// self signed certificate generated with the following command:
+				// $: openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout tls.key -out tls.crt -subj "/CN=foo.bar.com"
+				crt := []byte(`-----BEGIN CERTIFICATE-----
+MIICqDCCAZACCQCFJS4D3wjf2TANBgkqhkiG9w0BAQsFADAWMRQwEgYDVQQDDAtm
+b28uYmFyLmNvbTAeFw0xOTA2MjUxNjIwMTJaFw0yMDA2MjQxNjIwMTJaMBYxFDAS
+BgNVBAMMC2Zvby5iYXIuY29tMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
+AQEAy8qoiwjrXI2Li1tsQHxM/6oBdZo189DhLI5S6KxmsbIpH4fGL9TBPAbQku6W
+7JQ105+nb9LRlfQlWrnIKqNNDFB3DL85g1lkgVHdV6dkyPErZ9l5tOOm6gPMkUWR
+oNgwmZCgQqsIIK1TgZEPYIf06xpF86dOZ7oZgYNpGZmbQQ9R1snxo1BDS19usYhP
+mTEi9jLJ5s6Rgh+hK1PIviSbIFgDoRTt6LwUMuel3ozlHQ0mIybHKtpYba+0BYTp
+Cl8ywwEpfvSLMVaW/oHcmBmiVrH78wywquLAGL3zccsEJAytUADGizwe/Ssw6gm0
+aWW5uSvD4V7tKoB33ksQkbgIKQIDAQABMA0GCSqGSIb3DQEBCwUAA4IBAQC6dcLk
+MC+nSaSWq8l4fJni5BnWesb6BBHpsP5YSqnXaeeDs80tvn6EzlpffujZFNUcrip9
+uAT4y4ByFQdSsaYnrTH3xQJS0aMzLp1o5xMPddrQmsPsIcKho4VrwnRKqrquKazH
+J/BONO2WghgZZNR43YggWPD/8W0SRdXVV6OstPwIDj/q9/BL6Z+xXO1mCoTuh4VF
+2KO+bdDhdilbMWaeJsdRdOTtxI4c0v9Xs02aw5gmrkgWIxxgwqIh2v4Gb79sHQst
++S1RrysxmZmzvpfiimGFKpiUReok8VChRYzBiVsjae8BapP6LwR6071h356VYlpN
+hCwSlCHr4kbspRx5
+-----END CERTIFICATE-----
+`)
+
+				key := []byte(`-----BEGIN PRIVATE KEY-----
+MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDLyqiLCOtcjYuL
+W2xAfEz/qgF1mjXz0OEsjlLorGaxsikfh8Yv1ME8BtCS7pbslDXTn6dv0tGV9CVa
+ucgqo00MUHcMvzmDWWSBUd1Xp2TI8Stn2Xm046bqA8yRRZGg2DCZkKBCqwggrVOB
+kQ9gh/TrGkXzp05nuhmBg2kZmZtBD1HWyfGjUENLX26xiE+ZMSL2MsnmzpGCH6Er
+U8i+JJsgWAOhFO3ovBQy56XejOUdDSYjJscq2lhtr7QFhOkKXzLDASl+9IsxVpb+
+gdyYGaJWsfvzDLCq4sAYvfNxywQkDK1QAMaLPB79KzDqCbRpZbm5K8PhXu0qgHfe
+SxCRuAgpAgMBAAECggEAIZFZH8WxVwZtpN/DPf/7guVS5jcnieivHnK3D2JObBin
+k2z+5SQLTELnGjy4mXF0SE50+wNjyGp1uLL/WJ6bc1rRsUTSSWNxHagJaIXHIR4w
+gyOcW4JgHQ3RJWCrMy5JGxJqg3C+nvtN1Pq66LCcVBl4ykCVtpo910p5BmF55EZB
+IZ7sP2RJeuJWgAU/wpB9QMtw8iCaDf505xwcUnRL4LFohQgAH0S5AHHyGiSw5HW7
+E8ts65U95q0UPe8osEk8SGRLgtx6sk+34HBXct6pgYjP5St066poeMzMLWFsIJZf
+b3IKV/TvaTyqRRCiUvrBJ+omMmWndqV9qoPZpZ+6nQKBgQD7cwugc4muBlgYcjY+
+l22ozykypsLJIDI1YqcHxpSfIwEcd2lgYEczEdhyVwC1ON134L03yQ/nnpr+aX+W
+B84RaEJ8OHvwjOqNWWa4+GIF5VCZF9Vf5+2H2gA57V+15s1ErYkXW7LnQmOACf7O
+8LWMekIedRSJb3p3XgXor5D6BwKBgQDPetEH+NDs/HdO+25vNL6GbhH338BdoOza
+tS5YIn68Yxemn+xEP4+xvkPn8tyIFSp/h28Rk02eagh5fg9FCBINtC7TbbIHHkIb
+DDxp3J0pCubXmqgHevPLJxFFpKIZJE/Lh3gLh93Yv4t9tI1XdA/cvgQiAcqeQFMj
+bsGnbvYgTwKBgCLmLM7wOkO1DbUW5QB68/ViC03EZ3SSy2UtdBFYNnh/2z+gMzf1
+JOyppWj5OlfstJBW2OxNM6/qC4kUC2k/XBJ+bfvfuxP/+u3zYpZ5ouE+mpkk/bB5
++DXKxA1GLOqKRiMqEsTzLTl7tWOn/32pWwlMTrD7fwY0OsMmgZtyAqUxAoGAb2Ch
+x6LFHQLmVSrZ/K6WvHloAeVGUbyqiTmLuFpEKIMVVigxX+2zCJp3v5L62b5rAuzE
+Le4iU7Dd/cIzFj6f2mVoYa1YTUPr/rMR105Lu5WTmBf4rZNOPjcpqXYYYmDAySRe
+x+nWqJ0il4eN/G1ceoYyl8LYbx1ew/2XzXbefzcCgYAgHxDKwq7vXAf9GPcnKJ+a
+YhkeidTpw4EgCytfG0l/YHjCeN1lYnx0QYEQiz8c+0s5L0vkeFGmNr08ZgGuRAk1
+Oe1uvUXqXv5NnvkRDQHmkMBs3lwGrgcFmv69YgR+2vs9rEasdnXtuapeNwW3zohp
+hBHIkVstxMO9c4ZCA60QbQ==
+-----END PRIVATE KEY-----
+`)
+
+				_, err = f.CreateSecret(namespace.Name, "test-secret", func(secret *corev1.Secret) {
+					secret.Data = map[string][]byte{}
+					secret.Data[corev1.TLSCertKey] = crt
+					secret.Data[corev1.TLSPrivateKeyKey] = key
+				})
+				Expect(err).NotTo(HaveOccurred(), "failed to create echo secret")
+
+				// Create an "echo" pod.
+				echoPod1, err = f.CreateEchoPod(namespace.Name, "http-echo-1")
+				Expect(err).NotTo(HaveOccurred(), "failed to create echo pod")
+				// Create an "echo" service.
+				echoSvc1, err = f.CreateServiceForEchoPod(echoPod1)
+				Expect(err).NotTo(HaveOccurred(), "failed to create service for echo pod %q", kubernetes.Key(echoPod1))
+
+				// Create an object holding the target EdgeLB pool's specification.
+				httpEchoSpec = translatorapi.IngressEdgeLBPoolSpec{
+					BaseEdgeLBPoolSpec: translatorapi.BaseEdgeLBPoolSpec{
+						// Request for the EdgeLB pool to be called "<namespace-name>".
+						Name: pointers.NewString(namespace.Name),
+					},
+					Frontends: &translatorapi.IngressEdgeLBPoolFrontendsSpec{
+						HTTP: &translatorapi.IngressEdgeLBPoolHTTPFrontendSpec{
+							// Disable HTTP frontend
+							Mode: pointers.NewString(translatorapi.IngressEdgeLBHTTPModeDisabled),
+						},
+						HTTPS: &translatorapi.IngressEdgeLBPoolHTTPSFrontendSpec{
+							// Request for the EdgeLB pool to expose the ingress at 8443.
+							Port: pointers.NewInt32(8443),
+						},
+					},
+				}
+
+				// Create an Ingress resource targeting the services above, annotating it to be provisioned by EdgeLB.
+				// The following rules are defined on the Ingress resource:
+				// * Requests for the "foo.bar.com" host are directed towards "http-echo-1".
+				ingress, err = f.CreateEdgeLBIngress(namespace.Name, "http-echo", func(ingress *extsv1beta1.Ingress) {
+					// Use "httpEchoSpec" as the specification for the target EdgeLB pool.
+					_ = translatorapi.SetIngressEdgeLBPoolSpec(ingress, &httpEchoSpec)
+					// Use "echoSvc1" as the default backend.
+					ingress.Spec.Backend = &extsv1beta1.IngressBackend{
+						ServiceName: echoSvc1.Name,
+						ServicePort: intstr.FromString(echoSvc1.Spec.Ports[0].Name),
+					}
+					// setup secret with TLS
+					ingress.Spec.TLS = []extsv1beta1.IngressTLS{
+						{
+							Hosts:      []string{host},
+							SecretName: "test-secret",
+						},
+					}
+					// Setup rules as described above.
+					ingress.Spec.Rules = []extsv1beta1.IngressRule{
+						{
+							Host: host,
+							IngressRuleValue: extsv1beta1.IngressRuleValue{
+								HTTP: &extsv1beta1.HTTPIngressRuleValue{
+									Paths: []extsv1beta1.HTTPIngressPath{
+										{
+											Backend: extsv1beta1.IngressBackend{
+												ServiceName: echoSvc1.Name,
+												ServicePort: intstr.FromInt(int(echoSvc1.Spec.Ports[0].Port)),
+											},
+										},
+									},
+								},
+							},
+						},
+					}
+				})
+				Expect(err).NotTo(HaveOccurred(), "failed to create ingress")
+
+				// Wait for EdgeLB to acknowledge the EdgeLB pool's creation.
+				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+					ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryInterval/2)
+					defer fn()
+					pool, err = f.EdgeLBManager.GetPool(ctx, *httpEchoSpec.Name)
+					return err == nil, nil
+				})
+				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
+
+				// Make sure the pool is reporting the requested configuration.
+				Expect(pool.Name).To(Equal(*httpEchoSpec.Name))
+
+				// Wait for the Ingress to be reachable.
+				log.Debugf("waiting for the public ip for %q to be reported", kubernetes.Key(ingress))
+				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+					// Wait for the pool's public IP to be reported.
+					ctx, cancel := context.WithTimeout(context.Background(), framework.DefaultRetryTimeout)
+					defer cancel()
+					publicIP, err = f.WaitForPublicIPForIngress(ctx, ingress)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(publicIP).NotTo(BeEmpty())
+
+					// Attempt to connect to the host using the reported IP.
+					addr := fmt.Sprintf("http://%s:%d", host, *httpEchoSpec.Frontends.HTTPS.Port)
+					log.Debugf("attempting to connect to %q at %q via %v", kubernetes.Key(ingress), addr, publicIP)
+
+					caCertPool := x509.NewCertPool()
+					caCertPool.AppendCertsFromPEM(crt)
+
+					f.HTTPClient.Transport = &http.Transport{
+						DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+							// Similar to curls --resolve behavior. Use a custom
+							// dialer to force resolve the host (ex.
+							// foo.bar.com) to the reported IP.
+							addr = fmt.Sprintf("%s:%d", publicIP, *httpEchoSpec.Frontends.HTTPS.Port)
+							tlsConfig := &tls.Config{
+								RootCAs:    caCertPool,
+								ServerName: "foo.bar.com",
+							}
+							return tls.Dial("tcp", addr, tlsConfig)
+						},
+					}
+					defer func() {
+						// reset TLS configuration
+						f.HTTPClient.Transport = &http.Transport{}
+					}()
+
+					r, err := f.HTTPClient.Get(addr)
+					if err != nil {
+						log.Debugf("waiting for the ingress to be reachable at %q", addr)
+						return false, nil
+					}
+					log.Debugf("the ingress is reachable at %q", addr)
+					return r.StatusCode == 200, nil
+				})
+				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the ingress to be reachable")
+
+				// Manually delete the Ingress resource now so that the target EdgeLB pool isn't left dangling after namespace deletion.
+				err = f.KubeClient.ExtensionsV1beta1().Ingresses(ingress.Namespace).Delete(ingress.Name, metav1.NewDeleteOptions(0))
+				Expect(err).NotTo(HaveOccurred(), "failed to delete ingress %q", kubernetes.Key(ingress))
 			})
 		})
 	})
