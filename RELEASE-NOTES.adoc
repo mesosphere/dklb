@@ -19,6 +19,16 @@ endif::[]
 == Table of Contents
 toc::[]
 
+== v0.1.0-alpha.11
+
+=== Bug fixes
+
+* Fix DC/OS secret names when Kubernetes is deployed in a DC/OS folder (https://github.com/mesosphere/dklb/pull/43[#43]).
+
+=== Documentation
+
+* Add command to cleanup Kubernetes secret in TLS for Ingress example (https://github.com/mesosphere/dklb/pull/43[#43]).
+
 == v0.1.0-alpha.10
 
 === Breaking changes
