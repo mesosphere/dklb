@@ -19,6 +19,16 @@ endif::[]
 == Table of Contents
 toc::[]
 
+== v0.1.0-alpha.12
+
+=== Breaking changes
+
+* The EdgeLB pool configuration was renamed from cloudProvider.aws.elb to cloudProvider.aws.elbs in version 1.4.0. To use NLB functionality we now require EdgeLB built from master (commit https://github.com/mesosphere/dcos-edge-lb/commit/d3547ca23ba9b4a07b91e33562868b731330c855[d3547ca]) or version 1.4.0.
+
+=== Improvements
+
+* EdgeLB version bump
+
 == v0.1.0-alpha.11
 
 === Bug fixes
