@@ -294,6 +294,11 @@ func (it *IngressTranslator) createEdgeLBPoolObject(backendMap IngressBackendNod
 		},
 		Secrets: secrets,
 	}
+
+	// Setup EdgeLB Marathon constraints if applicable.
+	if it.spec.Constraints != nil {
+		p.Constraints = it.spec.Constraints
+	}
 	// Request for the EdgeLB pool to join the requested DC/OS virtual network if applicable.
 	if *it.spec.Network != constants.EdgeLBHostNetwork {
 		p.VirtualNetworks = []*models.V2PoolVirtualNetworksItems0{

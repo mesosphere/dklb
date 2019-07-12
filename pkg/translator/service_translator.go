@@ -184,6 +184,11 @@ func (st *ServiceTranslator) createEdgeLBPoolObject() (*models.V2Pool, error) {
 		},
 	}
 
+	// Setup EdgeLB Marathon constraints if applicable.
+	if st.spec.Constraints != nil {
+		p.Constraints = st.spec.Constraints
+	}
+
 	// Request for a cloud load-balancer to be configured if applicable.
 	if *st.spec.CloudProviderConfiguration != "" {
 		o, err := st.unmarshalCloudProviderObject(*st.spec.CloudProviderConfiguration)

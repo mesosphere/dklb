@@ -17,6 +17,8 @@ import (
 type BaseEdgeLBPoolSpec struct {
 	// CloudProviderConfiguration is the raw, JSON-encoded configuration to set on the target EdgeLB pool's ".cloudProvider" field.
 	CloudProviderConfiguration *string `yaml:"cloudProviderConfiguration"`
+	// Constraints is a Marathon style constraints for load balancer instance placement.
+	Constraints *string `yaml:"constraints"`
 	// CPUs is the amount of CPU to request for the target EdgeLB pool.
 	CPUs *float64 `yaml:"cpus"`
 	// Memory is the amount of memory to request for the target EdgeLB pool.
@@ -29,7 +31,7 @@ type BaseEdgeLBPoolSpec struct {
 	Role *string `yaml:"role"`
 	// Size is the size to request for the target EdgeLB pool.
 	Size *int32 `yaml:"size"`
-	//  Strategies groups together strategies used to customize the management of the target EdgeLB pool.
+	// Strategies groups together strategies used to customize the management of the target EdgeLB pool.
 	Strategies *EdgeLBPoolManagementStrategies `yaml:"strategies"`
 }
 

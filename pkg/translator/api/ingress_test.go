@@ -79,3 +79,57 @@ func TestGetIngressEdgeLBPoolSpec(t *testing.T) {
 		test.validate(t, spec)
 	}
 }
+
+func TestGetIngressEdgeLBPoolSpecConstraints(t *testing.T) {
+	// cluster name really shouldn't be a global
+	cluster.Name = "test-cluster"
+	tests := []struct {
+		description   string
+		expectedError error
+		ingress       *extsv1beta1.Ingress
+		validate      func(t *testing.T, spec *IngressEdgeLBPoolSpec)
+	}{
+		{
+			description: "should translate to an edgelb pool without a constraint",
+			ingress: &extsv1beta1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test-namespace",
+					Name:      "test-ingress",
+				},
+			},
+			validate: func(t *testing.T, spec *IngressEdgeLBPoolSpec) {
+				var nilString *string
+				assert.Equal(t, spec.BaseEdgeLBPoolSpec.Constraints, nilString)
+				assert.Equal(t, *spec.Frontends.HTTP.Mode, IngressEdgeLBHTTPModeEnabled)
+				assert.Equal(t, *spec.Frontends.HTTP.Port, DefaultEdgeLBPoolHTTPPort)
+			},
+		},
+		{
+			description: "should translate to an edgelb pool with a constraint",
+			ingress: &extsv1beta1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						constants.DklbConfigAnnotationKey: `
+constraints: "[[\"hostname\",\"MAX_PER\",\"1\"],[\"@zone\",\"GROUP_BY\",\"3\"]]"
+`,
+					},
+					Namespace: "test-namespace",
+					Name:      "test-ingress",
+				},
+			},
+			validate: func(t *testing.T, spec *IngressEdgeLBPoolSpec) {
+				assert.Equal(t, *spec.Constraints, "[[\"hostname\",\"MAX_PER\",\"1\"],[\"@zone\",\"GROUP_BY\",\"3\"]]")
+				assert.Equal(t, *spec.Frontends.HTTP.Mode, IngressEdgeLBHTTPModeEnabled)
+				assert.Equal(t, *spec.Frontends.HTTP.Port, DefaultEdgeLBPoolHTTPPort)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Logf("test case: %s", test.description)
+
+		spec, err := GetIngressEdgeLBPoolSpec(test.ingress)
+		assert.Equal(t, err, nil)
+		test.validate(t, spec)
+	}
+}
