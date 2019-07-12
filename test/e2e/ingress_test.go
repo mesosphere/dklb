@@ -513,6 +513,226 @@ var _ = Describe("Ingress", func() {
 			})
 		})
 
+		It("is correctly provisioned by EdgeLB with a constraint [HTTP] [Public]", func() {
+			// Same test as above but with a EdgeLB constraint set to
+			// [["hostname", "UNIQUE"]].
+			f.WithTemporaryNamespace(func(namespace *corev1.Namespace) {
+				var (
+					echoPod1     *corev1.Pod
+					echoPod2     *corev1.Pod
+					echoPod3     *corev1.Pod
+					echoPod4     *corev1.Pod
+					echoSvc1     *corev1.Service
+					echoSvc2     *corev1.Service
+					echoSvc3     *corev1.Service
+					echoSvc4     *corev1.Service
+					err          error
+					httpEchoSpec translatorapi.IngressEdgeLBPoolSpec
+					ingress      *extsv1beta1.Ingress
+					pool         *models.V2Pool
+					publicIP     string
+				)
+
+				// Create the first "echo" pod.
+				echoPod1, err = f.CreateEchoPod(namespace.Name, "http-echo-1")
+				Expect(err).NotTo(HaveOccurred(), "failed to create echo pod")
+				// Create the first "echo" service.
+				echoSvc1, err = f.CreateServiceForEchoPod(echoPod1)
+				Expect(err).NotTo(HaveOccurred(), "failed to create service for echo pod %q", kubernetes.Key(echoPod1))
+
+				// Create the second "echo" pod.
+				echoPod2, err = f.CreateEchoPod(namespace.Name, "http-echo-2")
+				Expect(err).NotTo(HaveOccurred(), "failed to create echo pod")
+				// Create the second "echo" service.
+				echoSvc2, err = f.CreateServiceForEchoPod(echoPod2)
+				Expect(err).NotTo(HaveOccurred(), "failed to create service for echo pod %q", kubernetes.Key(echoPod1))
+
+				// Create the third "echo" pod.
+				echoPod3, err = f.CreateEchoPod(namespace.Name, "http-echo-3")
+				Expect(err).NotTo(HaveOccurred(), "failed to create echo pod")
+				// Create the third "echo" service.
+				echoSvc3, err = f.CreateServiceForEchoPod(echoPod3)
+				Expect(err).NotTo(HaveOccurred(), "failed to create service for echo pod %q", kubernetes.Key(echoPod1))
+
+				// Create the fourth "echo" pod.
+				echoPod4, err = f.CreateEchoPod(namespace.Name, "http-echo-4")
+				Expect(err).NotTo(HaveOccurred(), "failed to create echo pod")
+				// Create the fourth "echo" service.
+				echoSvc4, err = f.CreateServiceForEchoPod(echoPod4)
+				Expect(err).NotTo(HaveOccurred(), "failed to create service for echo pod %q", kubernetes.Key(echoPod1))
+
+				// Create an object holding the target EdgeLB pool's specification.
+				httpEchoSpec = translatorapi.IngressEdgeLBPoolSpec{
+					BaseEdgeLBPoolSpec: translatorapi.BaseEdgeLBPoolSpec{
+						// Request for the EdgeLB pool to be called "<namespace-name>".
+						Name: pointers.NewString(namespace.Name),
+						// Request for the EdgeLB pool to be deployed to an agent with the "slave_public" role.
+						Role: pointers.NewString(constants.EdgeLBRolePublic),
+						// Request for the EdgeLB pool to be given 0.2 CPUs.
+						CPUs: pointers.NewFloat64(0.2),
+						// Request for the EdgeLB pool to be given 256MiB of RAM.
+						Memory: pointers.NewInt32(256),
+						// Request for the EdgeLB pool to have a single instance.
+						Size: pointers.NewInt32(1),
+						// Constraints for the EdgeLB pool placement.
+						Constraints: pointers.NewString("[[\"hostname\",\"UNIQUE\"]]"),
+					},
+					Frontends: &translatorapi.IngressEdgeLBPoolFrontendsSpec{
+						HTTP: &translatorapi.IngressEdgeLBPoolHTTPFrontendSpec{
+							// Request for the EdgeLB pool to expose the ingress at 18080.
+							Port: pointers.NewInt32(18080),
+						},
+					},
+				}
+
+				// Create an Ingress resource targeting the services above, annotating it to be provisioned by EdgeLB.
+				// The following rules are defined on the Ingress resource:
+				// * Requests for the "http-echo-4.com" host are (ALL) directed towards "http-echo-4".
+				// * Requests for the "http-echo-3.com" host and the "/bar(/.*)?" path are directed towards "http-echo-3".
+				// * Requests for the "http-echo-3.com" host and any other path are directed towards "http-echo-2".
+				// * Unmatched requests are directed towards "http-echo-1".
+				ingress, err = f.CreateEdgeLBIngress(namespace.Name, "http-echo", func(ingress *extsv1beta1.Ingress) {
+					// Use "httpEchoSpec" as the specification for the target EdgeLB pool.
+					_ = translatorapi.SetIngressEdgeLBPoolSpec(ingress, &httpEchoSpec)
+					// Use "echoSvc1" as the default backend.
+					ingress.Spec.Backend = &extsv1beta1.IngressBackend{
+						ServiceName: echoSvc1.Name,
+						ServicePort: intstr.FromString(echoSvc1.Spec.Ports[0].Name),
+					}
+					// Setup rules as described above.
+					ingress.Spec.Rules = []extsv1beta1.IngressRule{
+						{
+							Host: "http-echo-3.com",
+							IngressRuleValue: extsv1beta1.IngressRuleValue{
+								HTTP: &extsv1beta1.HTTPIngressRuleValue{
+									Paths: []extsv1beta1.HTTPIngressPath{
+										{
+											Backend: extsv1beta1.IngressBackend{
+												ServiceName: echoSvc2.Name,
+												ServicePort: intstr.FromInt(int(echoSvc2.Spec.Ports[0].Port)),
+											},
+										},
+										{
+											Path: "/bar(/.*)?",
+											Backend: extsv1beta1.IngressBackend{
+												ServiceName: echoSvc3.Name,
+												ServicePort: intstr.FromString(echoSvc3.Spec.Ports[0].Name),
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							Host: "http-echo-4.com",
+							IngressRuleValue: extsv1beta1.IngressRuleValue{
+								HTTP: &extsv1beta1.HTTPIngressRuleValue{
+									Paths: []extsv1beta1.HTTPIngressPath{
+										{
+											Backend: extsv1beta1.IngressBackend{
+												ServiceName: echoSvc4.Name,
+												ServicePort: intstr.FromString(echoSvc4.Spec.Ports[0].Name),
+											},
+										},
+									},
+								},
+							},
+						},
+					}
+				})
+				Expect(err).NotTo(HaveOccurred(), "failed to create ingress")
+
+				// Wait for EdgeLB to acknowledge the EdgeLB pool's creation.
+				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+					ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryInterval/2)
+					defer fn()
+					pool, err = f.EdgeLBManager.GetPool(ctx, *httpEchoSpec.Name)
+					return err == nil, nil
+				})
+				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
+
+				// Make sure the pool is reporting the requested configuration.
+				Expect(pool.Name).To(Equal(*httpEchoSpec.Name))
+				Expect(pool.Role).To(Equal(*httpEchoSpec.Role))
+				Expect(pool.Cpus).To(Equal(*httpEchoSpec.CPUs))
+				Expect(pool.Mem).To(Equal(*httpEchoSpec.Memory))
+				Expect(*pool.Count).To(Equal(*httpEchoSpec.Size))
+
+				// Wait for the Ingress to be reachable.
+				log.Debugf("waiting for the public ip for %q to be reported", kubernetes.Key(ingress))
+				err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+					// Wait for the pool's public IP to be reported.
+					ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryTimeout)
+					defer fn()
+					publicIP, err = f.WaitForPublicIPForIngress(ctx, ingress)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(publicIP).NotTo(BeEmpty())
+					// Attempt to connect to the ingress using the reported IP.
+					addr := fmt.Sprintf("http://%s:%d", publicIP, *httpEchoSpec.Frontends.HTTP.Port)
+					log.Debugf("attempting to connect to %q at %q", kubernetes.Key(ingress), addr)
+					r, err := f.HTTPClient.Get(addr)
+					if err != nil {
+						log.Debugf("waiting for the ingress to be reachable at %q", addr)
+						return false, nil
+					}
+					log.Debugf("the ingress is reachable at %q", addr)
+					return r.StatusCode == 200, nil
+				})
+				Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the ingress to be reachable")
+
+				// Make sure that requests are directed towards the appropriate backend and contain the expected headers.
+				tests := []struct {
+					host        string
+					path        string
+					expectedPod string
+				}{
+					// Test that requests whose path starts with "/bar" but whose host is "http-echo-4.com" are directed towards "http-echo-4".
+					{
+						host:        "http-echo-4.com",
+						path:        "/bar",
+						expectedPod: echoPod4.Name,
+					},
+					// Test that requests whose path starts with "/foo" and whose host is "http-echo-3.com" are directed towards "http-echo-2".
+					{
+						host:        "http-echo-3.com",
+						path:        "/foo",
+						expectedPod: echoPod2.Name,
+					},
+					// Test that requests whose path starts with "/bar" and whose host is "http-echo-3.com" are directed towards "http-echo-3".
+					{
+						host:        "http-echo-3.com",
+						path:        "/bar",
+						expectedPod: echoPod3.Name,
+					},
+					// Test that unmatched requests are directed towards "http-echo-1" (the default backend).
+					{
+						host:        publicIP,
+						path:        "/foo",
+						expectedPod: echoPod1.Name,
+					},
+				}
+				for _, test := range tests {
+					for _, method := range []string{"GET", "POST", "PUT", "PATCH", "DELETE"} {
+						log.Debugf("test case: %s request to host %q and path %q is directed towards %q", method, test.host, test.path, test.expectedPod)
+						res, err := f.EchoRequest(method, publicIP, *httpEchoSpec.Frontends.HTTP.Port, test.path, map[string]string{
+							"Host": test.host,
+						})
+						Expect(err).NotTo(HaveOccurred(), "failed to perform http request")
+						Expect(res.Host).To(Equal(test.host), "the reported host header doesn't match the expectation")
+						Expect(res.Method).To(Equal(method), "the reported method doesn't match the expectation")
+						Expect(res.K8sEnv.Namespace).To(Equal(namespace.Name), "the reported namespace doesn't match the expectation")
+						Expect(res.K8sEnv.Pod).To(Equal(test.expectedPod), "the reported pod doesn't match the expectation")
+						Expect(res.URI).To(Equal(test.path), "the reported path doesn't match the expectation")
+						Expect(res.XForwardedForContains(f.ExternalIP)).To(BeTrue(), "external ip missing from the x-forwarded-for header")
+					}
+				}
+
+				// Manually delete the Ingress resource now so that the target EdgeLB pool isn't possibly left dangling after namespace deletion.
+				err = f.KubeClient.ExtensionsV1beta1().Ingresses(ingress.Namespace).Delete(ingress.Name, metav1.NewDeleteOptions(0))
+				Expect(err).NotTo(HaveOccurred(), "failed to delete ingress %q", kubernetes.Key(ingress))
+			})
+		})
+
 		It("can share a pool with an Ingress resource in a different namespace [HTTP] [Public]", func() {
 			// Create two temporary namespaces for the test.
 			f.WithTemporaryNamespace(func(namespace1 *corev1.Namespace) {
