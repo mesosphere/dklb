@@ -18,5 +18,5 @@ var (
 	// DefaultEdgeLBPoolRole is the role to use for an EdgeLB pool when a value is not provided.
 	DefaultEdgeLBPoolRole = constants.EdgeLBRolePublic
 	// DefaultEdgeLBPoolSize is the size to use for an EdgeLB pool when a value is not provided.
-	DefaultEdgeLBPoolSize = int32(1)
+	DefaultEdgeLBPoolSize = int(1)
 )

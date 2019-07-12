@@ -58,7 +58,7 @@ func (o *BaseEdgeLBPoolSpec) setDefaults() {
 		o.Network = pointers.NewString(constants.DefaultDCOSVirtualNetworkName)
 	}
 	if o.Size == nil {
-		o.Size = &DefaultEdgeLBPoolSize
+		o.Size = pointers.NewInt32(int32(DefaultEdgeLBPoolSize))
 	}
 	if o.Strategies == nil {
 		o.Strategies = &EdgeLBPoolManagementStrategies{

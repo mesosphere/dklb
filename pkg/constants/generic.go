@@ -17,6 +17,8 @@ const (
 	DefaultEdgeLBPath = "/"
 	// DefaultEdgeLBPoolGroup is the name of the DC/OS service group in which to create EdgeLB pools by default.
 	DefaultEdgeLBPoolGroup = "dcos-edgelb/pools"
+	// DefaultEdgeLBPoolSize is the default number of load balancers in the EdgeLB pool.
+	DefaultEdgeLBPoolSize = 1
 	// DefaultEdgeLBScheme is the default scheme to use when communicating with the EdgeLB API server.
 	DefaultEdgeLBScheme = "http"
 	// DefaultResyncPeriod is the (default) maximum amount of time that may elapse between two consecutive synchronizations of Ingress/Service resources and the status of EdgeLB pools.

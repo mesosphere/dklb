@@ -68,6 +68,15 @@ In order to achieve this, the following flag must be provided as an argument to 
 --edgelb-pool-group=<edgelb-pool-group>
 ----
 
+==== Customizing the default number of load balancers in the EdgeLB pools
+
+By default, the number of load balancers in the EdgeLB pool is set to 1. In some DC/OS clusters it may be required to customize it. To do this, you can use the following flag:
+
+[source,text]
+----
+--edgelb-default-pool-size=<edgelb-pool-size>
+----
+
 == Tailing logs
 
 At any given time, only a single replica is actively working in order to satisfy Ingress/Service resources.

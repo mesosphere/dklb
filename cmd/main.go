@@ -88,6 +88,7 @@ func init() {
 	flag.StringVar(&edgelbOptions.Host, "edgelb-host", constants.DefaultEdgeLBHost, "the host at which the edgelb api server can be reached")
 	flag.BoolVar(&edgelbOptions.InsecureSkipTLSVerify, "edgelb-insecure-skip-tls-verify", false, "whether to skip verification of the tls certificate presented by the edgelb api server")
 	flag.StringVar(&edgelbOptions.Path, "edgelb-path", constants.DefaultEdgeLBPath, "the path at which the edgelb api server can be reached")
+	flag.IntVar(&translatorapi.DefaultEdgeLBPoolSize, "edgelb-default-pool-size", constants.DefaultEdgeLBPoolSize, "the default number of load balancer instances in the edgelb pools")
 	flag.StringVar(&edgelbOptions.PoolGroup, "edgelb-pool-group", constants.DefaultEdgeLBPoolGroup, "the dc/os service group in which to create edgelb pools")
 	flag.StringVar(&edgelbOptions.Scheme, "edgelb-scheme", constants.DefaultEdgeLBScheme, "the scheme to use when communicating with the edgelb api server")
 	flag.StringVar(&featureGates, "feature-gates", "", "a comma-separated list of \"key=value\" pairs used to toggle certain features")

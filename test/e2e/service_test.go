@@ -110,7 +110,7 @@ var _ = Describe("Service", func() {
 				Expect(*objSpec.Network).To(Equal(constants.EdgeLBHostNetwork))
 				Expect(*objSpec.CPUs).To(Equal(translatorapi.DefaultEdgeLBPoolCpus))
 				Expect(*objSpec.Memory).To(Equal(translatorapi.DefaultEdgeLBPoolMemory))
-				Expect(*objSpec.Size).To(Equal(translatorapi.DefaultEdgeLBPoolSize))
+				Expect(*objSpec.Size).To(Equal(int32(translatorapi.DefaultEdgeLBPoolSize)))
 				Expect(objSpec.Frontends).To(HaveLen(len(svc.Spec.Ports)))
 				Expect(objSpec.Frontends[0].ServicePort).To(Equal(svc.Spec.Ports[0].Port))
 				Expect(*objSpec.Frontends[0].Port).To(Equal(svc.Spec.Ports[0].Port))
