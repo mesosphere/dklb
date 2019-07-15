@@ -138,6 +138,26 @@ kubernetes.dcos.io/dklb-config: |
 
 In the above representation, `<edgelb-pool-cpus>` is a floating-point number (e.g. `0.2`), and `<edgelb-pool-memory>` and `<edgelb-pool-size>` are integers (e.g. `512` and `3`, respectively).
 
+==== Customizing the EdgeLB load balancer instance placement constraints
+
+`dklb` supports customizing load balancer instance placement for the target EdgeLB Pool.
+The default is no constraint is specified. A custom value can be speficied using `.constraints` field.
+
+WARNING: Take special care to escape strings in the placement constraint.
+
+[source,text]
+----
+kubernetes.dcos.io/dklb-config: |
+  contraints: "<Marathon style constraints for load balancer instance placement>"
+----
+
+===== Example
+[source,text]
+----
+kubernetes.dcos.io/dklb-config: |
+  contraints: "[[\"hostname\",\"MAX_PER\",\"1\"],[\"@zone\",\"GROUP_BY\",\"3\"]]"
+----
+
 === Advanced topics
 
 ==== Customizing the DC/OS virtual network to join
