@@ -151,7 +151,7 @@ In the above representation, `<edgelb-pool-cpus>` is a floating-point number (e.
 ==== Customizing the EdgeLB load balancer instance placement constraints
 
 `dklb` supports customizing load balancer instance placement for the target EdgeLB Pool.
-The default is no constraint is specified. A custom value can be speficied using `.constraints` field.
+By default, no constraint is specified. A custom value can be specified using the `constraints` field.
 
 WARNING: Take special care to escape strings in the placement constraint.
 
