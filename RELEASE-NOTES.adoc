@@ -19,6 +19,13 @@ endif::[]
 == Table of Contents
 toc::[]
 
+== v0.1.0-alpha.13
+
+=== Improvements
+
+* Add option to configure default number of load balancers in the EdgeLB pools. By default, the number of load balancers in the EdgeLB pool is set to 1. A custom value can be specified using the `--edgelb-default-pool-size` command line flag. (https://github.com/mesosphere/dklb/pull/46[#46])
+* Add option to configure load balancer instance placement for the target EdgeLB Pool. By default, no constraint is specified. A custom value can be specified using the `.constraints` field in the `kubernetes.dcos.io/dklb-config` annotation. (https://github.com/mesosphere/dklb/pull/47[#47])
+
 == v0.1.0-alpha.12
 
 === Breaking changes
