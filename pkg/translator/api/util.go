@@ -26,7 +26,7 @@ const (
 )
 
 // newRandomEdgeLBPoolName returns a string meant to be used as the name of an EdgeLB pool.
-// The computed name is of the form "[<prefix>--]<cluster-name>--<suffix>", where "<prefix>" is the specified (possibly empty) string and "<suffix>" is a randomly-generated suffix.
+// The computed name is of the form "<EdgeLB group>--[<prefix>--]<cluster-name>--<suffix>", where "<prefix>" is the specified (possibly empty) string and "<suffix>" is a randomly-generated suffix.
 // It is guaranteed not to exceed 63 characters.
 // It is also guaranteed, to the best of our ability, not to clash with the names of any pre-existing EdgeLB pool.
 func newRandomEdgeLBPoolName(prefix string) string {
@@ -36,12 +36,24 @@ func newRandomEdgeLBPoolName(prefix string) string {
 	}
 	// Grab a random string to use as the suffix, and prepend it with the component separator (i.e. "--<suffix>").
 	suffix := edgeLBPoolNameComponentSeparator + strings.RandomStringWithLength(edgeLBPoolNameSuffixLength)
-	// Compute the maximum length of the "<cluster-name>" component.
-	maxClusterNameLength := edgeLBPoolNameMaxLength - len(prefix) - len(suffix)
+	// Compute the maximum length of the "<cluster-name>" component. We need to account for the EdgeLB pool group name
+	// where the pool will created or else the pool will fail to create with the following error:
+	//
+	// com.mesosphere.sdk.state.ConfigStoreException: Configuration failed
+	// validation without any prior target configurationavailable for fallback.
+	// Initial launch with invalid configuration? 1 Errors: 1: Field:
+	// 'service.name'; Value:
+	// 'dcos-edgelb/pools/abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghjik';
+	// Message: 'Service name (without slashes) exceeds 63 characters. In order
+	// for service DNS to work correctly, the service name (without slashes)
+	// must not exceed 63 characters'; Fatal: false (reason: LOGIC_ERROR)
+	//
+	maxClusterNameLength := edgeLBPoolNameMaxLength - (len(constants.DefaultEdgeLBPoolGroup) + 1) - len(prefix) - len(suffix)
+
 	// Compute a "safe" version of the cluster's name.
 	clusterName := strings.ReplaceForwardSlashes(cluster.Name, edgeLBPoolNameComponentSeparator)
 	if len(clusterName) > maxClusterNameLength {
-		clusterName = clusterName[:edgeLBPoolNameMaxLength]
+		clusterName = clusterName[:maxClusterNameLength]
 	}
 	// Join the prefix, cluster name and suffix in order to obtain a candidate name.
 	candidate := prefix + clusterName + suffix
