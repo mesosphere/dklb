@@ -78,7 +78,7 @@ endif
 # NOTE: Kubernetes cluster package normally takes up 10. 10 minutes to be running and healthy.
 package.kubernetes-cluster.await-healthy:
 	@$(call retry,\
-		dcos kubernetes cluster debug plan status deploy --cluster-name kubernetes-cluster --json 2> /dev/null | tail -n +2 | jq -e '.status == "COMPLETE"' &> /dev/null,\
+		dcos kubernetes cluster debug plan status deploy --cluster-name kubernetes-cluster --json 2> /dev/null | jq -e '.status == "COMPLETE"' &> /dev/null,\
 		40,\
 		15,\
 		Kubernetes cluster installation isn't ready yet. Retrying in 15 seconds...)
