@@ -34,6 +34,12 @@ func TestNewRandomEdgeLBPoolName(t *testing.T) {
 			clusterName:            "one--sixty--three--character--string--used--for--testing--this",
 			prefix:                 "cloud",
 		},
+		{
+			description:            "should trim first forward slash in cluster name",
+			expectedPoolNameRegexp: "^foldered--cluster--name--",
+			clusterName:            "/foldered/cluster/name",
+			prefix:                 "",
+		},
 	}
 
 	for _, test := range tests {

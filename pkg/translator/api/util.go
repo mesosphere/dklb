@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	pkgstrings "strings"
 	"time"
 
 	"gopkg.in/yaml.v2"
@@ -51,7 +52,8 @@ func newRandomEdgeLBPoolName(prefix string) string {
 	maxClusterNameLength := edgeLBPoolNameMaxLength - (len(constants.DefaultEdgeLBPoolGroup) + 1) - len(prefix) - len(suffix)
 
 	// Compute a "safe" version of the cluster's name.
-	clusterName := strings.ReplaceForwardSlashes(cluster.Name, edgeLBPoolNameComponentSeparator)
+	clusterName := pkgstrings.TrimPrefix(cluster.Name, "/")
+	clusterName = strings.ReplaceForwardSlashes(clusterName, edgeLBPoolNameComponentSeparator)
 	if len(clusterName) > maxClusterNameLength {
 		clusterName = clusterName[:maxClusterNameLength]
 	}
