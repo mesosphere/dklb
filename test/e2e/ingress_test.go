@@ -1167,8 +1167,8 @@ var _ = Describe("Ingress", func() {
 			// This guarantees that HTTPS backends are supported.
 			status, body, err := f.Request("GET", publicIP, "/kubernetes")
 			Expect(err).NotTo(HaveOccurred(), "failed to perform http request")
-			Expect(status).To(Equal(403), "the response's status code doesn't match the expectation")
-			Expect(body).To(MatchRegexp("anonymous"), "the response's body doesn't match the expectations")
+			Expect(status).To(Equal(http.StatusUnauthorized), "the response's status code doesn't match the expectation")
+			Expect(body).To(MatchRegexp(`{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"Unauthorized","reason":"Unauthorized","code":401}`), "the response's body doesn't match the expectations")
 
 			// Undo the change made to the "default/kubernetes" service.
 			svc, err = f.KubeClient.CoreV1().Services(svc.Namespace).Get(svc.Name, metav1.GetOptions{})
