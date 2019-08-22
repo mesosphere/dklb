@@ -19,6 +19,12 @@ endif::[]
 == Table of Contents
 toc::[]
 
+== v1.0.0-rc1
+
+=== Bug fixes
+
+* Fix EdgeLB pool name when 63 character limit is reached. The Kubernetes cluster name is now properly truncated to not hit the EdgeLB pool name length limit.
+
 == v0.1.0-alpha.13
 
 === Improvements
