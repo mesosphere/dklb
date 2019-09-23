@@ -19,6 +19,10 @@ endif::[]
 == Table of Contents
 toc::[]
 
+== v1.0.0
+
+Upgraded v1.0.0-rc1 to GA.
+
 == v1.0.0-rc1
 
 === Bug fixes
