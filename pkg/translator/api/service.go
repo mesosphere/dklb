@@ -42,7 +42,7 @@ func (o *ServiceEdgeLBPoolSpec) SetDefaults(service *corev1.Service) {
 	for _, port := range service.Spec.Ports {
 		frontendPort := port.Port
 		for _, frontendSpec := range o.Frontends {
-			if frontendSpec.ServicePort == port.Port {
+			if frontendSpec.ServicePort == port.Port && frontendSpec.Port != nil {
 				frontendPort = *frontendSpec.Port
 				break
 			}
