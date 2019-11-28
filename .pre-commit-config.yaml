@@ -37,7 +37,7 @@ repos:
       - id: shfmt
         stages: [commit,push]
   - repo: https://github.com/golangci/golangci-lint
-    rev: v1.16.0
+    rev: v1.21.0
     hooks:
       - id: golangci-lint
         args: ["--fix", "-c", ".golangci.yml"]
