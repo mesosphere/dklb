@@ -87,6 +87,7 @@ func TestSecretReflector_reflect(t *testing.T) {
 		expectedError     error
 		kubeClient        kubernetes.Interface
 		kubeSecret        *corev1.Secret
+		uid               string
 	}{
 		{
 			description: "should create DC/OS Secret",
@@ -95,8 +96,8 @@ func TestSecretReflector_reflect(t *testing.T) {
 			},
 			dcosSecretsClient: &fakeDCOSSecretsClient{
 				OnCreate: func(path string) error {
-					if path != "kubernetes_cluster-1__namespace-1__name-1" {
-						return fmt.Errorf("error expected 'kubernetes_cluster-1__namespace-1__name-1' got '%s'", path)
+					if path != "uid__name-1" {
+						return fmt.Errorf("error expected 'uid__name-1' got '%s'", path)
 					}
 					return nil
 				},
@@ -104,6 +105,7 @@ func TestSecretReflector_reflect(t *testing.T) {
 			expectedError: nil,
 			kubeClient:    fake.NewSimpleClientset(defaultTestKubeSecret),
 			kubeSecret:    defaultTestKubeSecret.DeepCopy(),
+			uid:           "uid",
 		},
 		{
 			description: "should update DC/OS Secret",
@@ -112,7 +114,7 @@ func TestSecretReflector_reflect(t *testing.T) {
 			},
 			dcosSecretsClient: &fakeDCOSSecretsClient{
 				OnUpdate: func(path string) error {
-					if path != "kubernetes_cluster-1__namespace-1__name-1" {
+					if path != "uid__name-1" {
 						return fmt.Errorf("error expected 'kubernetes_cluster-1__namespace-1__name-1' got '%s'", path)
 					}
 					return nil
@@ -125,6 +127,7 @@ func TestSecretReflector_reflect(t *testing.T) {
 				secret.Data[corev1.TLSPrivateKeyKey] = []byte("d29ybGQK")
 				secret.Annotations[constants.DklbSecretAnnotationKey] = "fake"
 			}),
+			uid: "uid",
 		},
 		{
 			description: "should fail with invalid DC/OS secret path",
@@ -133,15 +136,16 @@ func TestSecretReflector_reflect(t *testing.T) {
 			},
 			dcosSecretsClient: &fakeDCOSSecretsClient{
 				OnCreate: func(path string) error {
-					if path == "kubernetes_cluster-1__namespace-1__name-1" {
+					if path == "uid__name-1" {
 						return errors.New("fake error")
 					}
 					return nil
 				},
 			},
-			expectedError: errors.New("failed to create DC/OS secret kubernetes_cluster-1__namespace-1__name-1: fake error"),
+			expectedError: errors.New("failed to create DC/OS secret uid__name-1: fake error"),
 			kubeClient:    fake.NewSimpleClientset(defaultTestKubeSecret),
 			kubeSecret:    defaultTestKubeSecret.DeepCopy(),
+			uid:           "uid",
 		},
 		{
 			description: "should not reflect secret because md5sum hash matches annotation",
@@ -154,24 +158,26 @@ func TestSecretReflector_reflect(t *testing.T) {
 				secret.Data[corev1.TLSPrivateKeyKey] = []byte("d29ybGQK")
 				secret.Annotations[constants.DklbSecretAnnotationKey] = "0f723ae7f9bf07744445e93ac5595156"
 			}),
+			uid: "uid",
 		},
 		{
 			description: "should fail to create DC/OS secret",
 			dcosSecret: &dcos.SecretsV1Secret{
 				Value: "hello\nworld\n",
 			},
-			expectedError: errors.New("failed to create DC/OS secret kubernetes_cluster-1__namespace-1__name-1: fake error"),
+			expectedError: errors.New("failed to create DC/OS secret uid__name-1: fake error"),
 			dcosSecretsClient: &fakeDCOSSecretsClient{
 				OnCreate: func(path string) error { return errors.New("fake error") },
 			},
 			kubeSecret: defaultTestKubeSecret.DeepCopy(),
+			uid:        "uid",
 		},
 		{
 			description: "should fail to update DC/OS secret",
 			dcosSecret: &dcos.SecretsV1Secret{
 				Value: "hello\nworld\n",
 			},
-			expectedError: errors.New("failed to update DC/OS secret kubernetes_cluster-1__namespace-1__name-1: fake error"),
+			expectedError: errors.New("failed to update DC/OS secret uid__name-1: fake error"),
 			dcosSecretsClient: &fakeDCOSSecretsClient{
 				OnUpdate: func(string) error { return errors.New("fake error") },
 			},
@@ -180,6 +186,7 @@ func TestSecretReflector_reflect(t *testing.T) {
 				secret.Data[corev1.TLSPrivateKeyKey] = []byte("d29ybGQK")
 				secret.Annotations[constants.DklbSecretAnnotationKey] = "fake"
 			}),
+			uid: "uid",
 		},
 		{
 			description: "should fail to update Kubernetes secret dklb-hash annotation",
@@ -190,6 +197,7 @@ func TestSecretReflector_reflect(t *testing.T) {
 			dcosSecretsClient: newFakeDCOSSecretsClient(),
 			kubeClient:        fake.NewSimpleClientset(),
 			kubeSecret:        defaultTestKubeSecret.DeepCopy(),
+			uid:               "uid",
 		},
 		{
 			description: "should succeed to update a secret already reflected",
@@ -204,6 +212,7 @@ func TestSecretReflector_reflect(t *testing.T) {
 			expectedError: nil,
 			kubeClient:    fake.NewSimpleClientset(defaultTestKubeSecret),
 			kubeSecret:    defaultTestKubeSecret.DeepCopy(),
+			uid:           "uid",
 		},
 		{
 			description: "should fail to update a secret already reflected",
@@ -215,9 +224,10 @@ func TestSecretReflector_reflect(t *testing.T) {
 				OnUpdate: func(string) error { return fmt.Errorf("fake update error") },
 				resp:     &http.Response{StatusCode: http.StatusConflict},
 			},
-			expectedError: fmt.Errorf("failed to update DC/OS secret kubernetes_cluster-1__namespace-1__name-1: fake update error"),
+			expectedError: fmt.Errorf("failed to update DC/OS secret uid__name-1: fake update error"),
 			kubeClient:    fake.NewSimpleClientset(defaultTestKubeSecret),
 			kubeSecret:    defaultTestKubeSecret.DeepCopy(),
+			uid:           "uid",
 		},
 	}
 	for _, test := range tests {
@@ -228,7 +238,7 @@ func TestSecretReflector_reflect(t *testing.T) {
 			logger:            defaultTestLogger,
 			kubeClient:        test.kubeClient,
 		}
-		err := sr.reflect(test.kubeSecret, test.dcosSecret)
+		err := sr.reflect(test.uid, test.kubeSecret, test.dcosSecret)
 
 		assert.Equal(t, test.expectedError, err)
 	}
@@ -246,6 +256,7 @@ func TestSecretReflector(t *testing.T) {
 		kubeCache         dklbcache.KubernetesResourceCache
 		kubeClient        kubernetes.Interface
 		kubeSecret        *corev1.Secret
+		uid               string
 	}{
 		{
 			description:       "should reflect a secret",
@@ -254,6 +265,7 @@ func TestSecretReflector(t *testing.T) {
 			kubeCache:         dklbcache.NewInformerBackedResourceCache(cachetestutil.NewFakeSharedInformerFactory(defaultTestKubeSecret)),
 			kubeClient:        fake.NewSimpleClientset(defaultTestKubeSecret),
 			kubeSecret:        defaultTestKubeSecret.DeepCopy(),
+			uid:               "uid",
 		},
 		{
 			description:       "should fail to retrieve a secret from cache",
@@ -261,6 +273,7 @@ func TestSecretReflector(t *testing.T) {
 			expectedError:     errors.New("failed to get secret \"namespace-1/name-1\": secret \"name-1\" not found"),
 			kubeCache:         dklbcache.NewInformerBackedResourceCache(cachetestutil.NewFakeSharedInformerFactory()),
 			kubeSecret:        defaultTestKubeSecret.DeepCopy(),
+			uid:               "uid",
 		},
 		{
 			description:       "should fail to translate a secret",
@@ -269,6 +282,7 @@ func TestSecretReflector(t *testing.T) {
 			kubeCache:         dklbcache.NewInformerBackedResourceCache(cachetestutil.NewFakeSharedInformerFactory(emptyKubeSecret)),
 			kubeClient:        fake.NewSimpleClientset(emptyKubeSecret),
 			kubeSecret:        emptyKubeSecret.DeepCopy(),
+			uid:               "uid",
 		},
 	}
 
@@ -281,7 +295,7 @@ func TestSecretReflector(t *testing.T) {
 			kubeCache:         test.kubeCache,
 			kubeClient:        test.kubeClient,
 		}
-		err := sr.Reflect(test.kubeSecret.Namespace, test.kubeSecret.Name)
+		err := sr.Reflect(test.uid, test.kubeSecret.Namespace, test.kubeSecret.Name)
 
 		assert.Equal(t, test.expectedError, err)
 	}

@@ -171,8 +171,8 @@ func (c *IngressController) processQueueItem(workItem WorkItem) error {
 
 	// Check if we need to reflect any secrets back to DC/OS.
 	for _, ingressTLS := range ingress.Spec.TLS {
-		c.logger.Debugf("reflecting ingress secret %s/%s", ingress.Namespace, ingressTLS.SecretName)
-		if err := c.secretsReflector.Reflect(ingress.Namespace, ingressTLS.SecretName); err != nil {
+		c.logger.Debugf("reflecting ingress secret UID=%s %s/%s", ingress.UID, ingress.Namespace, ingressTLS.SecretName)
+		if err := c.secretsReflector.Reflect(string(ingress.UID), ingress.Namespace, ingressTLS.SecretName); err != nil {
 			c.er.Eventf(ingress, corev1.EventTypeWarning, constants.ReasonSecretReflectionError, "failed to reflect ingress secret: %v", err)
 			c.logger.Errorf("failed to reflect ingress secret %q: %v", workItem.Key, err)
 			return err

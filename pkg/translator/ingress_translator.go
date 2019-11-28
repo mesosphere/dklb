@@ -18,7 +18,6 @@ import (
 	"github.com/mesosphere/dklb/pkg/constants"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	dklberrors "github.com/mesosphere/dklb/pkg/errors"
-	secretsreflector "github.com/mesosphere/dklb/pkg/secrets_reflector"
 	translatorapi "github.com/mesosphere/dklb/pkg/translator/api"
 	kubernetesutil "github.com/mesosphere/dklb/pkg/util/kubernetes"
 	"github.com/mesosphere/dklb/pkg/util/pointers"
@@ -275,7 +274,7 @@ func (it *IngressTranslator) createEdgeLBPoolObject(backendMap IngressBackendNod
 		return backends[i].Name < backends[j].Name
 	})
 	// Create the EdgeLB frontend object.
-	frontends := computeEdgeLBFrontendForIngress(it.ingress, *it.spec)
+	frontends := computeEdgeLBFrontendForIngress(it.ingress, *it.spec, nil)
 	secrets := computeEdgeLBSecretsForIngress(it.ingress)
 	// Create the base EdgeLB pool object.
 	p := &models.V2Pool{
@@ -308,6 +307,17 @@ func (it *IngressTranslator) createEdgeLBPoolObject(backendMap IngressBackendNod
 		}
 	}
 	return p
+}
+
+// checkIfDesired is a helper function that returns true if the list of frontends
+// contains a frontend with the same name as desired.
+func checkIfDesired(frontends []*models.V2Frontend, desired *models.V2Frontend) bool {
+	for _, f := range frontends {
+		if f.Name == desired.Name {
+			return true
+		}
+	}
+	return false
 }
 
 // updateEdgeLBPoolObject updates the specified EdgeLB pool object in order to reflect the status of the current Ingress resource.
@@ -374,14 +384,16 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 
 	// Check if pool's frontends match the desired list. If a frontend is not
 	// managed by dklb it's added to the list of desiredFrontends.
-	desiredFrontends := computeEdgeLBFrontendForIngress(it.ingress, *it.spec)
+
+	desiredFrontends := computeEdgeLBFrontendForIngress(it.ingress, *it.spec, pool)
 	updatedFrontends := make([]*models.V2Frontend, 0)
 	if !reflect.DeepEqual(desiredFrontends, pool.Haproxy.Frontends) {
 		wasChanged = true
 		report.Report("frontend list requires an update")
 		for _, frontend := range pool.Haproxy.Frontends {
 			frontendMetadata, err := computeIngressOwnedEdgeLBObjectMetadata(frontend.Name)
-			if err != nil || !frontendMetadata.IsOwnedBy(it.ingress) {
+			isDesired := checkIfDesired(desiredFrontends, frontend)
+			if !isDesired && (err != nil || !frontendMetadata.IsOwnedBy(it.ingress)) {
 				wasChanged = true
 				updatedFrontends = append(updatedFrontends, frontend)
 				report.Report("added unmanaged frontend %q", frontend.Name)
@@ -392,12 +404,9 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 	// Iterate of the pool's secrets and check whether each one is owned by the current ingress
 	desiredSecrets := computeEdgeLBSecretsForIngress(it.ingress)
 	updatedSecrets := make([]*models.V2PoolSecretsItems0, 0)
-	// Compute the dcos secret name using the empty string. This
-	// will return the prefix used when creating the secret. We'll
-	// use it check if the secret is managed by dklb or not.
-	dcosSecretNamePrefix := secretsreflector.ComputeDCOSSecretName(it.ingress.Namespace, "")
+
 	for _, secret := range pool.Secrets {
-		if !strings.HasPrefix(secret.Secret, dcosSecretNamePrefix) {
+		if !strings.HasPrefix(secret.Secret, string(it.ingress.UID)) {
 			wasChanged = true
 			report.Report("added unmanaged secret %q", secret.File)
 			updatedSecrets = append(updatedSecrets, secret)

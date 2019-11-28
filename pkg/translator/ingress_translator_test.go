@@ -9,6 +9,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 
 	edgelbmodels "github.com/mesosphere/dcos-edge-lb/pkg/apis/models"
@@ -25,6 +27,7 @@ import (
 )
 
 func TestTranslate(t *testing.T) {
+	cluster.Name = "test-cluster-test-translate"
 	// dummyService represents a dummy Service resource.
 	defaultService := servicetestutil.DummyServiceResource("kube-system", "dklb", func(service *corev1.Service) {
 		service.Spec.Type = corev1.ServiceTypeLoadBalancer
@@ -36,6 +39,19 @@ func TestTranslate(t *testing.T) {
 			{
 				Port:     443,
 				NodePort: 32789,
+			},
+		}
+	})
+	testService := servicetestutil.DummyServiceResource("test-namespace", "test-service", func(service *corev1.Service) {
+		service.Spec.Type = corev1.ServiceTypeLoadBalancer
+		service.Spec.Ports = []corev1.ServicePort{
+			{
+				Port:     80,
+				NodePort: 31889,
+			},
+			{
+				Port:     443,
+				NodePort: 32889,
 			},
 		}
 	})
@@ -74,9 +90,126 @@ func TestTranslate(t *testing.T) {
 			},
 			kubeCache: dklbcache.NewInformerBackedResourceCache(cachetestutil.NewFakeSharedInformerFactory(defaultService)),
 		},
+		{
+			description: "should succeed adding to frontend backendmap",
+			edgelbManager: func() edgelbmanager.EdgeLBManager {
+				pool := &models.V2Pool{
+					Namespace: pointers.NewString(""),
+					Role:      "slave-public",
+					Cpus:      0.1,
+					Mem:       int32(128),
+					VirtualNetworks: []*models.V2PoolVirtualNetworksItems0{
+						{Name: "dcos"},
+					},
+					Count: pointers.NewInt32(1),
+					Haproxy: &models.V2Haproxy{
+						Backends: []*models.V2Backend{},
+						Frontends: []*models.V2Frontend{
+							{
+								BindAddress: "0.0.0.0",
+								BindPort:    pointers.NewInt32(443),
+								LinkBackend: &models.V2FrontendLinkBackend{
+									DefaultBackend: "existing-backend",
+								},
+								Name:         "frontend",
+								Protocol:     "HTTPS",
+								Certificates: []string{"$SECRETS/existing-secret"},
+							},
+						},
+						Stats: &models.V2Stats{
+							BindPort: pointers.NewInt32(0),
+						},
+					},
+					Secrets: []*models.V2PoolSecretsItems0{
+						{
+							File:   "existing-secret",
+							Secret: "existing-secret",
+						},
+					},
+				}
+				edgelbManager := new(mockedgelb.MockEdgeLBManager)
+				edgelbManager.On("PoolGroup").Return("test-pool-group", nil)
+				edgelbManager.On("GetPool", mock.Anything, mock.Anything).Return(pool, nil)
+				edgelbManager.On("GetPoolMetadata", mock.Anything, mock.Anything).Return(&edgelbmodels.V2PoolMetadata{}, nil)
+				edgelbManager.On("UpdatePool", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+					pool := args.Get(1).(*models.V2Pool)
+					assert.Contains(t, pool.Secrets, &models.V2PoolSecretsItems0{
+						File:   "uid__test-secret-1",
+						Secret: "uid__test-secret-1",
+					})
+					assert.Contains(t, pool.Secrets, &models.V2PoolSecretsItems0{
+						File:   "existing-secret",
+						Secret: "existing-secret",
+					})
+					assert.Equal(t, len(pool.Haproxy.Frontends), 2)
+					assert.Contains(t, pool.Haproxy.Frontends[1].Certificates, "$SECRETS/existing-secret")
+					assert.Contains(t, pool.Haproxy.Frontends[1].Certificates, "$SECRETS/uid__test-secret-1")
+					assert.Equal(t, pool.Haproxy.Frontends[1].LinkBackend.DefaultBackend, "existing-backend")
+					assert.Equal(t, len(pool.Haproxy.Frontends[1].LinkBackend.Map), 2)
+					assert.Contains(t, pool.Haproxy.Frontends[1].LinkBackend.Map, &models.V2FrontendLinkBackendMapItems0{
+						Backend: "test-cluster-test-translate:test-namespace:test-ingress-1:test-service:80",
+						HostEq:  "test-host.com",
+						PathReg: "^/bar(/.*)?$",
+					})
+					assert.Contains(t, pool.Haproxy.Frontends[1].LinkBackend.Map, &models.V2FrontendLinkBackendMapItems0{
+						Backend: "test-cluster-test-translate:test-namespace:test-ingress-1:test-service:80",
+						HostEq:  "test-host.com",
+						PathReg: `^.*$`,
+					})
+				}).Return(pool, nil)
+				return edgelbManager
+			},
+			eventRecorder:    record.NewFakeRecorder(10),
+			expectedError:    nil,
+			expectedLBStatus: &corev1.LoadBalancerStatus{},
+			ingress: &extsv1beta1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test-namespace",
+					Name:      "test-ingress-1",
+					UID:       "uid",
+					Annotations: map[string]string{
+						constants.EdgeLBIngressClassAnnotationKey: constants.EdgeLBIngressClassAnnotationValue,
+					},
+				},
+				Spec: extsv1beta1.IngressSpec{
+					Backend: &extsv1beta1.IngressBackend{
+						ServiceName: testService.Name,
+						ServicePort: intstr.FromString("80"),
+					},
+					Rules: []extsv1beta1.IngressRule{
+						{
+							Host: "test-host.com",
+							IngressRuleValue: extsv1beta1.IngressRuleValue{
+								HTTP: &extsv1beta1.HTTPIngressRuleValue{
+									Paths: []extsv1beta1.HTTPIngressPath{
+										{
+											Backend: extsv1beta1.IngressBackend{
+												ServiceName: testService.Name,
+												ServicePort: intstr.FromInt(80),
+											},
+										},
+										{
+											Path: "/bar(/.*)?",
+											Backend: extsv1beta1.IngressBackend{
+												ServiceName: testService.Name,
+												ServicePort: intstr.FromString("80"),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+					TLS: []extsv1beta1.IngressTLS{
+						{SecretName: "test-secret-1"},
+					},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
+		test.kubeCache = dklbcache.NewInformerBackedResourceCache(cachetestutil.NewFakeSharedInformerFactory(defaultService, testService, test.ingress))
 		status, err := NewIngressTranslator(test.ingress, test.kubeCache, test.edgelbManager(), test.eventRecorder).Translate()
 		assert.Equal(t, test.expectedError, err)
 		assert.Equal(t, test.expectedLBStatus, status)
@@ -131,6 +264,7 @@ func TestTranslate_createEdgeLBPoolObject(t *testing.T) {
 						Annotations: map[string]string{
 							constants.EdgeLBIngressClassAnnotationKey: constants.EdgeLBIngressClassAnnotationValue,
 						},
+						UID: types.UID("uid"),
 					},
 				},
 				spec: &translatorapi.IngressEdgeLBPoolSpec{
@@ -182,7 +316,7 @@ func TestTranslate_createEdgeLBPoolObject(t *testing.T) {
 							},
 							Name:         "test-cluster:test-namespace:test-ingress:https",
 							Protocol:     "HTTPS",
-							Certificates: []string{"$SECRETS/test-cluster__test-namespace__test-secret"},
+							Certificates: []string{"$SECRETS/uid__test-secret"},
 						},
 					},
 					Stats: &models.V2Stats{
@@ -191,8 +325,8 @@ func TestTranslate_createEdgeLBPoolObject(t *testing.T) {
 				},
 				Secrets: []*models.V2PoolSecretsItems0{
 					{
-						File:   "test-cluster__test-namespace__test-secret",
-						Secret: "test-cluster__test-namespace__test-secret",
+						File:   "uid__test-secret",
+						Secret: "uid__test-secret",
 					},
 				},
 			},
@@ -204,6 +338,7 @@ func TestTranslate_createEdgeLBPoolObject(t *testing.T) {
 						Annotations: map[string]string{
 							constants.EdgeLBIngressClassAnnotationKey: constants.EdgeLBIngressClassAnnotationValue,
 						},
+						UID: types.UID("uid"),
 					},
 					Spec: extsv1beta1.IngressSpec{
 						TLS: []extsv1beta1.IngressTLS{
@@ -254,7 +389,7 @@ func TestTranslate_createEdgeLBPoolObject(t *testing.T) {
 							},
 							Name:         "test-cluster:test-namespace:test-ingress:https",
 							Protocol:     "HTTPS",
-							Certificates: []string{"$SECRETS/test-cluster__test-namespace__test-secret"},
+							Certificates: []string{"$SECRETS/uid__test-secret"},
 						},
 					},
 					Stats: &models.V2Stats{
@@ -263,8 +398,8 @@ func TestTranslate_createEdgeLBPoolObject(t *testing.T) {
 				},
 				Secrets: []*models.V2PoolSecretsItems0{
 					{
-						File:   "test-cluster__test-namespace__test-secret",
-						Secret: "test-cluster__test-namespace__test-secret",
+						File:   "uid__test-secret",
+						Secret: "uid__test-secret",
 					},
 				},
 			},
@@ -276,6 +411,7 @@ func TestTranslate_createEdgeLBPoolObject(t *testing.T) {
 						Annotations: map[string]string{
 							constants.EdgeLBIngressClassAnnotationKey: constants.EdgeLBIngressClassAnnotationValue,
 						},
+						UID: types.UID("uid"),
 					},
 					Spec: extsv1beta1.IngressSpec{
 						TLS: []extsv1beta1.IngressTLS{
@@ -328,6 +464,7 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 					Annotations: map[string]string{
 						constants.EdgeLBIngressClassAnnotationKey: constants.EdgeLBIngressClassAnnotationValue,
 					},
+					UID: types.UID("uid"),
 				},
 				Spec: extsv1beta1.IngressSpec{
 					TLS: []extsv1beta1.IngressTLS{
@@ -381,7 +518,7 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 						},
 						Name:         "test-cluster:test-namespace:test-ingress:https",
 						Protocol:     "HTTPS",
-						Certificates: []string{"$SECRETS/test-cluster__test-namespace__test-secret"},
+						Certificates: []string{"$SECRETS/uid__test-secret"},
 					},
 				},
 				Stats: &models.V2Stats{
@@ -390,8 +527,8 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			},
 			Secrets: []*models.V2PoolSecretsItems0{
 				{
-					File:   "test-cluster__test-namespace__test-secret",
-					Secret: "test-cluster__test-namespace__test-secret",
+					File:   "uid__test-secret",
+					Secret: "uid__test-secret",
 				},
 			},
 		}
@@ -427,17 +564,19 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			it: newIngressTranslator(func(it *IngressTranslator) {
 				it.ingress.Spec.TLS = []extsv1beta1.IngressTLS{
 					// in this test we update the name of the secret
-					{SecretName: "test-secret-1"},
+					{SecretName: "should-update-test-secret-1"},
 				}
 			}),
 			pool: newPool(func(*models.V2Pool) {
 			}),
 			expectedPool: newPool(func(expectedPool *models.V2Pool) {
-				expectedPool.Haproxy.Frontends[0].Certificates = []string{"$SECRETS/test-cluster__test-namespace__test-secret-1"}
+				expectedPool.Haproxy.Frontends[0].Certificates = []string{
+					"$SECRETS/uid__should-update-test-secret-1",
+				}
 				expectedPool.Secrets = []*models.V2PoolSecretsItems0{
 					{
-						File:   "test-cluster__test-namespace__test-secret-1",
-						Secret: "test-cluster__test-namespace__test-secret-1",
+						File:   "uid__should-update-test-secret-1",
+						Secret: "uid__should-update-test-secret-1",
 					},
 				}
 			}),
@@ -459,8 +598,8 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			expectedPool: newPool(func(expectedPool *models.V2Pool) {
 				expectedPool.Secrets = []*models.V2PoolSecretsItems0{
 					{
-						File:   "test-cluster__test-namespace__test-secret",
-						Secret: "test-cluster__test-namespace__test-secret",
+						File:   "uid__test-secret",
+						Secret: "uid__test-secret",
 					},
 					{
 						File:   "foobar",
@@ -498,7 +637,7 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 						},
 						Name:         "test-cluster:test-namespace:test-ingress:https",
 						Protocol:     "HTTPS",
-						Certificates: []string{"$SECRETS/test-cluster__test-namespace__test-secret"},
+						Certificates: []string{"$SECRETS/uid__test-secret"},
 					},
 				}
 			}),
@@ -527,7 +666,7 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 						},
 						Name:         "test-cluster:test-namespace:test-ingress:https",
 						Protocol:     "HTTPS",
-						Certificates: []string{"test-secret"},
+						Certificates: []string{"$SECRETS/uid__test-secret"},
 					},
 				}
 			}),
@@ -552,7 +691,7 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 						},
 						Name:         "test-cluster:test-namespace:test-ingress:https",
 						Protocol:     "HTTPS",
-						Certificates: []string{"test-secret"},
+						Certificates: []string{"$SECRETS/uid__test-secret"},
 					},
 					{
 						BindAddress: "0.0.0.0",
@@ -584,7 +723,7 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 						},
 						Name:         "test-cluster:test-namespace:test-ingress:https",
 						Protocol:     "HTTPS",
-						Certificates: []string{"$SECRETS/test-cluster__test-namespace__test-secret"},
+						Certificates: []string{"$SECRETS/uid__test-secret"},
 					},
 					{
 						BindAddress: "0.0.0.0",
@@ -716,9 +855,9 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 
 	for _, test := range tests {
 		t.Logf("test case: %s", test.description)
-		changed, report := test.it.updateEdgeLBPoolObject(test.pool, test.backendMap)
 
-		assert.Equal(t, test.expectedChange, changed)
+		changed, report := test.it.updateEdgeLBPoolObject(test.pool, test.backendMap)
+		assert.Equal(t, test.expectedChange, changed, report)
 		assert.Equal(t, test.expectedPool, test.pool, report)
 	}
 }

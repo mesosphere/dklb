@@ -148,18 +148,41 @@ func computeEdgeLBBackendNameForIngressBackend(ingress *extsv1beta1.Ingress, bac
 	return fmt.Sprintf(edgeLBIngressBackendNameFormatString, dklbstrings.ReplaceForwardSlashesWithDots(cluster.Name), ingress.Namespace, ingress.Name, backend.ServiceName, backend.ServicePort.String())
 }
 
+// findFrontends returns a copy of the  frontend from edgelb pool bound to the
+// port or nil if it doesn't exist
+func findFrontend(pool *models.V2Pool, port int32) *models.V2Frontend {
+	if pool == nil {
+		return nil
+	}
+	for _, frontend := range pool.Haproxy.Frontends {
+		if *frontend.BindPort == port {
+			// at this point we can ignore any errors since the pool has been
+			// validated before
+			bytes, _ := frontend.MarshalBinary()
+			copyFrontend := &models.V2Frontend{}
+			copyFrontend.UnmarshalBinary(bytes)
+			return copyFrontend
+		}
+	}
+	return nil
+}
+
 // computeEdgeLBFrontendForIngress computes the EdgeLB frontend that corresponds to the specified Ingress resource.
-func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translatorapi.IngressEdgeLBPoolSpec) []*models.V2Frontend {
+func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translatorapi.IngressEdgeLBPoolSpec, pool *models.V2Pool) []*models.V2Frontend {
 	// Compute the base frontend object.
 	frontends := make([]*models.V2Frontend, 0)
 	// check if HTTP frontend is enabled
 	if spec.Frontends.HTTP != nil && *spec.Frontends.HTTP.Mode != translatorapi.IngressEdgeLBHTTPModeDisabled {
-		httpFrontend := &models.V2Frontend{
-			BindAddress: constants.EdgeLBFrontendBindAddress,
-			Name:        computeEdgeLBFrontendNameForIngress(ingress, string(models.V2ProtocolHTTP)),
-			Protocol:    models.V2ProtocolHTTP,
-			BindPort:    spec.Frontends.HTTP.Port,
-			LinkBackend: &models.V2FrontendLinkBackend{},
+		// check if there's already an http frontend
+		httpFrontend := findFrontend(pool, *spec.Frontends.HTTP.Port)
+		if httpFrontend == nil {
+			httpFrontend = &models.V2Frontend{
+				BindAddress: constants.EdgeLBFrontendBindAddress,
+				Name:        computeEdgeLBFrontendNameForIngress(ingress, string(models.V2ProtocolHTTP)),
+				Protocol:    models.V2ProtocolHTTP,
+				BindPort:    spec.Frontends.HTTP.Port,
+				LinkBackend: &models.V2FrontendLinkBackend{},
+			}
 		}
 		if *spec.Frontends.HTTP.Mode == translatorapi.IngressEdgeLBHTTPModeRedirect {
 			// Setting this to the empty object is enough to redirect all
@@ -171,22 +194,37 @@ func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translat
 	}
 	// check if HTTPS frontend is enabled
 	if spec.Frontends.HTTPS != nil {
+		// check if we already have an https frontend
+		httpsFrontend := findFrontend(pool, *spec.Frontends.HTTPS.Port)
+		if httpsFrontend == nil {
+			httpsFrontend = &models.V2Frontend{
+				BindAddress:  constants.EdgeLBFrontendBindAddress,
+				Name:         computeEdgeLBFrontendNameForIngress(ingress, string(models.V2ProtocolHTTPS)),
+				Protocol:     models.V2ProtocolHTTPS,
+				BindPort:     spec.Frontends.HTTPS.Port,
+				LinkBackend:  &models.V2FrontendLinkBackend{},
+				Certificates: make([]string, 0),
+			}
+		}
+
+		// filter certicates created for this ingress in case any updates were
+		// made
 		certificates := make([]string, 0)
+		for _, c := range httpsFrontend.Certificates {
+			secretPrefix := fmt.Sprintf("$SECRETS/%s__", string(ingress.UID))
+			if !strings.HasPrefix(c, secretPrefix) {
+				certificates = append(certificates, c)
+			}
+		}
+
+		// add the certificates required by this ingress
 		for _, ingressTLS := range ingress.Spec.TLS {
 			// Compute the filename for the given secret
-			dcosSecretName := secretsreflector.ComputeDCOSSecretName(ingress.Namespace, ingressTLS.SecretName)
-			filename := secretsreflector.ComputeDCOSSecretFileName(dcosSecretName)
-			cert := fmt.Sprintf("$SECRETS/%s", filename)
+			cert := fmt.Sprintf("$SECRETS/%s__%s", ingress.UID, ingressTLS.SecretName)
 			certificates = append(certificates, cert)
 		}
-		httpsFrontend := &models.V2Frontend{
-			BindAddress:  constants.EdgeLBFrontendBindAddress,
-			Name:         computeEdgeLBFrontendNameForIngress(ingress, string(models.V2ProtocolHTTPS)),
-			Protocol:     models.V2ProtocolHTTPS,
-			BindPort:     spec.Frontends.HTTPS.Port,
-			LinkBackend:  &models.V2FrontendLinkBackend{},
-			Certificates: certificates,
-		}
+		httpsFrontend.Certificates = certificates
+
 		frontends = append(frontends, httpsFrontend)
 	}
 
@@ -199,7 +237,10 @@ func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translat
 		case host == nil && path == nil:
 			// link frontends and backends
 			for _, frontend := range frontends {
-				frontend.LinkBackend.DefaultBackend = computeEdgeLBBackendNameForIngressBackend(ingress, backend)
+				// don't override default backend
+				if frontend.LinkBackend.DefaultBackend == "" {
+					frontend.LinkBackend.DefaultBackend = computeEdgeLBBackendNameForIngressBackend(ingress, backend)
+				}
 			}
 		default:
 			rule := prioritizedMatchingRule{
@@ -316,7 +357,7 @@ func computeEdgeLBSecretsForIngress(ingress *extsv1beta1.Ingress) []*models.V2Po
 	secrets := make([]*models.V2PoolSecretsItems0, 0)
 
 	for _, ingressTLS := range ingress.Spec.TLS {
-		dcosSecretName := secretsreflector.ComputeDCOSSecretName(ingress.Namespace, ingressTLS.SecretName)
+		dcosSecretName := fmt.Sprintf("%s__%s", ingress.UID, ingressTLS.SecretName)
 		filename := secretsreflector.ComputeDCOSSecretFileName(dcosSecretName)
 		secret := &models.V2PoolSecretsItems0{
 			Secret: dcosSecretName,

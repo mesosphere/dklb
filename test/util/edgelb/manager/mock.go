@@ -60,6 +60,6 @@ func (m *MockEdgeLBManager) PoolGroup() string {
 
 // UpdatePool updates the specified EdgeLB pool in the EdgeLB API server.
 func (m *MockEdgeLBManager) UpdatePool(ctx context.Context, pool *edgelbmodels.V2Pool) (*edgelbmodels.V2Pool, error) {
-	args := m.Called(ctx)
+	args := m.Called(ctx, pool)
 	return args.Get(0).(*edgelbmodels.V2Pool), args.Error(1)
 }

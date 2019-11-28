@@ -14,7 +14,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	dklbcache "github.com/mesosphere/dklb/pkg/cache"
-	"github.com/mesosphere/dklb/pkg/cluster"
 	"github.com/mesosphere/dklb/pkg/constants"
 	dklbstrings "github.com/mesosphere/dklb/pkg/util/strings"
 )
@@ -26,7 +25,7 @@ const (
 
 // SecretsReflector defines the interface exposed by this package.
 type SecretsReflector interface {
-	Reflect(namespace, name string) error
+	Reflect(uid, namespace, name string) error
 }
 
 // DCOSSecretsAPI defines the interface required by the SecretsReflector to manage DC/OS secrets.
@@ -55,7 +54,7 @@ func New(dcosSecretsClient DCOSSecretsClient, kubeCache dklbcache.KubernetesReso
 
 // Reflect reads Kubernetes secret with the provided namespace and name, translates it to a DC/OS secret
 // and checks if it needs to be recreated in DC/OS.
-func (s *secretsReflector) Reflect(namespace, name string) error {
+func (s *secretsReflector) Reflect(uid, namespace, name string) error {
 	// Get the secret from Kubernetes
 	kubeSecret, err := s.kubeCache.GetSecret(namespace, name)
 	if err != nil {
@@ -67,7 +66,7 @@ func (s *secretsReflector) Reflect(namespace, name string) error {
 		return fmt.Errorf("failed to translate secret: %s", err)
 	}
 	// Check if we need to update/create the dcos secret
-	return s.reflect(kubeSecret, dcosSecret)
+	return s.reflect(uid, kubeSecret, dcosSecret)
 }
 
 // translate Kubernetes secret kubeSecret to structure expected by DC/OS or an error if it failed.
@@ -96,7 +95,7 @@ func (s *secretsReflector) translate(kubeSecret *corev1.Secret) (*dcos.SecretsV1
 
 // reflect checks if Kubernetes secret was updated by verifying if the MD5 hash of certificate
 // and private key changed, and, if required proceeds to re-create the DC/OS secret.
-func (s *secretsReflector) reflect(kubeSecret *corev1.Secret, dcosSecret *dcos.SecretsV1Secret) error {
+func (s *secretsReflector) reflect(uid string, kubeSecret *corev1.Secret, dcosSecret *dcos.SecretsV1Secret) error {
 	hashRaw := md5.Sum([]byte(dcosSecret.Value))
 	hash := fmt.Sprintf("%x", hashRaw)
 	expectedHash, withPreviousAnnotation := kubeSecret.Annotations[constants.DklbSecretAnnotationKey]
@@ -106,7 +105,7 @@ func (s *secretsReflector) reflect(kubeSecret *corev1.Secret, dcosSecret *dcos.S
 		return nil
 	}
 	// Generate the DC/OS secret name
-	dcosSecretName := ComputeDCOSSecretName(kubeSecret.Namespace, kubeSecret.Name)
+	dcosSecretName := ComputeDCOSSecretName(uid, kubeSecret.Name)
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 	// Check if we need to update or create the DC/OS secret
@@ -144,8 +143,8 @@ func (s *secretsReflector) reflect(kubeSecret *corev1.Secret, dcosSecret *dcos.S
 	return nil
 }
 
-func ComputeDCOSSecretName(namespace, kubeSecretName string) string {
-	return fmt.Sprintf("%s__%s__%s", dklbstrings.ReplaceForwardSlashesWithUnderscores(cluster.Name), namespace, kubeSecretName)
+func ComputeDCOSSecretName(uid, kubeSecretName string) string {
+	return fmt.Sprintf("%s__%s", uid, kubeSecretName)
 }
 
 func ComputeDCOSSecretFileName(dcosSecretName string) string {
