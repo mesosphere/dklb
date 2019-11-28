@@ -941,6 +941,184 @@ var _ = Describe("Ingress", func() {
 			})
 		})
 
+		It("can share a pool and a frontend with an Ingress resource [HTTP] [Public]", func() {
+			// Create two temporary namespaces for the test.
+			f.WithTemporaryNamespace(func(namespace1 *corev1.Namespace) {
+				f.WithTemporaryNamespace(func(namespace2 *corev1.Namespace) {
+					var (
+						echoPod1 *corev1.Pod
+						echoPod2 *corev1.Pod
+						err      error
+						ingress1 *extsv1beta1.Ingress
+						ingress2 *extsv1beta1.Ingress
+						publicIP string
+					)
+
+					namespace := "default"
+
+					// Create the first "echo" pod.
+					echoPod1, err = f.CreateEchoPod(namespace, "http-echo-1")
+					Expect(err).NotTo(HaveOccurred(), "failed to create echo pod")
+					// Create the first "echo" service.
+					_, err = f.CreateServiceForEchoPod(echoPod1)
+					Expect(err).NotTo(HaveOccurred(), "failed to create service for echo pod %q", kubernetes.Key(echoPod1))
+
+					// Create an Ingress resource targeting the "http-echo-1" service above, annotating it to be provisioned by EdgeLB.
+					// The Ingress is configured to direct all traffic under "/foo" to "http-echo-1".
+					ingress1yaml := `
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: edgelb
+    kubernetes.dcos.io/dklb-config: |
+      name: dklb
+  labels:
+    owner: dklb
+  name: dklb-echo-1
+  namespace: default
+spec:
+  rules:
+  - http:
+      paths:
+       - path: /echo1
+         backend:
+          serviceName: http-echo-1
+          servicePort: 80
+`
+					ingress1, err = f.CreateIngressFromYamlSpec(ingress1yaml)
+					Expect(err).NotTo(HaveOccurred(), "failed to create ingress")
+
+					// Create the second "echo" pod.
+					echoPod2, err = f.CreateEchoPod(namespace, "http-echo-2")
+					Expect(err).NotTo(HaveOccurred(), "failed to create echo pod")
+					// Create the second "echo" service.
+					_, err = f.CreateServiceForEchoPod(echoPod2)
+					Expect(err).NotTo(HaveOccurred(), "failed to create service for echo pod %q", kubernetes.Key(echoPod2))
+
+					ingress2yaml := `
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: edgelb
+    kubernetes.dcos.io/dklb-config: |
+      name: dklb
+  labels:
+    owner: dklb
+  name: dklb-echo-2
+  namespace: default
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /echo2
+        backend:
+          serviceName: http-echo-2
+          servicePort: 80
+`
+					ingress2, err = f.CreateIngressFromYamlSpec(ingress2yaml)
+					Expect(err).NotTo(HaveOccurred(), "failed to create ingress")
+
+					// Wait for EdgeLB to acknowledge the pool's creation.
+					err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+						ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryInterval/2)
+						defer fn()
+						_, err = f.EdgeLBManager.GetPool(ctx, ingress1.Name)
+						return err == nil, nil
+					})
+					Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the edgelb api server to acknowledge the pool's creation")
+
+					// Wait for the Ingress to be reachable.
+					log.Debugf("waiting for the public ip for %q to be reported", kubernetes.Key(ingress1))
+					err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+						// Wait for the pool's public IP to be reported.
+						ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryTimeout)
+						defer fn()
+						publicIP, err = f.WaitForPublicIPForIngress(ctx, ingress1)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(publicIP).NotTo(BeEmpty())
+						// Attempt to connect to the ingress using the reported IP.
+						addr := fmt.Sprintf("http://%s:80", publicIP)
+						log.Debugf("attempting to connect to %q at %q", kubernetes.Key(ingress1), addr)
+						url := fmt.Sprintf("%s/foo", addr)
+						r, err := f.HTTPClient.Get(url)
+						if err != nil {
+							log.Debugf("waiting for the ingress to be reachable at %s", url)
+							return false, nil
+						}
+						log.Debugf("the ingress is reachable at %s", url)
+						return r.StatusCode == 200, nil
+					})
+					Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the ingress to be reachable")
+
+					// Wait for the Ingress to be reachable.
+					log.Debugf("waiting for the public ip for %q to be reported", kubernetes.Key(ingress2))
+					err = retry.WithTimeout(framework.DefaultRetryTimeout, framework.DefaultRetryInterval, func() (bool, error) {
+						// Wait for the pool's public IP to be reported.
+						ctx, fn := context.WithTimeout(context.Background(), framework.DefaultRetryTimeout)
+						defer fn()
+						publicIP, err = f.WaitForPublicIPForIngress(ctx, ingress2)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(publicIP).NotTo(BeEmpty())
+						// Attempt to connect to the ingress using the reported IP.
+						addr := fmt.Sprintf("http://%s:80", publicIP)
+						log.Debugf("attempting to connect to %q at %q", kubernetes.Key(ingress2), addr)
+						url := fmt.Sprintf("%s/foo", addr)
+						r, err := f.HTTPClient.Get(url)
+						if err != nil {
+							log.Debugf("waiting for the ingress to be reachable at %s", url)
+							return false, nil
+						}
+						log.Debugf("the ingress is reachable at %s", url)
+						return r.StatusCode == 200, nil
+					})
+					Expect(err).NotTo(HaveOccurred(), "timed out while waiting for the ingress to be reachable")
+
+					// Make sure that both Ingress resources are reachable and directing requests towards the expected backend.
+					tests := []struct {
+						port              int32
+						path              string
+						expectedNamespace string
+						expectedPod       string
+					}{
+						{
+							path:              "/echo-1",
+							expectedNamespace: echoPod1.Namespace,
+							expectedPod:       echoPod1.Name,
+						},
+						{
+							path:              "/echo-2",
+							expectedNamespace: echoPod2.Namespace,
+							expectedPod:       echoPod2.Name,
+						},
+					}
+					for _, test := range tests {
+						log.Debugf("test case: request to port 80 and path %q is directed towards %q", test.path, test.expectedPod)
+						res, err := f.EchoRequest("GET", publicIP, int32(80), test.path, nil)
+						Expect(err).NotTo(HaveOccurred(), "failed to perform http request")
+						Expect(res.K8sEnv.Namespace).To(Equal(test.expectedNamespace), "the reported namespace doesn't match the expectation")
+						Expect(res.K8sEnv.Pod).To(Equal(test.expectedPod), "the reported pod doesn't match the expectation")
+						Expect(res.URI).To(Equal(test.path), "the reported path doesn't match the expectation")
+						Expect(res.XForwardedForContains(f.ExternalIP)).To(BeTrue(), "external ip missing from the x-forwarded-for header")
+					}
+
+					// Make sure there is a single EdgeLB pool.
+					ctx3, fn3 := context.WithTimeout(context.Background(), framework.DefaultEdgeLBOperationTimeout)
+					defer fn3()
+					pools, err := f.EdgeLBManager.GetPools(ctx3)
+					Expect(err).NotTo(HaveOccurred(), "failed to list edgelb pools")
+					Expect(len(pools)).To(Equal(1), "expecting a single edgelb pool, found %d", len(pools))
+
+					// Manually delete the Ingress resources now in order to prevent the EdgeLB pool from being re-created during namespace deletion.
+					err = f.KubeClient.ExtensionsV1beta1().Ingresses(ingress1.Namespace).Delete(ingress1.Name, metav1.NewDeleteOptions(0))
+					Expect(err).NotTo(HaveOccurred(), "failed to delete ingress %q", kubernetes.Key(ingress1))
+					err = f.KubeClient.ExtensionsV1beta1().Ingresses(ingress2.Namespace).Delete(ingress1.Name, metav1.NewDeleteOptions(0))
+					Expect(err).NotTo(HaveOccurred(), "failed to delete ingress %q", kubernetes.Key(ingress2))
+				})
+			})
+		})
+
 		It("uses dklb as its default backend whenever one is not specified or a service is missing [HTTP] [Public]", func() {
 			// Create a temporary namespace for the test.
 			f.WithTemporaryNamespace(func(namespace *corev1.Namespace) {
