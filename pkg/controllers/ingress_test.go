@@ -92,7 +92,8 @@ func TestIngressController_enqueueIngressesReferecingService(t *testing.T) {
 		ic.initialize(ingressInformer, serviceInformer)
 
 		ic.enqueueIngressesReferencingService(test.service)
-
+		fake.mutex.Lock()
+		defer fake.mutex.Unlock()
 		if test.expected == nil {
 			assert.Equal(t, len(fake.queue), 0)
 		} else {
