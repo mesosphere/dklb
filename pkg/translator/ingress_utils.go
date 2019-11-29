@@ -1,7 +1,6 @@
 package translator
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -61,6 +60,9 @@ type prioritizedMatchingRule struct {
 
 // IsOwnedBy indicates whether the current EdgeLB object is owned by the specified Ingress resource.
 func (m *ingressOwnedEdgeLBObjectMetadata) IsOwnedBy(ingress *extsv1beta1.Ingress) bool {
+	if m == nil {
+		return false
+	}
 	return m.ClusterName == cluster.Name && m.Namespace == ingress.Namespace && m.Name == ingress.Name
 }
 
@@ -208,8 +210,8 @@ func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translat
 			}
 		}
 
-		// filter certicates created for this ingress in case any updates were
-		// made
+		// filter certicates created for this ingress in case any updates
+		// were made
 		certificates := make([]string, 0)
 		for _, c := range httpsFrontend.Certificates {
 			secretPrefix := fmt.Sprintf("$SECRETS/%s__", string(ingress.UID))
@@ -320,7 +322,7 @@ func computeEdgeLBBackendMiscStr(options ...string) string {
 }
 
 // computeServiceOwnedEdgeLBObjectMetadata parses the provided EdgeLB backend/frontend name and returns metadata about the Ingress resource that owns it.
-func computeIngressOwnedEdgeLBObjectMetadata(name string) (*ingressOwnedEdgeLBObjectMetadata, error) {
+func computeIngressOwnedEdgeLBObjectMetadata(name string) *ingressOwnedEdgeLBObjectMetadata {
 	// Split the provided name by "separator".
 	parts := strings.Split(name, separator)
 	// Check how many parts we are dealing with, and act accordingly.
@@ -337,7 +339,7 @@ func computeIngressOwnedEdgeLBObjectMetadata(name string) (*ingressOwnedEdgeLBOb
 				ServiceName: parts[3],
 				ServicePort: intstr.Parse(parts[4]),
 			},
-		}, nil
+		}
 	case 4:
 		// The provided name is composed of 3 parts separated by "separator".
 		// Hence, it most likely corresponds to an EdgeLB frontend owned by an Ingress resource.
@@ -347,11 +349,11 @@ func computeIngressOwnedEdgeLBObjectMetadata(name string) (*ingressOwnedEdgeLBOb
 			Name:           parts[2],
 			IngressBackend: nil,
 			Protocol:       parts[3],
-		}, nil
+		}
 	default:
 		// The provided name is composed of a different number of parts.
 		// Hence, it does not correspond to an Ingress-owned EdgeLB object.
-		return nil, errors.New("invalid backend/frontend name for ingress")
+		return nil
 	}
 }
 

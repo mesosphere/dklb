@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/mesosphere/dcos-edge-lb/pkg/apis/models"
+
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	"github.com/mesosphere/dklb/pkg/util/kubernetes"
 )
@@ -51,8 +52,8 @@ func computeLoadBalancerStatus(manager manager.EdgeLBManager, poolName string, o
 						m, err := computeServiceOwnedEdgeLBObjectMetadata(*listener.LinkFrontend)
 						isOwnedByObj = err == nil && m.IsOwnedBy(t)
 					case *extsv1beta1.Ingress:
-						m, err := computeIngressOwnedEdgeLBObjectMetadata(*listener.LinkFrontend)
-						isOwnedByObj = err == nil && m.IsOwnedBy(t)
+						m := computeIngressOwnedEdgeLBObjectMetadata(*listener.LinkFrontend)
+						isOwnedByObj = m.IsOwnedBy(t)
 					default:
 						return nil
 					}
@@ -75,8 +76,8 @@ func computeLoadBalancerStatus(manager manager.EdgeLBManager, poolName string, o
 			m, err := computeServiceOwnedEdgeLBObjectMetadata(frontend.Name)
 			isOwnedByObj = err == nil && m.IsOwnedBy(t)
 		case *extsv1beta1.Ingress:
-			m, err := computeIngressOwnedEdgeLBObjectMetadata(frontend.Name)
-			isOwnedByObj = err == nil && m.IsOwnedBy(t)
+			m := computeIngressOwnedEdgeLBObjectMetadata(frontend.Name)
+			isOwnedByObj = m.IsOwnedBy(t)
 			if !isOwnedByObj && desiredFrontends != nil {
 				// we might be sharing the pool so we need to check ...
 				for _, f := range desiredFrontends {

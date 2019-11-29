@@ -811,7 +811,7 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			}),
 		},
 		{
-			description:    "should delete ingress frontends and secrets ",
+			description:    "should delete ingress frontends and secrets",
 			backendMap:     IngressBackendNodePortMap{},
 			expectedChange: true,
 			it: newIngressTranslator(func(it *IngressTranslator) {
@@ -862,8 +862,11 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 	for _, test := range tests {
 		t.Logf("test case: %s", test.description)
 
-		changed, _, report := test.it.updateEdgeLBPoolObject(test.pool, test.backendMap)
-		assert.Equal(t, test.expectedChange, changed, report)
-		assert.Equal(t, test.expectedPool, test.pool, report)
+		changed, _ := test.it.updateEdgeLBPoolObject(test.pool, test.backendMap)
+		assert.Equal(t, test.expectedChange, changed)
+		assert.Equal(t, test.expectedPool, test.pool)
+		reg := strfmt.NewFormats()
+		err := test.pool.Validate(reg)
+		assert.Equal(t, err, nil)
 	}
 }
