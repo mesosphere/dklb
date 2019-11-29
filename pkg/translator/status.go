@@ -10,6 +10,7 @@ import (
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	"github.com/mesosphere/dcos-edge-lb/pkg/apis/models"
 	"github.com/mesosphere/dklb/pkg/edgelb/manager"
 	"github.com/mesosphere/dklb/pkg/util/kubernetes"
 )
@@ -17,7 +18,7 @@ import (
 // computeLoadBalancerStatus builds a "LoadBalancerStatus" object representing the status of the EdgeLB pool with the specified name.
 // If we're successful in reading the EdgeLB pool's metadata, the returned object contains all reported DNS names, private IPs and public IPs (in this order).
 // Otherwise, the returned object is nil.
-func computeLoadBalancerStatus(manager manager.EdgeLBManager, poolName string, obj runtime.Object) *corev1.LoadBalancerStatus {
+func computeLoadBalancerStatus(manager manager.EdgeLBManager, poolName string, obj runtime.Object, desiredFrontends []*models.V2Frontend) *corev1.LoadBalancerStatus {
 	// Retrieve the pool's metadata from the EdgeLB API server.
 	ctx, fn := context.WithTimeout(context.Background(), defaultEdgeLBManagerTimeout)
 	defer fn()
@@ -76,6 +77,15 @@ func computeLoadBalancerStatus(manager manager.EdgeLBManager, poolName string, o
 		case *extsv1beta1.Ingress:
 			m, err := computeIngressOwnedEdgeLBObjectMetadata(frontend.Name)
 			isOwnedByObj = err == nil && m.IsOwnedBy(t)
+			if !isOwnedByObj && desiredFrontends != nil {
+				// we might be sharing the pool so we need to check ...
+				for _, f := range desiredFrontends {
+					if f.Name == frontend.Name {
+						isOwnedByObj = true
+						break
+					}
+				}
+			}
 		default:
 			return nil
 		}

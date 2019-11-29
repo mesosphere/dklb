@@ -3,6 +3,7 @@ package translator
 import (
 	"testing"
 
+	strfmt "github.com/go-openapi/strfmt"
 	"github.com/mesosphere/dcos-edge-lb/pkg/apis/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -133,6 +134,11 @@ func TestTranslate(t *testing.T) {
 				edgelbManager.On("GetPoolMetadata", mock.Anything, mock.Anything).Return(&edgelbmodels.V2PoolMetadata{}, nil)
 				edgelbManager.On("UpdatePool", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 					pool := args.Get(1).(*models.V2Pool)
+
+					reg := strfmt.NewFormats()
+					err := pool.Validate(reg)
+					assert.Equal(t, err, nil)
+
 					assert.Contains(t, pool.Secrets, &models.V2PoolSecretsItems0{
 						File:   "uid__test-secret-1",
 						Secret: "uid__test-secret-1",
@@ -856,7 +862,7 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 	for _, test := range tests {
 		t.Logf("test case: %s", test.description)
 
-		changed, report := test.it.updateEdgeLBPoolObject(test.pool, test.backendMap)
+		changed, _, report := test.it.updateEdgeLBPoolObject(test.pool, test.backendMap)
 		assert.Equal(t, test.expectedChange, changed, report)
 		assert.Equal(t, test.expectedPool, test.pool, report)
 	}

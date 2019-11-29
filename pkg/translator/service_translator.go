@@ -105,7 +105,7 @@ func (st *ServiceTranslator) createEdgeLBPool() (*corev1.LoadBalancerStatus, err
 		return nil, err
 	}
 	// Compute and return the status of the load-balancer.
-	return computeLoadBalancerStatus(st.manager, pool.Name, st.service), nil
+	return computeLoadBalancerStatus(st.manager, pool.Name, st.service, nil), nil
 }
 
 // updateOrDeleteEdgeLBPool makes a decision on whether the specified EdgeLB pool should be updated/deleted based on the current status of the associated Service resource.
@@ -126,7 +126,7 @@ func (st *ServiceTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool) (*cor
 	// If the pool doesn't need to be updated, we just compute and return an updated "LoadBalancerStatus" object.
 	if !wasChanged {
 		st.logger.Debugf("edgelb pool %q is synced", pool.Name)
-		return computeLoadBalancerStatus(st.manager, pool.Name, st.service), nil
+		return computeLoadBalancerStatus(st.manager, pool.Name, st.service, nil), nil
 	}
 
 	// At this point we know that the pool must be either updated or deleted.
@@ -149,7 +149,7 @@ func (st *ServiceTranslator) updateOrDeleteEdgeLBPool(pool *models.V2Pool) (*cor
 	if _, err := st.manager.UpdatePool(ctx, pool); err != nil {
 		return nil, err
 	}
-	return computeLoadBalancerStatus(st.manager, pool.Name, st.service), nil
+	return computeLoadBalancerStatus(st.manager, pool.Name, st.service, nil), nil
 }
 
 // createEdgeLBPoolObject creates an EdgeLB pool object that satisfies the current Service resource.

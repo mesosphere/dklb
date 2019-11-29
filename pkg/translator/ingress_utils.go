@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -287,14 +288,25 @@ func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translat
 	sort.SliceStable(rules, func(i, j int) bool {
 		return rules[i].priority > rules[j].priority
 	})
-	// Add each rule to the final slice of rules.
+	// Add each rule to the final slice of rules but check for potencial duplicates first.
 	for _, rule := range rules {
 		for _, frontend := range frontends {
-			frontend.LinkBackend.Map = append(frontend.LinkBackend.Map, rule.item)
+			if !findRule(frontend.LinkBackend.Map, rule.item) {
+				frontend.LinkBackend.Map = append(frontend.LinkBackend.Map, rule.item)
+			}
 		}
 	}
 	// Return the computed EdgeLB frontend objects.
 	return frontends
+}
+
+func findRule(list []*models.V2FrontendLinkBackendMapItems0, item *models.V2FrontendLinkBackendMapItems0) bool {
+	for _, entry := range list {
+		if reflect.DeepEqual(item, entry) {
+			return true
+		}
+	}
+	return false
 }
 
 // computeEdgeLBFrontendNameForIngress computes the name of the EdgeLB frontend that corresponds to the specified Ingress resource.
