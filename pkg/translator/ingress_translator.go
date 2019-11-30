@@ -464,6 +464,7 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 	// create a map of backends referenced by a frontend
 	referencedBackends := map[string]string{}
 	for _, frontend := range pool.Haproxy.Frontends {
+		referencedBackends[frontend.LinkBackend.DefaultBackend] = ""
 		for _, m := range frontend.LinkBackend.Map {
 			referencedBackends[m.Backend] = ""
 		}
