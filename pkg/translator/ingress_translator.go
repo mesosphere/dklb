@@ -305,19 +305,18 @@ func (it *IngressTranslator) createEdgeLBPoolObject(backendMap IngressBackendNod
 
 // checkIfDesired is a helper function that returns true if the list of frontends
 // contains a frontend with the same name as desired.
-func checkIfDesired(frontends []*models.V2Frontend, desired *models.V2Frontend) bool {
+func checkIfDesired(frontends []*models.V2Frontend, desired *models.V2Frontend) *models.V2Frontend {
 	for _, f := range frontends {
 		if f.Name == desired.Name {
-			return true
+			return f
 		}
 	}
-	return false
+	return nil
 }
 
 func checkIfReferencesBackend(backends []*models.V2Backend, name string) bool {
 	for _, b := range backends {
 		if b.Name == name {
-			log.Debugf("backend %v should be deleted", name)
 			return true
 		}
 	}
@@ -332,7 +331,7 @@ func checkIfReferencesBackend(backends []*models.V2Backend, name string) bool {
 // * If the object is an EdgeLB backend owned by the current Ingress resource but the corresponding Ingress backend has disappeared, it is removed.
 // * If the object is owned by the current Ingress resource and the corresponding Ingress backend still exists (or the object is an EdgeLB frontend), it is checked for correctness and updated if necessary.
 // Furthermore, Ingress backends are iterated over in order to understand which EdgeLB backends must be added to the EdgeLB pool.
-func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backendMap IngressBackendNodePortMap) (wasChanged bool, desiredFronteds []*models.V2Frontend) {
+func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backendMap IngressBackendNodePortMap) (wasChanged bool, desiredFrontends []*models.V2Frontend) {
 	// ingressDeleted holds whether the Ingress resource has been deleted or its "kubernetes.io/ingress.class" has changed.
 	ingressDeleted := it.ingress.DeletionTimestamp != nil || it.ingress.Annotations[constants.EdgeLBIngressClassAnnotationKey] != constants.EdgeLBIngressClassAnnotationValue
 	log.Debugf("ingress is being deleted? %v", ingressDeleted)
@@ -343,8 +342,6 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 	// updatedBackends holds the set of updated EdgeLB backends.
 	// It is used as the final set of EdgeLB backends for the EdgeLB pool if we find out we need to update it.
 	updatedBackends := make([]*models.V2Backend, 0, len(pool.Haproxy.Backends))
-
-	deletedBackends := make([]*models.V2Backend, 0, len(pool.Haproxy.Backends))
 
 	// Iterate over the EdgeLB pool's EdgeLB backends and check whether each one is owned by the current Ingress.
 	// In case an EdgeLB backend isn't owned by the current Ingress, it is left unchanged and added to the set of "updated" EdgeLB backends.
@@ -362,7 +359,6 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 		// Check whether the Ingress resource has been deleted, and skip (i.e. remove) the EdgeLB backend if it has.
 		if ingressDeleted {
 			wasChanged = true
-			deletedBackends = append(deletedBackends, backend)
 			log.Debugf("must delete backend %q as %q was deleted", backend.Name, kubernetesutil.Key(it.ingress))
 			continue
 		}
@@ -371,7 +367,6 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 		currentIngressBackend := *backendMetadata.IngressBackend
 		if _, exists := backendMap[currentIngressBackend]; !exists {
 			wasChanged = true
-			deletedBackends = append(deletedBackends, backend)
 			log.Debugf("must delete edgelb backend %q as the corresponding ingress backend is missing from %q", backend.Name, kubernetesutil.Key(it.ingress))
 			continue
 		}
@@ -381,6 +376,7 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 		// Compute the desired state for the current EdgeLB backend.
 		// In case differences are detected, we replace  the existing EdgeLB backend with the computed one.
 		desiredBackend := computeEdgeLBBackendForIngressBackend(it.ingress, currentIngressBackend, backendMap[currentIngressBackend])
+		prettyprint.LogfJSON(log.Debugf, desiredBackend, "computed desired backend")
 		if !reflect.DeepEqual(backend, desiredBackend) {
 			wasChanged = true
 			updatedBackends = append(updatedBackends, desiredBackend)
@@ -390,63 +386,61 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 			log.Debugf("no changes required for backend %q", backend.Name)
 		}
 	}
+	prettyprint.LogfJSON(log.Debugf, updatedBackends, "computed updated backends")
 
 	// Check if pool's frontends match the desired list. If a frontend is not
 	// managed by dklb it's added to the list of updatedFrontends.
-	desiredFrontends := computeEdgeLBFrontendForIngress(it.ingress, *it.spec, pool)
+	desiredFrontends = computeEdgeLBFrontendForIngress(it.ingress, *it.spec, pool)
 	prettyprint.LogfJSON(log.Debugf, desiredFrontends, "computed desired frontends")
-	prettyprint.LogfJSON(log.Debugf, deletedBackends, "computed deleted backends")
 	updatedFrontends := make([]*models.V2Frontend, 0)
 
+	if !reflect.DeepEqual(pool.Haproxy.Frontends, desiredFrontends) {
+		wasChanged = true
+		log.Debug("frontend list requires an update")
+	}
+
+	//
 	for _, frontend := range pool.Haproxy.Frontends {
-		isDesired := checkIfDesired(desiredFrontends, frontend)
+		desiredFrontend := checkIfDesired(desiredFrontends, frontend)
 		frontendMetadata := computeIngressOwnedEdgeLBObjectMetadata(frontend.Name)
 
-		if !isDesired && !frontendMetadata.IsOwnedBy(it.ingress) {
+		if desiredFrontend == nil && !frontendMetadata.IsOwnedBy(it.ingress) {
 			log.Debugf("added unmanaged frontend %v", frontend.Name)
 			updatedFrontends = append(updatedFrontends, frontend)
 			continue
 		}
-
-		if isDesired {
-			log.Tracef("frontend %v is in desired list", frontend.Name)
-			if frontendMetadata.IsOwnedBy(it.ingress) && ingressDeleted {
-				// don't add it because ingress is being deleted
-				log.Tracef("ingress is being deleted, don't add frontend %v", frontend.Name)
-				continue
-			}
-
-			if checkIfReferencesBackend(deletedBackends, frontend.LinkBackend.DefaultBackend) {
-				log.Debugf("default backend %v is being deleted... setting to empty value", frontend.LinkBackend.DefaultBackend)
-				frontend.LinkBackend.DefaultBackend = ""
-			}
-
-			// remove links pointing to deleted backends
-			linkBackendMap := make([]*models.V2FrontendLinkBackendMapItems0, 0)
-			for _, entry := range frontend.LinkBackend.Map {
-				if !checkIfReferencesBackend(deletedBackends, entry.Backend) {
-					log.Tracef("frontend %v references %v", frontend.Name, entry.Backend)
-					linkBackendMap = append(linkBackendMap, entry)
-				}
-			}
-
-			if len(linkBackendMap) == 0 {
-				log.Debugf("deleting %v frontend", frontend.Name)
-				continue
-			}
-
-			// TODO: check certificates
-			log.Tracef("adding frontend %v", frontend.Name)
-			frontend.LinkBackend.Map = linkBackendMap
-			updatedFrontends = append(updatedFrontends, frontend)
-		}
 	}
 
-	prettyprint.LogfJSON(log.Debugf, updatedFrontends, "computed updated frontends")
+	for _, frontend := range desiredFrontends {
+		log.Tracef("checking frontend=%v", frontend.Name)
+		frontendMetadata := computeIngressOwnedEdgeLBObjectMetadata(frontend.Name)
+		if frontendMetadata.IsOwnedBy(it.ingress) && ingressDeleted {
+			log.Tracef("ingress is being deleted, don't add frontend %v", frontend.Name)
+			continue
+		}
 
-	if !reflect.DeepEqual(pool.Haproxy.Frontends, desiredFrontends) {
-		wasChanged = true
-		log.Debug("check if frontend list requires an update")
+		if !checkIfReferencesBackend(updatedBackends, frontend.LinkBackend.DefaultBackend) {
+			log.Debugf("default backend %v is being deleted... setting to empty value", frontend.LinkBackend.DefaultBackend)
+			frontend.LinkBackend.DefaultBackend = ""
+		}
+
+		linkBackendMap := make([]*models.V2FrontendLinkBackendMapItems0, 0)
+		// remove references to deleted backends
+		for _, entry := range frontend.LinkBackend.Map {
+			if checkIfReferencesBackend(updatedBackends, entry.Backend) {
+				log.Tracef("frontend %v references %v", frontend.Name, entry.Backend)
+				linkBackendMap = append(linkBackendMap, entry)
+			}
+		}
+		frontend.LinkBackend.Map = linkBackendMap
+
+		if len(frontend.LinkBackend.Map) == 0 {
+			log.Debugf("deleting %v frontend because linkbackend map is empty", frontend.Name)
+			continue
+		}
+
+		log.Tracef("adding frontend %v", frontend.Name)
+		updatedFrontends = append(updatedFrontends, frontend)
 	}
 
 	desiredSecrets := computeEdgeLBSecretsForIngress(it.ingress)
@@ -465,7 +459,6 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 	// If the ingress wasn't deleted we concatenate the desired list of
 	// frontends and secrets with the list of the unmanaged ones.
 	if !ingressDeleted {
-		// updatedFrontends = append(desiredFrontends, updatedFrontends...)
 		updatedSecrets = append(desiredSecrets, updatedSecrets...)
 	}
 
