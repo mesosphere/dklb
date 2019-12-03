@@ -439,11 +439,6 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 			frontend.LinkBackend.Map = linkBackendMap
 		}
 
-		// if len(frontend.LinkBackend.Map) == 0 {
-		// 	log.Debugf("deleting %v frontend because linkbackend map is empty", frontend.Name)
-		// 	continue
-		// }
-
 		log.Tracef("adding frontend %v", frontend.Name)
 		updatedFrontends = append(updatedFrontends, frontend)
 	}

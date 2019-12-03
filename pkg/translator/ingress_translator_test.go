@@ -1,13 +1,11 @@
 package translator
 
 import (
-	"encoding/json"
 	"fmt"
 	"testing"
 
 	strfmt "github.com/go-openapi/strfmt"
 	"github.com/mesosphere/dcos-edge-lb/pkg/apis/models"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	corev1 "k8s.io/api/core/v1"
@@ -74,7 +72,11 @@ func TestTranslate(t *testing.T) {
 		// 		edgelbManager := new(mockedgelb.MockEdgeLBManager)
 		// 		edgelbManager.On("PoolGroup").Return("test-pool-group", nil)
 		// 		edgelbManager.On("GetPool", mock.Anything, mock.Anything).Return(nil, nil)
-		// 		edgelbManager.On("CreatePool", mock.Anything, mock.Anything).Return(&edgelbmodels.V2Pool{}, nil)
+		// 		edgelbManager.On("CreatePool", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		// 			pool := args.Get(1).(*models.V2Pool)
+		// 			b, _ := json.MarshalIndent(pool, "", "  ")
+		// 			fmt.Printf("CreatePool: %s\n", string(b))
+		// 		}).Return(&edgelbmodels.V2Pool{}, nil)
 		// 		edgelbManager.On("GetPoolMetadata", mock.Anything, mock.Anything).Return(&edgelbmodels.V2PoolMetadata{}, nil)
 		// 		return edgelbManager
 		// 	},
@@ -187,12 +189,13 @@ func TestTranslate(t *testing.T) {
 													Enabled: pointers.NewBool(true),
 												},
 												MiscStr: "check-ssl ssl verify none",
-												Port:    31789,
+												Port:    32889,
 												Type:    models.V2EndpointTypeCONTAINERIP,
 											},
 											Marathon: &models.V2ServiceMarathon{},
 											Mesos: &models.V2ServiceMesos{
-												FrameworkName: "test-cluster",
+												FrameworkName:   "test-cluster-test-translate",
+												TaskNamePattern: "^kube-node-.*$",
 											},
 										},
 										{
@@ -200,16 +203,14 @@ func TestTranslate(t *testing.T) {
 												Check: &models.V2EndpointCheck{
 													Enabled: pointers.NewBool(true),
 												},
-												MiscStr: computeEdgeLBBackendMiscStr(constants.EdgeLBBackendBackup),
+												MiscStr: "backup",
 												Port:    32889,
 												Type:    models.V2EndpointTypeCONTAINERIP,
 											},
-											Marathon: &models.V2ServiceMarathon{
-												// We don't want to use any Marathon service as the backend.
-											},
+											Marathon: &models.V2ServiceMarathon{},
 											Mesos: &models.V2ServiceMesos{
-												FrameworkName:   cluster.Name,
-												TaskNamePattern: constants.KubeNodeTaskPattern,
+												FrameworkName:   "test-cluster-test-translate",
+												TaskNamePattern: "^kube-node-.*$",
 											},
 										},
 									},
@@ -228,18 +229,16 @@ func TestTranslate(t *testing.T) {
 											{
 												Backend: "test-cluster-test-translate:test-namespace:test-ingress-1:test-service:80",
 												HostEq:  "test-host.com",
-												PathReg: "^/bar(/.*)?$",
-											},
-											{
-												Backend: "test-cluster-test-translate:test-namespace:test-ingress-1:test-service:80",
-												HostEq:  "test-host.com",
 												PathReg: "^.*$",
 											},
 										},
 									},
-									Name:         "frontend",
-									Protocol:     "HTTPS",
-									Certificates: []string{"$SECRETS/existing-secret"},
+									Name:     "frontend",
+									Protocol: "HTTPS",
+									Certificates: []string{
+										"$SECRETS/existing-secret",
+										"$SECRETS/uid__test-secret-1",
+									},
 								},
 							},
 							Stats: &models.V2Stats{
@@ -248,12 +247,12 @@ func TestTranslate(t *testing.T) {
 						},
 						Secrets: []*models.V2PoolSecretsItems0{
 							{
-								File:   "existing-secret",
-								Secret: "existing-secret",
-							},
-							{
 								File:   "uid__test-secret-1",
 								Secret: "uid__test-secret-1",
+							},
+							{
+								File:   "existing-secret",
+								Secret: "existing-secret",
 							},
 						},
 					}
@@ -280,10 +279,10 @@ frontends:
 					},
 				},
 				Spec: extsv1beta1.IngressSpec{
-					Backend: &extsv1beta1.IngressBackend{
-						ServiceName: testService.Name,
-						ServicePort: intstr.FromString("80"),
-					},
+					// Backend: &extsv1beta1.IngressBackend{
+					// 	ServiceName: testService.Name,
+					// 	ServicePort: intstr.FromString("80"),
+					// },
 					Rules: []extsv1beta1.IngressRule{
 						{
 							Host: "test-host.com",
@@ -294,13 +293,6 @@ frontends:
 											Backend: extsv1beta1.IngressBackend{
 												ServiceName: testService.Name,
 												ServicePort: intstr.FromInt(80),
-											},
-										},
-										{
-											Path: "/bar(/.*)?",
-											Backend: extsv1beta1.IngressBackend{
-												ServiceName: testService.Name,
-												ServicePort: intstr.FromString("80"),
 											},
 										},
 									},
@@ -315,9 +307,6 @@ frontends:
 			},
 		},
 	}
-	// Enable logging at the requested level.
-	l, _ := log.ParseLevel("trace")
-	log.SetLevel(l)
 
 	for _, test := range tests {
 		test.kubeCache = dklbcache.NewInformerBackedResourceCache(cachetestutil.NewFakeSharedInformerFactory(defaultService, testService, test.ingress))
@@ -661,8 +650,6 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 		pool *models.V2Pool
 		// what we expect the edgelb pool to look like after running the test
 		expectedPool *models.V2Pool
-		beforeEach   func()
-		afterEach    func()
 	}{
 		{
 			description:    "should not update pool",
@@ -873,15 +860,6 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			expectedPool: newPool(func(expectedPool *models.V2Pool) {
 				expectedPool.Haproxy.Frontends[0].BindPort = pointers.NewInt32(4430)
 			}),
-			beforeEach: func() {
-				// Enable logging at the requested level.
-				l, _ := log.ParseLevel("trace")
-				log.SetLevel(l)
-			},
-			afterEach: func() {
-				l, _ := log.ParseLevel("error")
-				log.SetLevel(l)
-			},
 		},
 		{
 			description:    "should update pools cpu requirements",
@@ -990,21 +968,12 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 
 	for _, test := range tests {
 		t.Logf("test case: %s", test.description)
-		if test.beforeEach != nil {
-			test.beforeEach()
-		}
+
 		changed, _ := test.it.updateEdgeLBPoolObject(test.pool, test.backendMap)
 		assert.Equal(t, test.expectedChange, changed)
-		if test.description == "should not remove unmanaged frontend and add http frontend" {
-			b, _ := json.MarshalIndent(test.pool, "", "  ")
-			fmt.Printf("test.pool=%s\n", string(b))
-		}
 		assert.Equal(t, test.expectedPool, test.pool)
 		reg := strfmt.NewFormats()
 		err := test.pool.Validate(reg)
 		assert.Nil(t, err)
-		if test.afterEach != nil {
-			test.afterEach()
-		}
 	}
 }
