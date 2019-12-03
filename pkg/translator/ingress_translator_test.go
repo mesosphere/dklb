@@ -1,6 +1,7 @@
 package translator
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -117,6 +118,9 @@ func TestTranslate(t *testing.T) {
 								BindPort:    pointers.NewInt32(443),
 								LinkBackend: &models.V2FrontendLinkBackend{
 									DefaultBackend: "existing-backend",
+									Map: []*models.V2FrontendLinkBackendMapItems0{
+										{Backend: "existing-backend"},
+									},
 								},
 								Name:         "frontend",
 								Protocol:     "HTTPS",
@@ -146,32 +150,115 @@ func TestTranslate(t *testing.T) {
 					err := pool.Validate(reg)
 					assert.Nil(t, err)
 
-					assert.Contains(t, pool.Secrets, &models.V2PoolSecretsItems0{
-						File:   "uid__test-secret-1",
-						Secret: "uid__test-secret-1",
-					})
-					assert.Contains(t, pool.Secrets, &models.V2PoolSecretsItems0{
-						File:   "existing-secret",
-						Secret: "existing-secret",
-					})
-					assert.NotNil(t, pool)
-					assert.NotNil(t, pool.Haproxy)
-					assert.Equal(t, 2, len(pool.Haproxy.Frontends))
+					expectedPool := &models.V2Pool{
+						Namespace: pointers.NewString(""),
+						Role:      "slave-public",
+						Cpus:      0.1,
+						Mem:       int32(128),
+						VirtualNetworks: []*models.V2PoolVirtualNetworksItems0{
+							{Name: "dcos"},
+						},
+						Count: pointers.NewInt32(1),
+						Haproxy: &models.V2Haproxy{
+							Backends: []*models.V2Backend{
+								{
+									Name: "existing-backend",
+								},
+								{
+									Name:     "test-cluster-test-translate:test-namespace:test-ingress-1:test-service:80",
+									Protocol: "HTTP",
+									Balance:  constants.EdgeLBBackendBalanceLeastConnections,
+									RewriteHTTP: &models.V2RewriteHTTP{
+										Request: &models.V2RewriteHTTPRequest{
+											Forwardfor:                pointers.NewBool(true),
+											XForwardedPort:            pointers.NewBool(true),
+											XForwardedProtoHTTPSIfTLS: pointers.NewBool(true),
+											RewritePath:               pointers.NewBool(false),
+											SetHostHeader:             pointers.NewBool(false),
+										},
+										Response: &models.V2RewriteHTTPResponse{
+											RewriteLocation: pointers.NewBool(false),
+										},
+									},
+									Services: []*models.V2Service{
+										{
+											Endpoint: &models.V2Endpoint{
+												Check: &models.V2EndpointCheck{
+													Enabled: pointers.NewBool(true),
+												},
+												MiscStr: "check-ssl ssl verify none",
+												Port:    31789,
+												Type:    models.V2EndpointTypeCONTAINERIP,
+											},
+											Marathon: &models.V2ServiceMarathon{},
+											Mesos: &models.V2ServiceMesos{
+												FrameworkName: "test-cluster",
+											},
+										},
+										{
+											Endpoint: &models.V2Endpoint{
+												Check: &models.V2EndpointCheck{
+													Enabled: pointers.NewBool(true),
+												},
+												MiscStr: computeEdgeLBBackendMiscStr(constants.EdgeLBBackendBackup),
+												Port:    32889,
+												Type:    models.V2EndpointTypeCONTAINERIP,
+											},
+											Marathon: &models.V2ServiceMarathon{
+												// We don't want to use any Marathon service as the backend.
+											},
+											Mesos: &models.V2ServiceMesos{
+												FrameworkName:   cluster.Name,
+												TaskNamePattern: constants.KubeNodeTaskPattern,
+											},
+										},
+									},
+								},
+							},
+							Frontends: []*models.V2Frontend{
+								{
+									BindAddress: "0.0.0.0",
+									BindPort:    pointers.NewInt32(443),
+									LinkBackend: &models.V2FrontendLinkBackend{
+										DefaultBackend: "existing-backend",
+										Map: []*models.V2FrontendLinkBackendMapItems0{
+											{
+												Backend: "existing-backend",
+											},
+											{
+												Backend: "test-cluster-test-translate:test-namespace:test-ingress-1:test-service:80",
+												HostEq:  "test-host.com",
+												PathReg: "^/bar(/.*)?$",
+											},
+											{
+												Backend: "test-cluster-test-translate:test-namespace:test-ingress-1:test-service:80",
+												HostEq:  "test-host.com",
+												PathReg: "^.*$",
+											},
+										},
+									},
+									Name:         "frontend",
+									Protocol:     "HTTPS",
+									Certificates: []string{"$SECRETS/existing-secret"},
+								},
+							},
+							Stats: &models.V2Stats{
+								BindPort: pointers.NewInt32(0),
+							},
+						},
+						Secrets: []*models.V2PoolSecretsItems0{
+							{
+								File:   "existing-secret",
+								Secret: "existing-secret",
+							},
+							{
+								File:   "uid__test-secret-1",
+								Secret: "uid__test-secret-1",
+							},
+						},
+					}
 
-					assert.Contains(t, pool.Haproxy.Frontends[1].Certificates, "$SECRETS/existing-secret")
-					assert.Contains(t, pool.Haproxy.Frontends[1].Certificates, "$SECRETS/uid__test-secret-1")
-					assert.Equal(t, pool.Haproxy.Frontends[1].LinkBackend.DefaultBackend, "existing-backend")
-					assert.Equal(t, len(pool.Haproxy.Frontends[1].LinkBackend.Map), 2)
-					assert.Contains(t, pool.Haproxy.Frontends[1].LinkBackend.Map, &models.V2FrontendLinkBackendMapItems0{
-						Backend: "test-cluster-test-translate:test-namespace:test-ingress-1:test-service:80",
-						HostEq:  "test-host.com",
-						PathReg: "^/bar(/.*)?$",
-					})
-					assert.Contains(t, pool.Haproxy.Frontends[1].LinkBackend.Map, &models.V2FrontendLinkBackendMapItems0{
-						Backend: "test-cluster-test-translate:test-namespace:test-ingress-1:test-service:80",
-						HostEq:  "test-host.com",
-						PathReg: `^.*$`,
-					})
+					assert.Equal(t, expectedPool, pool)
 				}).Return(pool, nil)
 				return edgelbManager
 			},
@@ -665,6 +752,9 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 						BindPort:    pointers.NewInt32(443),
 						LinkBackend: &models.V2FrontendLinkBackend{
 							DefaultBackend: "",
+							Map: []*models.V2FrontendLinkBackendMapItems0{
+								{Backend: "backend"},
+							},
 						},
 						Name:         "test-cluster:test-namespace:test-ingress:https",
 						Protocol:     "HTTPS",
@@ -672,15 +762,6 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 					},
 				}
 			}),
-			beforeEach: func() {
-				// Enable logging at the requested level.
-				l, _ := log.ParseLevel("trace")
-				log.SetLevel(l)
-			},
-			afterEach: func() {
-				l, _ := log.ParseLevel("error")
-				log.SetLevel(l)
-			},
 		},
 		{
 			description:    "should disable HTTP frontend",
@@ -703,6 +784,9 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 						BindPort:    pointers.NewInt32(443),
 						LinkBackend: &models.V2FrontendLinkBackend{
 							DefaultBackend: "",
+							Map: []*models.V2FrontendLinkBackendMapItems0{
+								{Backend: "backend"},
+							},
 						},
 						Name:         "test-cluster:test-namespace:test-ingress:https",
 						Protocol:     "HTTPS",
@@ -748,6 +832,15 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 				expectedPool.Haproxy.Frontends = []*models.V2Frontend{
 					{
 						BindAddress: "0.0.0.0",
+						BindPort:    pointers.NewInt32(444),
+						LinkBackend: &models.V2FrontendLinkBackend{
+							DefaultBackend: "",
+						},
+						Name:     "unmanaged",
+						Protocol: "HTTP",
+					},
+					{
+						BindAddress: "0.0.0.0",
 						BindPort:    pointers.NewInt32(80),
 						LinkBackend: &models.V2FrontendLinkBackend{
 							DefaultBackend: "",
@@ -765,15 +858,6 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 						Protocol:     "HTTPS",
 						Certificates: []string{"$SECRETS/uid__test-secret"},
 					},
-					{
-						BindAddress: "0.0.0.0",
-						BindPort:    pointers.NewInt32(444),
-						LinkBackend: &models.V2FrontendLinkBackend{
-							DefaultBackend: "",
-						},
-						Name:     "unmanaged",
-						Protocol: "HTTP",
-					},
 				}
 			}),
 		},
@@ -789,6 +873,15 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			expectedPool: newPool(func(expectedPool *models.V2Pool) {
 				expectedPool.Haproxy.Frontends[0].BindPort = pointers.NewInt32(4430)
 			}),
+			beforeEach: func() {
+				// Enable logging at the requested level.
+				l, _ := log.ParseLevel("trace")
+				log.SetLevel(l)
+			},
+			afterEach: func() {
+				l, _ := log.ParseLevel("error")
+				log.SetLevel(l)
+			},
 		},
 		{
 			description:    "should update pools cpu requirements",
@@ -836,7 +929,8 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			it: newIngressTranslator(func(it *IngressTranslator) {
 				it.ingress.ObjectMeta.Annotations = map[string]string{}
 			}),
-			pool: newPool(func(*models.V2Pool) {
+			pool: newPool(func(pool *models.V2Pool) {
+				pool.Haproxy.Backends = nil
 			}),
 			expectedPool: newPool(func(expectedPool *models.V2Pool) {
 				expectedPool.Haproxy.Backends = make([]*edgelbmodels.V2Backend, 0)
@@ -852,6 +946,7 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 				it.ingress.ObjectMeta.Annotations = map[string]string{}
 			}),
 			pool: newPool(func(pool *models.V2Pool) {
+				pool.Haproxy.Backends = nil
 				pool.Haproxy.Frontends = []*models.V2Frontend{
 					{
 						BindAddress: "0.0.0.0",
@@ -900,6 +995,10 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 		}
 		changed, _ := test.it.updateEdgeLBPoolObject(test.pool, test.backendMap)
 		assert.Equal(t, test.expectedChange, changed)
+		if test.description == "should not remove unmanaged frontend and add http frontend" {
+			b, _ := json.MarshalIndent(test.pool, "", "  ")
+			fmt.Printf("test.pool=%s\n", string(b))
+		}
 		assert.Equal(t, test.expectedPool, test.pool)
 		reg := strfmt.NewFormats()
 		err := test.pool.Validate(reg)

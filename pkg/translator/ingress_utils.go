@@ -151,14 +151,14 @@ func computeEdgeLBBackendNameForIngressBackend(ingress *extsv1beta1.Ingress, bac
 	return fmt.Sprintf(edgeLBIngressBackendNameFormatString, dklbstrings.ReplaceForwardSlashesWithDots(cluster.Name), ingress.Namespace, ingress.Name, backend.ServiceName, backend.ServicePort.String())
 }
 
-// findFrontends returns a copy of the  frontend from edgelb pool bound to the
+// findFrontends returns a copy of the frontend from edgelb pool bound to the
 // port or nil if it doesn't exist
-func findFrontend(pool *models.V2Pool, port int32) *models.V2Frontend {
+func findFrontend(pool *models.V2Pool, port int32, name string) *models.V2Frontend {
 	if pool == nil {
 		return nil
 	}
 	for _, frontend := range pool.Haproxy.Frontends {
-		if *frontend.BindPort == port {
+		if *frontend.BindPort == port || frontend.Name == name {
 			// at this point we can ignore any errors since the pool has been
 			// validated before
 			bytes, _ := frontend.MarshalBinary()
@@ -177,16 +177,18 @@ func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translat
 	// check if HTTP frontend is enabled
 	if spec.Frontends.HTTP != nil && *spec.Frontends.HTTP.Mode != translatorapi.IngressEdgeLBHTTPModeDisabled {
 		// check if there's already an http frontend
-		httpFrontend := findFrontend(pool, *spec.Frontends.HTTP.Port)
+		frontendName := computeEdgeLBFrontendNameForIngress(ingress, string(models.V2ProtocolHTTP))
+		httpFrontend := findFrontend(pool, *spec.Frontends.HTTP.Port, frontendName)
 		if httpFrontend == nil {
 			httpFrontend = &models.V2Frontend{
 				BindAddress: constants.EdgeLBFrontendBindAddress,
-				Name:        computeEdgeLBFrontendNameForIngress(ingress, string(models.V2ProtocolHTTP)),
+				Name:        frontendName,
 				Protocol:    models.V2ProtocolHTTP,
 				BindPort:    spec.Frontends.HTTP.Port,
 				LinkBackend: &models.V2FrontendLinkBackend{},
 			}
 		}
+		httpFrontend.BindPort = spec.Frontends.HTTP.Port
 		if *spec.Frontends.HTTP.Mode == translatorapi.IngressEdgeLBHTTPModeRedirect {
 			// Setting this to the empty object is enough to redirect all
 			// traffic from HTTP (this frontend) to HTTPS (port 443).
@@ -198,17 +200,18 @@ func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translat
 	// check if HTTPS frontend is enabled
 	if spec.Frontends.HTTPS != nil {
 		// check if we already have an https frontend
-		httpsFrontend := findFrontend(pool, *spec.Frontends.HTTPS.Port)
+		frontendName := computeEdgeLBFrontendNameForIngress(ingress, string(models.V2ProtocolHTTPS))
+		httpsFrontend := findFrontend(pool, *spec.Frontends.HTTPS.Port, frontendName)
 		if httpsFrontend == nil {
 			httpsFrontend = &models.V2Frontend{
 				BindAddress:  constants.EdgeLBFrontendBindAddress,
-				Name:         computeEdgeLBFrontendNameForIngress(ingress, string(models.V2ProtocolHTTPS)),
+				Name:         frontendName,
 				Protocol:     models.V2ProtocolHTTPS,
-				BindPort:     spec.Frontends.HTTPS.Port,
 				LinkBackend:  &models.V2FrontendLinkBackend{},
 				Certificates: make([]string, 0),
 			}
 		}
+		httpsFrontend.BindPort = spec.Frontends.HTTPS.Port
 
 		// filter certicates created for this ingress in case any updates
 		// were made

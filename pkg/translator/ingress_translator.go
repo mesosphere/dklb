@@ -342,6 +342,7 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 	// updatedBackends holds the set of updated EdgeLB backends.
 	// It is used as the final set of EdgeLB backends for the EdgeLB pool if we find out we need to update it.
 	updatedBackends := make([]*models.V2Backend, 0, len(pool.Haproxy.Backends))
+	deletedBackends := make(map[string]string)
 
 	// Iterate over the EdgeLB pool's EdgeLB backends and check whether each one is owned by the current Ingress.
 	// In case an EdgeLB backend isn't owned by the current Ingress, it is left unchanged and added to the set of "updated" EdgeLB backends.
@@ -360,6 +361,7 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 		if ingressDeleted {
 			wasChanged = true
 			log.Debugf("must delete backend %q as %q was deleted", backend.Name, kubernetesutil.Key(it.ingress))
+			deletedBackends[backend.Name] = ""
 			continue
 		}
 		// Check whether the Ingress backend that corresponds to the current EdgeLB backend is still present in the Ingress resource.
@@ -367,6 +369,7 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 		currentIngressBackend := *backendMetadata.IngressBackend
 		if _, exists := backendMap[currentIngressBackend]; !exists {
 			wasChanged = true
+			deletedBackends[backend.Name] = ""
 			log.Debugf("must delete edgelb backend %q as the corresponding ingress backend is missing from %q", backend.Name, kubernetesutil.Key(it.ingress))
 			continue
 		}
@@ -419,25 +422,27 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 			continue
 		}
 
-		if !checkIfReferencesBackend(updatedBackends, frontend.LinkBackend.DefaultBackend) {
+		if _, ok := deletedBackends[frontend.LinkBackend.DefaultBackend]; ok {
 			log.Debugf("default backend %v is being deleted... setting to empty value", frontend.LinkBackend.DefaultBackend)
 			frontend.LinkBackend.DefaultBackend = ""
 		}
 
-		linkBackendMap := make([]*models.V2FrontendLinkBackendMapItems0, 0)
-		// remove references to deleted backends
-		for _, entry := range frontend.LinkBackend.Map {
-			if checkIfReferencesBackend(updatedBackends, entry.Backend) {
-				log.Tracef("frontend %v references %v", frontend.Name, entry.Backend)
-				linkBackendMap = append(linkBackendMap, entry)
+		if frontend.LinkBackend.Map != nil {
+			linkBackendMap := make([]*models.V2FrontendLinkBackendMapItems0, 0)
+			// remove references to deleted backends
+			for _, entry := range frontend.LinkBackend.Map {
+				if _, ok := deletedBackends[entry.Backend]; !ok {
+					log.Tracef("frontend %v references %v", frontend.Name, entry.Backend)
+					linkBackendMap = append(linkBackendMap, entry)
+				}
 			}
+			frontend.LinkBackend.Map = linkBackendMap
 		}
-		frontend.LinkBackend.Map = linkBackendMap
 
-		if len(frontend.LinkBackend.Map) == 0 {
-			log.Debugf("deleting %v frontend because linkbackend map is empty", frontend.Name)
-			continue
-		}
+		// if len(frontend.LinkBackend.Map) == 0 {
+		// 	log.Debugf("deleting %v frontend because linkbackend map is empty", frontend.Name)
+		// 	continue
+		// }
 
 		log.Tracef("adding frontend %v", frontend.Name)
 		updatedFrontends = append(updatedFrontends, frontend)
