@@ -247,12 +247,12 @@ func TestTranslate(t *testing.T) {
 						},
 						Secrets: []*models.V2PoolSecretsItems0{
 							{
-								File:   "uid__test-secret-1",
-								Secret: "uid__test-secret-1",
-							},
-							{
 								File:   "existing-secret",
 								Secret: "existing-secret",
+							},
+							{
+								File:   "uid__test-secret-1",
+								Secret: "uid__test-secret-1",
 							},
 						},
 					}
@@ -793,6 +793,9 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 				it.spec.Frontends.HTTP.Port = pointers.NewInt32(80)
 			}),
 			pool: newPool(func(pool *models.V2Pool) {
+				pool.Haproxy.Backends = []*models.V2Backend{
+					{Name: "unmanaged"},
+				}
 				pool.Haproxy.Frontends = []*models.V2Frontend{
 					{
 						BindAddress: "0.0.0.0",
@@ -816,6 +819,7 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 				}
 			}),
 			expectedPool: newPool(func(expectedPool *models.V2Pool) {
+				expectedPool.Haproxy.Backends = []*models.V2Backend{}
 				expectedPool.Haproxy.Frontends = []*models.V2Frontend{
 					{
 						BindAddress: "0.0.0.0",

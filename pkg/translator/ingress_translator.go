@@ -2,6 +2,7 @@ package translator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -370,6 +371,27 @@ func computeUnmanagedSecrets(ingress *extsv1beta1.Ingress, pool *models.V2Pool) 
 	return unmanagedSecrets
 }
 
+func filterUnreferencedBackends(backends []*models.V2Backend, frontends []*models.V2Frontend) []*models.V2Backend {
+	referencedBackends := make([]*models.V2Backend, 0)
+	references := make(map[string]string)
+	for _, f := range frontends {
+		if f.LinkBackend.DefaultBackend != "" {
+			references[f.LinkBackend.DefaultBackend] = ""
+		}
+		for _, b := range f.LinkBackend.Map {
+			references[b.Backend] = ""
+		}
+	}
+
+	for _, b := range backends {
+		if _, ok := references[b.Name]; ok {
+			referencedBackends = append(referencedBackends, b)
+		}
+	}
+
+	return referencedBackends
+}
+
 // updateEdgeLBPoolObject updates the specified EdgeLB pool object in order to reflect the status of the current Ingress resource.
 // It modifies the specified EdgeLB pool in-place and returns a value indicating whether the EdgeLB pool object contains changes.
 // EdgeLB backends and frontends (the "objects") are added/modified/deleted according to the following rules:
@@ -396,6 +418,8 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 		frontends = append(frontends, desiredFrontends...)
 		secrets = append(secrets, desiredSecrets...)
 	}
+
+	backends = filterUnreferencedBackends(backends, frontends)
 
 	// sort everything to have predictable objects
 	sort.SliceStable(backends, func(i, j int) bool {
@@ -453,6 +477,9 @@ func (it *IngressTranslator) updateEdgeLBPoolObject(pool *models.V2Pool, backend
 		wasChanged = true
 		log.Debugf("must update the size request")
 	}
+
+	b, _ := json.MarshalIndent(pool, "", "  ")
+	fmt.Printf("computed pool=\n%s\n", string(b))
 
 	// Return a value indicating whether the pool was changed and the desired frontend configuration
 	return wasChanged, desiredFrontends
