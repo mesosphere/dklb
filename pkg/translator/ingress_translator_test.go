@@ -703,12 +703,12 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			expectedPool: newPool(func(expectedPool *models.V2Pool) {
 				expectedPool.Secrets = []*models.V2PoolSecretsItems0{
 					{
-						File:   "uid__test-secret",
-						Secret: "uid__test-secret",
-					},
-					{
 						File:   "foobar",
 						Secret: "foobar",
+					},
+					{
+						File:   "uid__test-secret",
+						Secret: "uid__test-secret",
 					},
 				}
 			}),
@@ -819,15 +819,6 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 				expectedPool.Haproxy.Frontends = []*models.V2Frontend{
 					{
 						BindAddress: "0.0.0.0",
-						BindPort:    pointers.NewInt32(444),
-						LinkBackend: &models.V2FrontendLinkBackend{
-							DefaultBackend: "",
-						},
-						Name:     "unmanaged",
-						Protocol: "HTTP",
-					},
-					{
-						BindAddress: "0.0.0.0",
 						BindPort:    pointers.NewInt32(80),
 						LinkBackend: &models.V2FrontendLinkBackend{
 							DefaultBackend: "",
@@ -844,6 +835,15 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 						Name:         "test-cluster:test-namespace:test-ingress:https",
 						Protocol:     "HTTPS",
 						Certificates: []string{"$SECRETS/uid__test-secret"},
+					},
+					{
+						BindAddress: "0.0.0.0",
+						BindPort:    pointers.NewInt32(444),
+						LinkBackend: &models.V2FrontendLinkBackend{
+							DefaultBackend: "",
+						},
+						Name:     "unmanaged",
+						Protocol: "HTTP",
 					},
 				}
 			}),
