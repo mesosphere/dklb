@@ -172,8 +172,6 @@ func findFrontend(pool *models.V2Pool, port int32, name string) *models.V2Fronte
 
 // computeEdgeLBFrontendForIngress computes the EdgeLB frontend that corresponds to the specified Ingress resource.
 func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translatorapi.IngressEdgeLBPoolSpec, pool *models.V2Pool) []*models.V2Frontend {
-	ingressDeleted := ingress.DeletionTimestamp != nil || ingress.Annotations[constants.EdgeLBIngressClassAnnotationKey] != constants.EdgeLBIngressClassAnnotationValue
-
 	// Compute the base frontend object.
 	frontends := make([]*models.V2Frontend, 0)
 	// check if HTTP frontend is enabled
@@ -181,7 +179,7 @@ func computeEdgeLBFrontendForIngress(ingress *extsv1beta1.Ingress, spec translat
 		// check if there's already an http frontend
 		frontendName := computeEdgeLBFrontendNameForIngress(ingress, string(models.V2ProtocolHTTP))
 		httpFrontend := findFrontend(pool, *spec.Frontends.HTTP.Port, frontendName)
-		if httpFrontend == nil || ingressDeleted {
+		if httpFrontend == nil {
 			httpFrontend = &models.V2Frontend{
 				BindAddress: constants.EdgeLBFrontendBindAddress,
 				Name:        frontendName,

@@ -642,19 +642,19 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 	}
 
 	tests := []struct {
-		description    string
-		backendMap     IngressBackendNodePortMap
-		expectedChange bool
-		it             *IngressTranslator
+		description       string
+		backendMap        IngressBackendNodePortMap
+		expectedOperation OperationResult
+		it                *IngressTranslator
 		// pool is the initial state of the edgelb pool
 		pool *models.V2Pool
 		// what we expect the edgelb pool to look like after running the test
 		expectedPool *models.V2Pool
 	}{
 		{
-			description:    "should not update pool",
-			backendMap:     IngressBackendNodePortMap{},
-			expectedChange: false,
+			description:       "should not update pool",
+			backendMap:        IngressBackendNodePortMap{},
+			expectedOperation: OperationResultNone,
 			it: newIngressTranslator(func(it *IngressTranslator) {
 			}),
 			pool: newPool(func(pool *models.V2Pool) {
@@ -663,9 +663,9 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			}),
 		},
 		{
-			description:    "should update frontend secrets",
-			backendMap:     IngressBackendNodePortMap{},
-			expectedChange: true,
+			description:       "should update frontend secrets",
+			backendMap:        IngressBackendNodePortMap{},
+			expectedOperation: OperationResultUpdated,
 			it: newIngressTranslator(func(it *IngressTranslator) {
 				it.ingress.Spec.TLS = []extsv1beta1.IngressTLS{
 					// in this test we update the name of the secret
@@ -687,9 +687,9 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			}),
 		},
 		{
-			description:    "should not remove unmanaged pool secret",
-			backendMap:     IngressBackendNodePortMap{},
-			expectedChange: true,
+			description:       "should not remove unmanaged pool secret",
+			backendMap:        IngressBackendNodePortMap{},
+			expectedOperation: OperationResultUpdated,
 			it: newIngressTranslator(func(*IngressTranslator) {
 			}),
 			pool: newPool(func(pool *models.V2Pool) {
@@ -714,9 +714,9 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			}),
 		},
 		{
-			description:    "should enable HTTP frontend",
-			backendMap:     IngressBackendNodePortMap{},
-			expectedChange: true,
+			description:       "should enable HTTP frontend",
+			backendMap:        IngressBackendNodePortMap{},
+			expectedOperation: OperationResultUpdated,
 			it: newIngressTranslator(func(it *IngressTranslator) {
 				it.spec.Frontends.HTTP.Mode = pointers.NewString(translatorapi.IngressEdgeLBHTTPModeEnabled)
 				it.spec.Frontends.HTTP.Port = pointers.NewInt32(80)
@@ -751,9 +751,9 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			}),
 		},
 		{
-			description:    "should disable HTTP frontend",
-			backendMap:     IngressBackendNodePortMap{},
-			expectedChange: true,
+			description:       "should disable HTTP frontend",
+			backendMap:        IngressBackendNodePortMap{},
+			expectedOperation: OperationResultUpdated,
 			it: newIngressTranslator(func(*IngressTranslator) {
 			}),
 			pool: newPool(func(pool *models.V2Pool) {
@@ -785,9 +785,9 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			}),
 		},
 		{
-			description:    "should not remove unmanaged frontend and add http frontend",
-			backendMap:     IngressBackendNodePortMap{},
-			expectedChange: true,
+			description:       "should not remove unmanaged frontend and add http frontend",
+			backendMap:        IngressBackendNodePortMap{},
+			expectedOperation: OperationResultUpdated,
 			it: newIngressTranslator(func(it *IngressTranslator) {
 				it.spec.Frontends.HTTP.Mode = pointers.NewString(translatorapi.IngressEdgeLBHTTPModeEnabled)
 				it.spec.Frontends.HTTP.Port = pointers.NewInt32(80)
@@ -853,9 +853,9 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			}),
 		},
 		{
-			description:    "should update https frontend port",
-			backendMap:     IngressBackendNodePortMap{},
-			expectedChange: true,
+			description:       "should update https frontend port",
+			backendMap:        IngressBackendNodePortMap{},
+			expectedOperation: OperationResultUpdated,
 			it: newIngressTranslator(func(it *IngressTranslator) {
 				it.spec.Frontends.HTTPS.Port = pointers.NewInt32(4430)
 			}),
@@ -866,9 +866,9 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			}),
 		},
 		{
-			description:    "should update pools cpu requirements",
-			backendMap:     IngressBackendNodePortMap{},
-			expectedChange: true,
+			description:       "should update pools cpu requirements",
+			backendMap:        IngressBackendNodePortMap{},
+			expectedOperation: OperationResultUpdated,
 			it: newIngressTranslator(func(it *IngressTranslator) {
 				it.spec.BaseEdgeLBPoolSpec.CPUs = pointers.NewFloat64(1.0)
 			}),
@@ -879,9 +879,9 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			}),
 		},
 		{
-			description:    "should update pools memory requirements",
-			backendMap:     IngressBackendNodePortMap{},
-			expectedChange: true,
+			description:       "should update pools memory requirements",
+			backendMap:        IngressBackendNodePortMap{},
+			expectedOperation: OperationResultUpdated,
 			it: newIngressTranslator(func(it *IngressTranslator) {
 				it.spec.BaseEdgeLBPoolSpec.Memory = pointers.NewInt32(256)
 			}),
@@ -892,9 +892,9 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			}),
 		},
 		{
-			description:    "should update pools size",
-			backendMap:     IngressBackendNodePortMap{},
-			expectedChange: true,
+			description:       "should update pools size",
+			backendMap:        IngressBackendNodePortMap{},
+			expectedOperation: OperationResultUpdated,
 			it: newIngressTranslator(func(it *IngressTranslator) {
 				it.spec.BaseEdgeLBPoolSpec.Size = pointers.NewInt32(2)
 			}),
@@ -905,25 +905,9 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 			}),
 		},
 		{
-			description:    "should delete ingress",
-			backendMap:     IngressBackendNodePortMap{},
-			expectedChange: false,
-			it: newIngressTranslator(func(it *IngressTranslator) {
-				it.ingress.ObjectMeta.Annotations = map[string]string{}
-			}),
-			pool: newPool(func(pool *models.V2Pool) {
-				pool.Haproxy.Backends = nil
-			}),
-			expectedPool: newPool(func(expectedPool *models.V2Pool) {
-				expectedPool.Haproxy.Backends = make([]*edgelbmodels.V2Backend, 0)
-				expectedPool.Haproxy.Frontends = make([]*edgelbmodels.V2Frontend, 0)
-				expectedPool.Secrets = make([]*edgelbmodels.V2PoolSecretsItems0, 0)
-			}),
-		},
-		{
-			description:    "should delete ingress frontends and secrets",
-			backendMap:     IngressBackendNodePortMap{},
-			expectedChange: true,
+			description:       "should delete ingress",
+			backendMap:        IngressBackendNodePortMap{},
+			expectedOperation: OperationResultDeleted,
 			it: newIngressTranslator(func(it *IngressTranslator) {
 				it.ingress.ObjectMeta.Annotations = map[string]string{}
 			}),
@@ -932,9 +916,36 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 				pool.Haproxy.Frontends = []*models.V2Frontend{
 					{
 						BindAddress: "0.0.0.0",
-						BindPort:    pointers.NewInt32(80),
+						BindPort:    pointers.NewInt32(443),
 						LinkBackend: &models.V2FrontendLinkBackend{
 							DefaultBackend: "",
+						},
+						Name:         "test-cluster-test-translate:test-namespace:test-ingress:https",
+						Protocol:     "HTTPS",
+						Certificates: []string{"$SECRETS/uid__test-secret"},
+					},
+				}
+			}),
+			expectedPool: newPool(func(expectedPool *models.V2Pool) {
+				expectedPool.Haproxy.Backends = make([]*edgelbmodels.V2Backend, 0)
+				expectedPool.Haproxy.Frontends = make([]*edgelbmodels.V2Frontend, 0)
+				expectedPool.Secrets = make([]*edgelbmodels.V2PoolSecretsItems0, 0)
+			}),
+		},
+		{
+			description:       "should delete ingress frontends and secrets",
+			backendMap:        IngressBackendNodePortMap{},
+			expectedOperation: OperationResultUpdated,
+			it: newIngressTranslator(func(it *IngressTranslator) {
+				it.ingress.ObjectMeta.Annotations = map[string]string{}
+			}),
+			pool: newPool(func(pool *models.V2Pool) {
+				pool.Haproxy.Frontends = []*models.V2Frontend{
+					{
+						BindAddress: "0.0.0.0",
+						BindPort:    pointers.NewInt32(80),
+						LinkBackend: &models.V2FrontendLinkBackend{
+							DefaultBackend: "backend",
 						},
 						Name:     "unmanaged",
 						Protocol: "HTTP",
@@ -945,16 +956,20 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 						File:   "foobar",
 						Secret: "foobar",
 					},
+					{
+						File:   "uid__test-secret",
+						Secret: "uid__test-secret",
+					},
 				}
 			}),
 			expectedPool: newPool(func(expectedPool *models.V2Pool) {
-				expectedPool.Haproxy.Backends = make([]*edgelbmodels.V2Backend, 0)
 				expectedPool.Haproxy.Frontends = []*models.V2Frontend{
 					{
 						BindAddress: "0.0.0.0",
 						BindPort:    pointers.NewInt32(80),
 						LinkBackend: &models.V2FrontendLinkBackend{
-							DefaultBackend: "",
+							DefaultBackend: "backend",
+							Map:            []*models.V2FrontendLinkBackendMapItems0{},
 						},
 						Name:     "unmanaged",
 						Protocol: "HTTP",
@@ -973,8 +988,8 @@ func TestTranslate_updateEdgeLBPoolObject(t *testing.T) {
 	for _, test := range tests {
 		t.Logf("test case: %s", test.description)
 
-		changed, _ := test.it.updateEdgeLBPoolObject(test.pool, test.backendMap)
-		assert.Equal(t, test.expectedChange, changed)
+		operationResult, _ := test.it.updateEdgeLBPoolObject(test.pool, test.backendMap)
+		assert.Equal(t, test.expectedOperation, operationResult)
 		assert.Equal(t, test.expectedPool, test.pool)
 		reg := strfmt.NewFormats()
 		err := test.pool.Validate(reg)
