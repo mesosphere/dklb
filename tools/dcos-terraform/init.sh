@@ -150,7 +150,7 @@ dcos_superuser_username         = "${DCOS_SUPERUSER_USERNAME}"
 dcos_superuser_password_hash    = "${DCOS_SUPERUSER_PASSWORD_HASH:-}"
 ssh_public_key_file             = "${SSH_PUBLIC_KEY_FILE}"
 admin_ips                       = "${DCOS_ADMIN_IPS:-}"
-public_agents_additional_ports  = ["6443", "18080", "16379"]
+public_agents_additional_ports  = ["6443", "18080", "16379", "28080"]
 dcos_config                     = $(echo -e ${DCOS_CONFIG})
 EOF
     ;;
@@ -174,7 +174,7 @@ dcos_superuser_username         = "${DCOS_SUPERUSER_USERNAME}"
 dcos_superuser_password_hash    = "${DCOS_SUPERUSER_PASSWORD_HASH:-}"
 ssh_public_key_file             = "${SSH_PUBLIC_KEY_FILE}"
 admin_ips                       = "${DCOS_ADMIN_IPS:-}"
-public_agents_additional_ports  = ["6443", "18080", "16379"]
+public_agents_additional_ports  = ["6443", "18080", "16379", "28080"]
 dcos_config                     = $(echo -e ${DCOS_CONFIG:-\"\"})
 tags                            = {
                                     owner      = "${DCOS_CLUSTER_OWNER}"
