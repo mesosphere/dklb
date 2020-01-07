@@ -65,7 +65,7 @@ test.e2e: AWS_PUBLIC_SUBNET_IDS ?=
 test.e2e: FOCUS ?= .*
 test.e2e: KUBECONFIG ?= $(HOME)/.kube/config
 test.e2e: LOG_LEVEL := info
-test.e2e: TIMEOUT := 1800s
+test.e2e: TIMEOUT := 3600s
 test.e2e: gitauth
 	@go test -tags e2e $(ROOT_DIR)/test/e2e \
 		-ginkgo.focus="$(FOCUS)" \
