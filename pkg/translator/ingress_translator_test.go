@@ -1,6 +1,7 @@
 package translator
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -66,36 +67,36 @@ func TestTranslate(t *testing.T) {
 		ingress          *extsv1beta1.Ingress
 		kubeCache        dklbcache.KubernetesResourceCache
 	}{
-		// {
-		// 	description: "should succeed translating ingress",
-		// 	edgelbManager: func() edgelbmanager.EdgeLBManager {
-		// 		edgelbManager := new(mockedgelb.MockEdgeLBManager)
-		// 		edgelbManager.On("PoolGroup").Return("test-pool-group", nil)
-		// 		edgelbManager.On("GetPool", mock.Anything, mock.Anything).Return(nil, nil)
-		// 		edgelbManager.On("CreatePool", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		// 			pool := args.Get(1).(*models.V2Pool)
-		// 			b, _ := json.MarshalIndent(pool, "", "  ")
-		// 			fmt.Printf("CreatePool: %s\n", string(b))
-		// 		}).Return(&edgelbmodels.V2Pool{}, nil)
-		// 		edgelbManager.On("GetPoolMetadata", mock.Anything, mock.Anything).Return(&edgelbmodels.V2PoolMetadata{}, nil)
-		// 		return edgelbManager
-		// 	},
-		// 	eventRecorder:    record.NewFakeRecorder(10),
-		// 	expectedError:    nil,
-		// 	expectedLBStatus: &corev1.LoadBalancerStatus{},
-		// 	ingress: &extsv1beta1.Ingress{
-		// 		ObjectMeta: metav1.ObjectMeta{
-		// 			Namespace: "test-namespace",
-		// 			Name:      "test-ingress",
-		// 		},
-		// 		Spec: extsv1beta1.IngressSpec{
-		// 			TLS: []extsv1beta1.IngressTLS{
-		// 				{SecretName: "test-secret"},
-		// 			},
-		// 		},
-		// 	},
-		// 	kubeCache: dklbcache.NewInformerBackedResourceCache(cachetestutil.NewFakeSharedInformerFactory(defaultService)),
-		// },
+		{
+			description: "should succeed translating ingress",
+			edgelbManager: func() edgelbmanager.EdgeLBManager {
+				edgelbManager := new(mockedgelb.MockEdgeLBManager)
+				edgelbManager.On("PoolGroup").Return("test-pool-group", nil)
+				edgelbManager.On("GetPool", mock.Anything, mock.Anything).Return(nil, nil)
+				edgelbManager.On("CreatePool", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+					pool := args.Get(1).(*models.V2Pool)
+					b, _ := json.MarshalIndent(pool, "", "  ")
+					fmt.Printf("CreatePool: %s\n", string(b))
+				}).Return(&edgelbmodels.V2Pool{}, nil)
+				edgelbManager.On("GetPoolMetadata", mock.Anything, mock.Anything).Return(&edgelbmodels.V2PoolMetadata{}, nil)
+				return edgelbManager
+			},
+			eventRecorder:    record.NewFakeRecorder(10),
+			expectedError:    nil,
+			expectedLBStatus: &corev1.LoadBalancerStatus{},
+			ingress: &extsv1beta1.Ingress{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test-namespace",
+					Name:      "test-ingress",
+				},
+				Spec: extsv1beta1.IngressSpec{
+					TLS: []extsv1beta1.IngressTLS{
+						{SecretName: "test-secret"},
+					},
+				},
+			},
+			kubeCache: dklbcache.NewInformerBackedResourceCache(cachetestutil.NewFakeSharedInformerFactory(defaultService)),
+		},
 		{
 			description: "should succeed adding to frontend backendmap",
 			edgelbManager: func() edgelbmanager.EdgeLBManager {
@@ -189,21 +190,6 @@ func TestTranslate(t *testing.T) {
 													Enabled: pointers.NewBool(true),
 												},
 												MiscStr: "check-ssl ssl verify none",
-												Port:    32889,
-												Type:    models.V2EndpointTypeCONTAINERIP,
-											},
-											Marathon: &models.V2ServiceMarathon{},
-											Mesos: &models.V2ServiceMesos{
-												FrameworkName:   "test-cluster-test-translate",
-												TaskNamePattern: "^kube-node-.*$",
-											},
-										},
-										{
-											Endpoint: &models.V2Endpoint{
-												Check: &models.V2EndpointCheck{
-													Enabled: pointers.NewBool(true),
-												},
-												MiscStr: "backup",
 												Port:    32889,
 												Type:    models.V2EndpointTypeCONTAINERIP,
 											},

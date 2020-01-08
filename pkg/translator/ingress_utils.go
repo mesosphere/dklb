@@ -68,50 +68,25 @@ func (m *ingressOwnedEdgeLBObjectMetadata) IsOwnedBy(ingress *extsv1beta1.Ingres
 
 // computeEdgeLBBackendForIngressBackend computes the EdgeLB backend that corresponds to the specified Ingress backend.
 func computeEdgeLBBackendForIngressBackend(ingress *extsv1beta1.Ingress, backend extsv1beta1.IngressBackend, nodePort int32) *models.V2Backend {
+
 	return &models.V2Backend{
 		Balance:  constants.EdgeLBBackendBalanceLeastConnections,
 		Name:     computeEdgeLBBackendNameForIngressBackend(ingress, backend),
 		Protocol: models.V2ProtocolHTTP,
-		// At this point we would need to know if the target server is TLS-enabled or not so that we could configure HAProxy accordingly.
-		// This is so because when the target server is TLS-enabled, HAProxy **MUST** be configured with the "ssl verify none" option (so that it actually communicates over TLS **AND** skips certificate verification).
-		// On the other hand, specifying said option when the target server is **NOT** TLS-enabled will cause HAProxy to be unable to communicate with said server.
-		// Hence, we add the same server twice:
-		// * We add the TLS-enabled variant of the server as the preferred server, forcing health-checks to happen over TLS.
-		//   This version will be the one used whenever the server responds adequately to said TLS-enabled health-checks (and only in this situation).
-		// * We add the TLS-disabled variant of the server as the "backup" server.
-		//   This version will be the one used whenever the server does not respond adequately to TLS-enabled health-checks (and only in this situation).
+		// When the target server is TLS-enabled, HAProxy **MUST** be configured with the "ssl verify none" option (so that it actually communicates over TLS **AND** skips certificate verification).
 		// This will result in an HAProxy config similar to the following one:
 		//
 		// backend ingress-backend
 		//    mode http
 		//    server 1.2.3.4:5678 check check-ssl ssl verify none
-		//    server 4.3.2.1:5678 check check-ssl ssl verify none
-		//    server 1.2.3.4:5678 check backup
-		//    server 4.3.2.1:5678 check backup
+		//    server 4.3.2.1:5678 check
 		Services: []*models.V2Service{
 			{
 				Endpoint: &models.V2Endpoint{
 					Check: &models.V2EndpointCheck{
 						Enabled: pointers.NewBool(true),
 					},
-					MiscStr: computeEdgeLBBackendMiscStr(constants.EdgeLBBackendTLSCheck, constants.EdgeLBBackendInsecureSkipTLSVerify),
-					Port:    nodePort,
-					Type:    models.V2EndpointTypeCONTAINERIP,
-				},
-				Marathon: &models.V2ServiceMarathon{
-					// We don't want to use any Marathon service as the backend.
-				},
-				Mesos: &models.V2ServiceMesos{
-					FrameworkName:   cluster.Name,
-					TaskNamePattern: constants.KubeNodeTaskPattern,
-				},
-			},
-			{
-				Endpoint: &models.V2Endpoint{
-					Check: &models.V2EndpointCheck{
-						Enabled: pointers.NewBool(true),
-					},
-					MiscStr: computeEdgeLBBackendMiscStr(constants.EdgeLBBackendBackup),
+					MiscStr: computeEdgeLBBackendMiscStr(ingress),
 					Port:    nodePort,
 					Type:    models.V2EndpointTypeCONTAINERIP,
 				},
@@ -320,8 +295,14 @@ func computeEdgeLBFrontendNameForIngress(ingress *extsv1beta1.Ingress, protocol 
 }
 
 // computeEdgeLBBackendMiscStr computes the value to be used as "miscStr" on a given backend given the specified options.
-func computeEdgeLBBackendMiscStr(options ...string) string {
-	return strings.Join(options, " ")
+func computeEdgeLBBackendMiscStr(ingress *extsv1beta1.Ingress) string {
+	// if tls is enabled then setup the check-ssl option
+	if translatorapi.IsIngressTLSEnabled(ingress) {
+		return strings.Join([]string{constants.EdgeLBBackendTLSCheck, constants.EdgeLBBackendInsecureSkipTLSVerify}, " ")
+	}
+
+	// service does not have TLS enabled
+	return ""
 }
 
 // computeServiceOwnedEdgeLBObjectMetadata parses the provided EdgeLB backend/frontend name and returns metadata about the Ingress resource that owns it.
