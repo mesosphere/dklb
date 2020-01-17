@@ -1,7 +1,9 @@
 package translator
 
 import (
+	"crypto/tls"
 	"fmt"
+	"log"
 	"math"
 	"reflect"
 	"sort"
@@ -86,7 +88,7 @@ func computeEdgeLBBackendForIngressBackend(ingress *extsv1beta1.Ingress, backend
 					Check: &models.V2EndpointCheck{
 						Enabled: pointers.NewBool(true),
 					},
-					MiscStr: computeEdgeLBBackendMiscStr(ingress),
+					MiscStr: computeEdgeLBBackendMiscStr(ingress, backend, nodePort),
 					Port:    nodePort,
 					Type:    models.V2EndpointTypeCONTAINERIP,
 				},
@@ -295,9 +297,23 @@ func computeEdgeLBFrontendNameForIngress(ingress *extsv1beta1.Ingress, protocol 
 }
 
 // computeEdgeLBBackendMiscStr computes the value to be used as "miscStr" on a given backend given the specified options.
-func computeEdgeLBBackendMiscStr(ingress *extsv1beta1.Ingress) string {
-	// if tls is enabled then setup the check-ssl option
-	if translatorapi.IsIngressTLSEnabled(ingress) {
+func computeEdgeLBBackendMiscStr(ingress *extsv1beta1.Ingress, backend extsv1beta1.IngressBackend, nodePort int32) string {
+	// dklb (probably) runs in a different kubernetes namespace than the ingress and the service
+	// so we need to add the namespace to the addr for dns to resolve properly.
+	// we only check if the service name contains a dot since the ingress can live
+	// in a different namespace than the service and in this case the operator
+	// will have to necessarly add a dot '.'
+	var addr string
+	if strings.Index(backend.ServiceName, ".") > 0 {
+		addr = fmt.Sprintf("%s:%d", backend.ServiceName, nodePort)
+	} else {
+		addr = fmt.Sprintf("%s.%s:%d", backend.ServiceName, ingress.Namespace, nodePort)
+	}
+	// check if we can connect to the service via TLS
+	conn, err := tls.Dial("tcp", addr, &tls.Config{InsecureSkipVerify: true})
+	log.Printf("checking tls connection addr=%s error=%v\n", addr, err)
+	if err == nil {
+		conn.Close()
 		return strings.Join([]string{constants.EdgeLBBackendTLSCheck, constants.EdgeLBBackendInsecureSkipTLSVerify}, " ")
 	}
 

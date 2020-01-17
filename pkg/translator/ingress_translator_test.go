@@ -189,7 +189,7 @@ func TestTranslate(t *testing.T) {
 												Check: &models.V2EndpointCheck{
 													Enabled: pointers.NewBool(true),
 												},
-												MiscStr: "check-ssl ssl verify none",
+												MiscStr: "",
 												Port:    32889,
 												Type:    models.V2EndpointTypeCONTAINERIP,
 											},
