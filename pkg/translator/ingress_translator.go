@@ -185,6 +185,7 @@ func (it *IngressTranslator) computeNodePortForIngressBackend(backend extsv1beta
 	}
 	// Lookup the referenced service port.
 	var servicePort *corev1.ServicePort
+	log.Printf("searching for backend.servicePort={%+v}", backend.ServicePort)
 	for _, port := range s.Spec.Ports {
 		// Pin "port" so we can take its address.
 		port := port

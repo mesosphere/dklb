@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net"
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/mesosphere/dcos-edge-lb/pkg/apis/models"
 	extsv1beta1 "k8s.io/api/extensions/v1beta1"
@@ -88,7 +90,7 @@ func computeEdgeLBBackendForIngressBackend(ingress *extsv1beta1.Ingress, backend
 					Check: &models.V2EndpointCheck{
 						Enabled: pointers.NewBool(true),
 					},
-					MiscStr: computeEdgeLBBackendMiscStr(ingress, backend, nodePort),
+					MiscStr: computeEdgeLBBackendMiscStr(ingress, backend),
 					Port:    nodePort,
 					Type:    models.V2EndpointTypeCONTAINERIP,
 				},
@@ -297,7 +299,18 @@ func computeEdgeLBFrontendNameForIngress(ingress *extsv1beta1.Ingress, protocol 
 }
 
 // computeEdgeLBBackendMiscStr computes the value to be used as "miscStr" on a given backend given the specified options.
-func computeEdgeLBBackendMiscStr(ingress *extsv1beta1.Ingress, backend extsv1beta1.IngressBackend, nodePort int32) string {
+func computeEdgeLBBackendMiscStr(ingress *extsv1beta1.Ingress, backend extsv1beta1.IngressBackend) string {
+	// try to resolve service port if it's using a string
+	var err error
+	port := backend.ServicePort.IntValue()
+	if port == 0 {
+		port, err = net.LookupPort("tcp", backend.ServicePort.String())
+		if err != nil {
+			log.Printf("error looking up port %s: %v", backend.ServicePort.String(), err)
+			return ""
+		}
+	}
+
 	// dklb (probably) runs in a different kubernetes namespace than the ingress and the service
 	// so we need to add the namespace to the addr for dns to resolve properly.
 	// we only check if the service name contains a dot since the ingress can live
@@ -305,16 +318,23 @@ func computeEdgeLBBackendMiscStr(ingress *extsv1beta1.Ingress, backend extsv1bet
 	// will have to necessarly add a dot '.'
 	var addr string
 	if strings.Index(backend.ServiceName, ".") > 0 {
-		addr = fmt.Sprintf("%s:%d", backend.ServiceName, nodePort)
+		addr = fmt.Sprintf("%s:%d", backend.ServiceName, port)
 	} else {
-		addr = fmt.Sprintf("%s.%s:%d", backend.ServiceName, ingress.Namespace, nodePort)
+		addr = fmt.Sprintf("%s.%s:%d", backend.ServiceName, ingress.Namespace, port)
 	}
-	// check if we can connect to the service via TLS
-	conn, err := tls.Dial("tcp", addr, &tls.Config{InsecureSkipVerify: true})
-	log.Printf("checking tls connection addr=%s error=%v\n", addr, err)
+
+	conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
 	if err == nil {
-		conn.Close()
-		return strings.Join([]string{constants.EdgeLBBackendTLSCheck, constants.EdgeLBBackendInsecureSkipTLSVerify}, " ")
+		tlsConn := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
+		defer conn.Close()
+		err = tlsConn.Handshake()
+		if err == nil {
+			log.Printf("connected to %s\n", addr)
+			return strings.Join([]string{constants.EdgeLBBackendTLSCheck, constants.EdgeLBBackendInsecureSkipTLSVerify}, " ")
+		}
+		log.Printf("error connecting to %s: %v", addr, err)
+	} else {
+		log.Printf("error dialing %s: %v", addr, err)
 	}
 
 	// service does not have TLS enabled

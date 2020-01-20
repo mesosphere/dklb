@@ -327,21 +327,21 @@ var _ = Describe("Ingress", func() {
 				Expect(err).NotTo(HaveOccurred(), "failed to create echo pod")
 				// Create the second "echo" service.
 				echoSvc2, err = f.CreateServiceForEchoPod(echoPod2)
-				Expect(err).NotTo(HaveOccurred(), "failed to create service for echo pod %q", kubernetes.Key(echoPod1))
+				Expect(err).NotTo(HaveOccurred(), "failed to create service for echo pod %q", kubernetes.Key(echoPod2))
 
 				// Create the third "echo" pod.
 				echoPod3, err = f.CreateEchoPod(namespace.Name, "http-echo-3")
 				Expect(err).NotTo(HaveOccurred(), "failed to create echo pod")
 				// Create the third "echo" service.
 				echoSvc3, err = f.CreateServiceForEchoPod(echoPod3)
-				Expect(err).NotTo(HaveOccurred(), "failed to create service for echo pod %q", kubernetes.Key(echoPod1))
+				Expect(err).NotTo(HaveOccurred(), "failed to create service for echo pod %q", kubernetes.Key(echoPod3))
 
 				// Create the fourth "echo" pod.
 				echoPod4, err = f.CreateEchoPod(namespace.Name, "http-echo-4")
 				Expect(err).NotTo(HaveOccurred(), "failed to create echo pod")
 				// Create the fourth "echo" service.
 				echoSvc4, err = f.CreateServiceForEchoPod(echoPod4)
-				Expect(err).NotTo(HaveOccurred(), "failed to create service for echo pod %q", kubernetes.Key(echoPod1))
+				Expect(err).NotTo(HaveOccurred(), "failed to create service for echo pod %q", kubernetes.Key(echoPod4))
 
 				// Create an object holding the target EdgeLB pool's specification.
 				httpEchoSpec = translatorapi.IngressEdgeLBPoolSpec{
