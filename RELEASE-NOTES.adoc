@@ -19,6 +19,12 @@ endif::[]
 == Table of Contents
 toc::[]
 
+== v1.0.1
+
+=== Bug fixes
+
+* Fix a bug where Kubernetes ingresses could not share an EdgeLB frontend.
+
 == v1.0.0
 
 Upgraded v1.0.0-rc1 to GA.
